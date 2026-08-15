@@ -70,6 +70,13 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$BIN" "$CONTENTS/MacOS/Pane"
 cp -R "$ROOT/Editor/dist/." "$CONTENTS/Resources/Editor/"
 
+# Static bundle resources — currently the menu bar template images. Flat rather than in a
+# subdirectory because `NSImage(named:)` only searches the top level of Resources, and going through
+# a subdirectory would mean loading them by path and losing the automatic @2x/@3x selection.
+if [[ -d "$ROOT/Resources" ]]; then
+	cp -R "$ROOT/Resources/." "$CONTENTS/Resources/"
+fi
+
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" \
 	"$ROOT/Scripts/Info.plist" > "$CONTENTS/Info.plist"
 

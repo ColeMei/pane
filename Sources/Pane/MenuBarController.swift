@@ -27,11 +27,7 @@ final class MenuBarController: NSObject {
         super.init()
 
         if let button = item.button {
-            button.image = NSImage(
-                systemSymbolName: "note.text",
-                accessibilityDescription: "Pane"
-            )
-            button.image?.isTemplate = true
+            button.image = Self.statusImage
             button.toolTip = "Pane — \(hotkey.displayString)"
         }
 
@@ -98,6 +94,19 @@ final class MenuBarController: NSObject {
         )
         return result
     }
+
+    /// The menu bar glyph — Pane's own mark, drawn as a template so macOS tints it for the current
+    /// menu bar rather than painting a black shape onto a dark background.
+    ///
+    /// Falls back to an SF Symbol when the resource is absent, which is the case for `swift run Pane`
+    /// during development: `NSImage(named:)` reads the app bundle, and there isn't one.
+    private static let statusImage: NSImage? = {
+        let image = NSImage(named: "MenuBar")
+            ?? NSImage(systemSymbolName: "note.text", accessibilityDescription: "Pane")
+        image?.isTemplate = true
+        image?.accessibilityDescription = "Pane"
+        return image
+    }()
 
     private static let pinImage: NSImage? = {
         let image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil)
