@@ -6,5 +6,7 @@ runMarkdownDocumentTests()
 runNoteOrderingTests()
 runPanelGeometryTests()
 runStateTests()
+runVaultSyncTests()
+runVaultIOTests()
 
 exit(Check.finish())
