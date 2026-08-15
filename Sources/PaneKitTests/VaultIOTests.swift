@@ -192,5 +192,46 @@ func runVaultIOTests() {
             do { _ = try VaultIO.loadText(url) } catch { caught = error }
             Check.expect(caught != nil, "must not silently substitute replacement characters")
         }
+
+        // Decision 10's trailing-newline invariant, on the way out. Normalising only on load looked
+        // sufficient for a whole release cycle and was not: the caret sits past the final newline
+        // after ⌘↓, so typing at the end of a note saved a file with none at all. Found by running
+        // the smoke test against a vault under git, which is exactly what that bar is for.
+        Check.test("a write always leaves exactly one trailing newline") {
+            let url = vaultDirectory().appendingPathComponent("trailing.md")
+
+            for typed in ["no newline", "one already\n", "three of them\n\n\n"] {
+                _ = try? VaultIO.write(text: typed, to: url, expectedHash: nil)
+                let raw = (try? String(contentsOf: url, encoding: .utf8)) ?? "<unreadable>"
+                Check.expect(
+                    raw.hasSuffix("\n") && !raw.hasSuffix("\n\n"),
+                    "for \(String(reflecting: typed)) got \(String(reflecting: raw))"
+                )
+            }
+        }
+
+        // The trap in the fix above. `write` returns the hash of the *normalised* bytes, so a caller
+        // holding an un-normalised buffer must normalise before comparing — otherwise the two never
+        // agree, the dirty check always fires, and the note is rewritten on every debounce forever.
+        Check.test("the hash a write returns matches the normalised buffer, not the raw one") {
+            let url = vaultDirectory().appendingPathComponent("hash.md")
+            let typed = "typed without a trailing newline"
+
+            var written: String?
+            if case .written(let hash)? = try? VaultIO.write(
+                text: typed, to: url, expectedHash: nil
+            ) {
+                written = hash
+            }
+
+            Check.equal(
+                written, ContentHash.of(MarkdownDocument.normalizeTrailingNewline(typed)),
+                "normalised buffer must hash to what write stored"
+            )
+            Check.notEqual(
+                written, ContentHash.of(typed),
+                "raw buffer must NOT match — this is the comparison that loops if used"
+            )
+        }
     }
 }

@@ -153,7 +153,18 @@ public enum VaultIO {
         expectedHash: String?,
         now: Date = Date()
     ) throws -> WriteOutcome {
-        let data = Data(text.utf8)
+        // Decision 10's "exactly one trailing newline" applies on the way *out* as well as on the way
+        // in, and for a while it did not. Normalising only on load looks sufficient and is not: the
+        // caret can sit past the final newline (⌘↓ goes there), so typing at the end of a note
+        // produced a file with no trailing newline at all. POSIX-incorrect, and it put a
+        // "\ No newline at end of file" line into the diff of every note edited at its end — in a
+        // vault kept under git, which is exactly how the byte-for-byte bar is meant to be checked.
+        //
+        // The returned hash is of these normalised bytes, because they are what lands on disk. Any
+        // caller comparing a buffer against it has to normalise the buffer the same way, or the two
+        // never agree and the note is rewritten on every debounce forever.
+        let normalized = MarkdownDocument.normalizeTrailingNewline(text)
+        let data = Data(normalized.utf8)
         let newHash = ContentHash.of(data)
 
         var outcome: WriteOutcome?

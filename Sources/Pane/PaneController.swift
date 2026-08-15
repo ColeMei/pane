@@ -67,6 +67,17 @@ final class PaneController: NSObject {
     /// `VaultSync.react` treats differently from "we read it and it was empty".
     private var baselineHash: String?
 
+    /// The buffer hashed the way `VaultIO.write` will store it — trailing newline normalised.
+    ///
+    /// Every comparison between the buffer and `baselineHash` must go through this. `baselineHash`
+    /// holds the hash of what is on disk, and what goes on disk is normalised (decision 10), so a
+    /// raw `ContentHash.of(bufferText)` differs from it by exactly one newline on most notes. The
+    /// guard in `flush` would then never match, and the pane would rewrite the file every 500 ms for
+    /// as long as it was open.
+    private var bufferHash: String {
+        ContentHash.of(MarkdownDocument.normalizeTrailingNewline(bufferText))
+    }
+
     private var writeTimer: DispatchWorkItem?
     private var isWriting = false
     private var writeRequestedWhileWriting = false
@@ -355,7 +366,7 @@ final class PaneController: NSObject {
         writeTimer = nil
 
         guard let filename = currentFilename else { return }
-        guard ContentHash.of(bufferText) != baselineHash else { return }
+        guard bufferHash != baselineHash else { return }
 
         // One write in flight at a time. A second request while the first is coordinating would race
         // the baseline update and could produce a conflict sibling out of our own two writes.
@@ -419,7 +430,7 @@ final class PaneController: NSObject {
             switch VaultSync.react(
                 diskHash: diskHash,
                 baselineHash: self.baselineHash,
-                bufferHash: ContentHash.of(self.bufferText)
+                bufferHash: self.bufferHash
             ) {
             case .ignoreEcho, .noChange:
                 break
