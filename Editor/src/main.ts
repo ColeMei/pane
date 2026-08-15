@@ -13,6 +13,7 @@ import "./styles/tokens.css";
 import "./styles/pane.css";
 import "./styles/markdown.css";
 import "./styles/switcher.css";
+import "./styles/action-panel.css";
 
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -25,6 +26,7 @@ import {
 import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemirror/view";
 
+import { mountActionPanel } from "./action-panel";
 import { livePreview, scrollReporter } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
 import { mountFormatBar, setHeading } from "./format-bar";
@@ -46,6 +48,9 @@ type OutboundMessage =
   | { type: "close" }
   | { type: "contentHeight"; height: number }
   | { type: "switcherOpen"; open: boolean }
+  | { type: "actionsOpen"; open: boolean; height: number }
+  | { type: "revealInFinder" }
+  | { type: "openSettings" }
   | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
   | { type: "headingMenu"; button: Rect; level: number | null };
 
@@ -233,17 +238,35 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
   browseNotes: "Mod-p",
   pinPane: "Shift-Mod-p",
   formatBar: "Alt-Mod-,",
+  actionPanel: "Mod-k",
+  revealInFinder: "Alt-Mod-r",
+  deleteNote: "Ctrl-x",
 };
 
 const shortcutsCompartment = new Compartment();
 
+/**
+ * What every ⌘K row does, keyed by the same id the panel's rows carry.
+ *
+ * One table, two callers: the panel runs an entry when a row is chosen, and the keymap binds the
+ * same entry to that row's advertised shortcut. Written once because the alternative is a row whose
+ * printed key does something subtly different from clicking it — and a shortcut printed next to an
+ * action that does not do that thing is worse than no shortcut at all, which is the same reasoning
+ * that made the format bar's heading dropdown a real menu.
+ */
+const actionHandlers: Record<string, () => boolean> = {
+  newNote: () => (send({ type: "createNote", title: "" }), true),
+  browseNotes: () => (switcher.toggle(), true),
+  pinPane: () => (send({ type: "togglePin", filename: currentFilename }), true),
+  formatBar: () => (toggleFormatBar(), true),
+  revealInFinder: () => (send({ type: "revealInFinder" }), true),
+  settings: () => (send({ type: "openSettings" }), true),
+  deleteNote: () =>
+    currentFilename ? (send({ type: "deleteNote", filename: currentFilename }), true) : false,
+};
+
 function paneShortcuts(bindings: Record<string, string>): Extension {
-  const run: Record<string, () => boolean> = {
-    newNote: () => (send({ type: "createNote", title: "" }), true),
-    browseNotes: () => (switcher.toggle(), true),
-    pinPane: () => (send({ type: "togglePin", filename: currentFilename }), true),
-    formatBar: () => (toggleFormatBar(), true),
-  };
+  const run: Record<string, () => boolean> = { ...actionHandlers, actionPanel: () => (actions.toggle(), true) };
 
   return keymap.of(
     Object.entries(run)
@@ -355,6 +378,17 @@ formatBar = mountFormatBar(
   toggleFormatBar,
   (button, level) => send({ type: "headingMenu", button, level })
 );
+
+const actions = mountActionPanel({
+  root: document.getElementById("actions") as HTMLElement,
+  pane: paneEl,
+  isPinned: () => paneEl.hasAttribute("data-pinned"),
+  run: (id) => actionHandlers[id]?.(),
+  onVisibilityChange: (open, height) => {
+    send({ type: "actionsOpen", open, height });
+    if (!open) view.focus();
+  },
+});
 
 const switcher = mountSwitcher({
   root: document.getElementById("switcher") as HTMLElement,

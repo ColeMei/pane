@@ -20,6 +20,11 @@ enum PaneMessage {
     case close
     case contentHeight(CGFloat)
     case switcherOpen(Bool)
+    /// ⌘K opened or closed. Carries the panel's measured height, because how tall it is depends on
+    /// how many rows survived the filter — and the pane has to grow to hold it.
+    case actionsOpen(open: Bool, height: CGFloat)
+    case revealInFinder
+    case openSettings
     /// Where the window may be dragged from, in CSS pixels with a top-left origin. Sent by the web
     /// layer because only it knows where its own buttons ended up.
     case dragRegions(titleBar: CGRect, exclusions: [CGRect])
@@ -56,6 +61,15 @@ enum PaneMessage {
             self = .contentHeight(CGFloat(number("height")))
         case "switcherOpen":
             self = .switcherOpen(dict["open"] as? Bool ?? false)
+        case "actionsOpen":
+            self = .actionsOpen(
+                open: dict["open"] as? Bool ?? false,
+                height: CGFloat(number("height"))
+            )
+        case "revealInFinder":
+            self = .revealInFinder
+        case "openSettings":
+            self = .openSettings
         case "dragRegions":
             self = .dragRegions(
                 titleBar: Self.rect(dict["titleBar"]),

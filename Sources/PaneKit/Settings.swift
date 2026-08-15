@@ -61,15 +61,21 @@ public struct Settings: Codable, Equatable, Sendable {
 
     /// Action key, the label the tab shows, and the binding Pane ships with.
     ///
-    /// Deliberately only the actions that exist. Frame 3c also lists Action Panel, Open in New Pane
-    /// and Find in Note; all three belong to features that are not in v0.1, and a recordable row
-    /// that binds nothing is worse than an absent one. Adding them later is one entry each, which is
-    /// the property the design wanted from the table.
+    /// Deliberately only the actions that exist — decision 31. Frame 3c also lists Open in New Pane
+    /// and Find in Note; both belong to features that are not in v0.1, and a recordable row that
+    /// binds nothing is worse than an absent one. Adding one back is one entry here, which is exactly
+    /// what happened to Action Panel when ⌘K landed.
+    ///
+    /// The last three are also ⌘K rows, so the shortcut printed beside a row and the shortcut in this
+    /// table are the same binding rather than two things that have to be kept in step.
     public static let shortcutActions: [(key: String, label: String, standard: String)] = [
         ("newNote", "New Note", "Mod-n"),
         ("browseNotes", "Browse Notes", "Mod-p"),
+        ("actionPanel", "Action Panel", "Mod-k"),
         ("pinPane", "Pin Pane", "Shift-Mod-p"),
         ("formatBar", "Show Format Bar", "Alt-Mod-,"),
+        ("revealInFinder", "Reveal in Finder", "Alt-Mod-r"),
+        ("deleteNote", "Delete Note", "Ctrl-x"),
     ]
 
     public static var standardShortcuts: [String: String] {

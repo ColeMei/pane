@@ -77,6 +77,23 @@
         <div class="switcher__list" id="switcher-list" role="listbox" aria-label="Notes"></div>
         <div class="switcher__footer" id="switcher-footer"></div>
       </div>
+
+      <!-- ⌘K. Decision 17: everything that is not pin, switcher or new lives here, which is what
+           keeps the title bar at three icons forever. Built the same way as the switcher above. -->
+      <div class="actions" id="actions" role="dialog" aria-label="Actions">
+        <input
+          class="actions__search"
+          id="actions-search"
+          type="text"
+          placeholder="Search actions…"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-controls="actions-list"
+        />
+        <div class="actions__list" id="actions-list" role="listbox" aria-label="Actions"></div>
+      </div>
     </div>
 
     <script>__SCRIPT__</script>

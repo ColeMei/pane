@@ -1,0 +1,163 @@
+/*
+ * The ⌘K action panel — design frame 2a.
+ *
+ * Same construction as the switcher: absolutely positioned inside the pane, 54px down, centred, with
+ * the pane's own material around it. It is narrower (400 against the switcher's 460) because it is a
+ * list of short labels rather than of note titles with a second line under each.
+ *
+ * Frame 2a draws the pane behind it at 45% — the only overlay the design dims. Frame 1c never shows
+ * the switcher in context at all, so this is following the one frame that says something rather than
+ * inventing a rule for both. If they should match, the switcher is the one to change.
+ */
+
+.actions {
+  position: absolute;
+  left: 50%;
+  top: 54px;
+  transform: translateX(-50%);
+  z-index: 11;
+
+  display: flex;
+  flex-direction: column;
+  width: 400px;
+  max-width: calc(100% - 32px);
+
+  background: var(--overlay-bg);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-overlay);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+}
+
+.pane:not([data-actions]) .actions {
+  display: none;
+}
+
+/* The pane recedes while the panel is open (frame 2a). Not the banner: a conflict that fired while
+ * the panel was open is the one thing here that must not get quieter. */
+.pane[data-actions] .pane__titlebar,
+.pane[data-actions] .pane__content,
+.pane[data-actions] .pane__footer,
+.pane[data-actions] .format-bar {
+  opacity: 0.45;
+  transition: opacity 120ms ease-out;
+}
+
+/* ---- Search field ------------------------------------------------------------------------------
+ * The top of the panel rather than a bordered input, exactly as the switcher's is.
+ */
+
+.actions__search {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 15px;
+  border: 0;
+  border-bottom: 1px solid var(--separator);
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.actions__search::placeholder {
+  color: var(--text-faint);
+}
+
+/* ---- Rows --------------------------------------------------------------------------------------- */
+
+.actions__list {
+  overflow-y: auto;
+  max-height: 420px;
+}
+
+.actions__group {
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.actions__group:last-child {
+  border-bottom: 0;
+}
+
+.actions__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-row);
+  cursor: default;
+  color: var(--text-primary);
+}
+
+.actions__row:hover {
+  background: var(--fill-row-hover);
+}
+
+/* Selection is a fill, not the accent — decision 22 reserves accent for interactive state, and every
+ * row in this list is equally interactive. */
+.actions__row[aria-selected="true"] {
+  background: var(--fill-hover);
+}
+
+.actions__icon {
+  flex: none;
+}
+
+.actions__label {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Delete is last, red and separated. The red is on the row's own colour so the icon follows the
+ * label without a second rule. */
+.actions__row--danger {
+  color: #d0342c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-appearance="light"]) .actions__row--danger {
+    color: #ff6961;
+  }
+}
+
+:root[data-appearance="dark"] .actions__row--danger {
+  color: #ff6961;
+}
+
+/* ---- Key hints ---------------------------------------------------------------------------------- */
+
+.actions__keys {
+  display: flex;
+  gap: 3px;
+  flex: none;
+}
+
+.actions__keys kbd {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: var(--radius-chip);
+  background: var(--fill-hover);
+  border: 1px solid var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.actions__empty {
+  padding: 22px 24px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-quaternary);
+}

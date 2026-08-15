@@ -53,6 +53,9 @@ final class PaneController: NSObject {
     var onPinsChanged: (() -> Void)?
     /// Called when the vault turns out to be gone (decision 13).
     var onVaultMissing: (() -> Void)?
+    /// Called by ⌘K's Settings… row. The window belongs to the app, not to a pane — decision 16 —
+    /// so the pane asks rather than owning one.
+    var onOpenSettings: (() -> Void)?
 
     private var paneID: UUID
 
@@ -72,6 +75,8 @@ final class PaneController: NSObject {
 
     private var lastContentHeight: CGFloat = PanePanel.defaultHeight
     private var switcherIsOpen = false
+    private var actionsIsOpen = false
+    private var actionsPaneHeight: CGFloat = 0
 
     /// Pane height while the switcher is open: it is absolutely positioned 54 px down and can be
     /// 430 px tall, so a pane sized to a three-line note has to grow to hold it. Recorded in the
@@ -168,7 +173,7 @@ final class PaneController: NSObject {
         // The height the note wanted may have moved while the pane was away — an external edit, or a
         // note switched from the menu bar. Reconciling here rather than waiting for the web layer's
         // next report keeps the first frame the user sees the right size.
-        applyContentHeight(switcherIsOpen ? max(lastContentHeight, Self.switcherPaneHeight) : lastContentHeight)
+        applyContentHeight(heightWanted)
 
         editor.call("setFocused", [true])
         editor.focusEditor()
@@ -486,6 +491,14 @@ final class PaneController: NSObject {
 
     // MARK: - Geometry
 
+    /// The height the pane should be right now: the note's, unless an overlay needs more room.
+    private var heightWanted: CGFloat {
+        var wanted = lastContentHeight
+        if switcherIsOpen { wanted = max(wanted, Self.switcherPaneHeight) }
+        if actionsIsOpen { wanted = max(wanted, actionsPaneHeight) }
+        return wanted
+    }
+
     private func applyContentHeight(_ desired: CGFloat) {
         // Only while on screen. Offscreen the panel's frame is 30,000 points below every display, so
         // `grown` would measure it against a screen it is nowhere near and clamp every note to the
@@ -593,12 +606,30 @@ extension PaneController: EditorWebViewDelegate {
 
         case .contentHeight(let height):
             lastContentHeight = height
-            guard !switcherIsOpen else { return }
+            // An overlay is holding the pane open at its own height; shrinking to the note's height
+            // now would clip the thing the user is looking at.
+            guard !switcherIsOpen, !actionsIsOpen else { return }
             applyContentHeight(height)
 
         case .switcherOpen(let open):
             switcherIsOpen = open
             applyContentHeight(open ? max(lastContentHeight, Self.switcherPaneHeight) : lastContentHeight)
+
+        case .actionsOpen(let open, let height):
+            actionsIsOpen = open
+            // The panel is positioned 54 px down like the switcher, and wants the same 16 px of pane
+            // below it. Its height is measured rather than assumed because filtering changes it.
+            actionsPaneHeight = open ? 54 + height + 16 : 0
+            applyContentHeight(open ? max(lastContentHeight, actionsPaneHeight) : lastContentHeight)
+
+        case .revealInFinder:
+            guard let filename = currentFilename else { return }
+            NSWorkspace.shared.activateFileViewerSelecting(
+                [settings.value.vaultURL.appendingPathComponent(filename)]
+            )
+
+        case .openSettings:
+            onOpenSettings?()
 
         case .dragRegions(let titleBar, let exclusions):
             editor.setDragRegions(titleBar: titleBar, exclusions: exclusions)

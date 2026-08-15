@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pane = PaneController(vault: vault, state: state, settings: settings)
         pane.onPinsChanged = { [weak self] in self?.refreshMenuBar() }
         pane.onVaultMissing = { [weak self] in self?.handleVaultMissing() }
+        pane.onOpenSettings = { [weak self] in self?.openSettingsWindow() }
 
         installMenuBarItem()
         installHotkey()
