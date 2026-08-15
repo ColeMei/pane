@@ -509,6 +509,14 @@ final class PaneController: NSObject {
         // `grown` would measure it against a screen it is nowhere near and clamp every note to the
         // 120 pt minimum. The height is reconciled on the next summon instead.
         guard panel.isSummoned else { return }
+
+        // Never while the user is dragging the resize handle. Auto-sizing and a live drag are two
+        // things setting the same frame: the drag resizes the window, the web layer's ResizeObserver
+        // reports a new content height, this sets the frame back, the observer fires again. The pane
+        // flickers between the two answers for as long as the mouse is down. The height the drag
+        // lands on is recorded in `windowDidEndLiveResize` and becomes the floor (decision 29), so
+        // nothing is lost by staying out of the way until then.
+        guard !panel.inLiveResize else { return }
         guard let screen = panel.screen ?? NSScreen.main else { return }
         let current = panel.rememberedFrame ?? panel.frame
 
@@ -695,6 +703,10 @@ extension PaneController: NSWindowDelegate {
         pane.manualHeight = Double(panel.frame.height)
         paneState = pane
         rememberFrame()
+
+        // Auto-sizing was suppressed for the whole drag; reconcile once now that it is over, so a
+        // pane dragged shorter than its note immediately grows back to the new floor.
+        applyContentHeight(heightWanted)
     }
 
     /// Rule 3, "stay put": the drag is the only thing that moves a pane, so the drag is the only
