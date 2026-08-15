@@ -8,5 +8,6 @@ runPanelGeometryTests()
 runStateTests()
 runVaultSyncTests()
 runVaultIOTests()
+runRecentlyDeletedTests()
 
 exit(Check.finish())
