@@ -16,13 +16,11 @@ cask "pane" do
   desc "Hotkey-summoned notes panel backed by a folder of markdown files you own"
   homepage "https://github.com/ColeMei/pane"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Pane.app"
 
-  zap trash: [
-    "~/Library/Application Support/Pane",
-  ]
+  zap trash: "~/Library/Application Support/Pane"
 
   # Deliberately NOT listing the vault. `zap` is for the app's own leavings, and the vault is the
   # user's documents — the entire premise of the product is that those files are theirs and outlive
