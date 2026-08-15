@@ -56,10 +56,15 @@ if [[ ! -f "$ROOT/Editor/dist/index.html" ]]; then
 fi
 
 # ---- 2. swift binary --------------------------------------------------------------------------
+# `${arr[@]+"${arr[@]}"}` rather than plain `"${arr[@]}"`, and it is not superstition: under `set -u`
+# **bash 3.2 treats an empty array's expansion as an unbound variable**, and bash 3.2 is what
+# /bin/bash is on macOS. It only ever fails where the array is empty — that is, every build without
+# --universal — and never on a machine whose PATH finds a modern bash first, which is why this ran
+# clean here for weeks and failed on CI's first attempt.
 say "Building Pane ($CONFIG${ARCH_ARGS:+, universal})"
-swift build -c "$CONFIG" "${ARCH_ARGS[@]}" --product Pane
+swift build -c "$CONFIG" ${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"} --product Pane
 
-BIN="$(swift build -c "$CONFIG" "${ARCH_ARGS[@]}" --product Pane --show-bin-path)/Pane"
+BIN="$(swift build -c "$CONFIG" ${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"} --product Pane --show-bin-path)/Pane"
 [[ -f "$BIN" ]] || { echo "error: binary not found at $BIN" >&2; exit 1; }
 
 # ---- 3. bundle layout -------------------------------------------------------------------------
