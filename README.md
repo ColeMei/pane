@@ -55,8 +55,12 @@ Or download the `.zip` from the [latest release](https://github.com/ColeMei/pane
   lists, task checkboxes, links, rules, blockquotes. Raw syntax shows on the caret's line only.
 - **<kbd>⌘P</kbd>** switcher — recency-ordered with bands, fuzzy title match, full-text search. No
   results? <kbd>⏎</kbd> makes a note titled with what you typed.
-- **<kbd>⌘K</kbd>** action panel for everything else, so the title bar stays at three icons.
+- **<kbd>⌘K</kbd>** action panel for everything else, so the title bar stays at three icons — find in
+  note, copy as markdown, reveal in Finder, export to HTML, hide from screen capture, and the notes
+  you deleted.
 - **<kbd>⌘N</kbd>** new note. Pin notes to the top of the switcher.
+- **Deleted notes are recoverable**, for as long as you choose. They wait outside your vault so they
+  don't sync back, and nothing about them lives in a database — the folder *is* the record.
 - Height follows the note; drag to set a floor. Word count in the footer, format bar behind `Aa`.
 - Menu bar item, launch at login, light and dark.
 - External edits picked up automatically. **Pane never silently overwrites a file that changed
