@@ -8,49 +8,112 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ColeMei/pane?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/built_with-Swift-orange?logo=swift&style=flat-square" alt="Built with Swift">
   <img src="https://img.shields.io/badge/platform-macOS_14+-lightgrey?style=flat-square" alt="Platform: macOS 14+">
-  <img src="https://img.shields.io/badge/status-pre--alpha-red?style=flat-square" alt="Status: pre-alpha">
+  <a href="https://github.com/ColeMei/pane/releases"><img src="https://img.shields.io/github/v/release/ColeMei/pane?style=flat-square" alt="Latest release"></a>
 </p>
-
-> [!WARNING]
-> **Nothing is built yet.** This repo currently holds the product brief and the project skeleton.
-> There is no app to download. See [docs/BRIEF.md](docs/BRIEF.md) for what's being built and why.
 
 **Pane** is a hotkey-summoned notes panel for macOS, backed by a folder of markdown files you own.
 
-Press the hotkey and a panel floats in over your work with the caret already in the note you used last.
-Type. Press it again and the panel goes away, caret back where it was. No filename, no save dialog, no
-app switch. Markdown renders live as you type.
+Press <kbd>⌃⌥Space</kbd> and a panel floats in over your work with the caret already in the note you
+used last. Type. Press it again and it goes away, caret back where it was. No filename, no save
+dialog, **no app switch** — summoning Pane doesn't activate it or change your menu bar.
 
 The notes are `.md` files in a flat folder you choose. Not a database, not an account — which means
 sync is whatever you already use: point iCloud Drive, Syncthing, or a git repo at the folder.
 
-## Planned for v0.1
+## Install
 
-- Global hotkey summons and dismisses the panel — **without activating the app** or changing the menu bar
-- Floats above other apps, follows the current Space, works over fullscreen apps
-- Live markdown rendering, Typora-style: headings, emphasis, code, lists, task checkboxes, links, quotes
-- `⌘P` switcher — recency-ordered, fuzzy title match, full-text search
-- `⌘N` new note; pin notes to the top of the switcher
-- Flat vault of `.md` files, default `~/Documents/Pane`
-- External edits picked up automatically; never silently overwrites a file that changed underneath it
-- Menu bar item, launch at login
+```bash
+brew install --cask ColeMei/pane/pane
+```
 
-**Not in v0.1:** AI features, mobile, Windows/Linux, any sync server or account, telemetry, images,
-wiki links, tags, folders, themes, multiple panes on screen, encryption.
+Or download the `.zip` from the [latest release](https://github.com/ColeMei/pane/releases) and drag
+`Pane.app` to `/Applications`.
 
-## Design
+> [!IMPORTANT]
+> **macOS will say Pane "is damaged and can't be opened". It isn't.**
+>
+> That is what Gatekeeper says about any unsigned app, and right-click → Open no longer gets past
+> it. Pane has no Apple Developer ID behind it. Clear the quarantine flag once and it launches
+> normally from then on:
+>
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/Pane.app
+> ```
+>
+> Or skip the flag at install time:
+>
+> ```bash
+> brew install --cask --no-quarantine ColeMei/pane/pane
+> ```
 
-Swift + AppKit owns the panel, hotkey, menu bar, and file I/O; the editor is CodeMirror 6 in a
-`WKWebView`. No Node process, no Rust core, no Electron. The buffer *is* the markdown — live preview is
-view-only decoration, so what lands on disk is byte-for-byte what you typed.
+## What it does
+
+- **<kbd>⌃⌥Space</kbd>** summons and dismisses the panel — without activating the app or changing
+  the menu bar. It floats above other apps, follows you between Spaces, and works over fullscreen
+  apps.
+- **Live markdown**, Typora-style: headings, bold/italic/strike, inline code and code blocks, nested
+  lists, task checkboxes, links, rules, blockquotes. Raw syntax shows on the caret's line only.
+- **<kbd>⌘P</kbd>** switcher — recency-ordered with bands, fuzzy title match, full-text search. No
+  results? <kbd>⏎</kbd> makes a note titled with what you typed.
+- **<kbd>⌘K</kbd>** action panel for everything else, so the title bar stays at three icons.
+- **<kbd>⌘N</kbd>** new note. Pin notes to the top of the switcher.
+- Height follows the note; drag to set a floor. Word count in the footer, format bar behind `Aa`.
+- Menu bar item, launch at login, light and dark.
+- External edits picked up automatically. **Pane never silently overwrites a file that changed
+  underneath it** — it writes your version to a sibling and tells you where it went.
+
+## Your notes
+
+Plain `.md` files in a flat folder, `~/Documents/Pane` by default.
+
+Filenames are frozen at creation — `2026-08-11-1453-first-few-words.md` — and the title is just the
+first line of the file. Editing the title never renames the file, because renames are the single
+biggest source of duplicate and conflicted copies in iCloud Drive and Syncthing.
+
+Nothing Pane needs is stored in your notes. Caret positions, pins, window geometry and recency all
+live in `~/Library/Application Support/Pane/state.json`, outside the vault, never synced. There is
+no frontmatter and no database. What is in the file is what you typed, byte for byte.
+
+## Settings
+
+<kbd>⌘,</kbd> from any pane, or the menu bar item. Four tabs: the hotkey recorder and launch
+options, where the vault lives, appearance and themes, and a rebindable shortcut table.
+
+Everything is also plain JSON in `~/Library/Application Support/Pane/settings.json`, which Pane
+watches and re-reads live — so editing it by hand, over SSH, or from a dotfiles repo works and takes
+effect immediately.
+
+A **markdown theme is just a CSS file**: drop one in
+`~/Library/Application Support/Pane/Themes` and it appears in the Appearance tab.
 
 ## Privacy
 
-Pane requests **no privacy permissions at all**. Global hotkeys go through `RegisterEventHotKey`, which
-needs no Accessibility access. No network code ships.
+Pane requests **no privacy permissions at all**. The global hotkey goes through
+`RegisterEventHotKey`, which needs no Accessibility access, and no network code ships. There is no
+telemetry, no account, and no server.
 
-Builds will be **unsigned** (no Apple Developer ID), so the first launch will need the quarantine flag
-cleared. That'll be documented here when there's something to download.
+Builds are unsigned, which is the honest trade for that: see the install note above.
+
+## Building from source
+
+Pane is a SwiftPM package plus a web bundle. There is no Xcode project, on purpose — everything here
+builds with the Command Line Tools alone.
+
+```bash
+Scripts/test.sh                # run the PaneKit suite
+Scripts/build-app.sh --debug   # assemble build/Pane.app
+```
+
+`swift test` does not work, and neither does `xcodebuild`: XCTest doesn't ship with the Command Line
+Tools, so the test suite is an ordinary executable target instead. A fresh checkout tests with
+nothing but the toolchain that builds it.
+
+Swift + AppKit owns the panel, hotkey, menu bar and file I/O; the editor is CodeMirror 6 in a
+`WKWebView`. No Node process, no Rust core, no Electron. The buffer *is* the markdown — live preview
+is view-only decoration, so what lands on disk is byte-for-byte what you typed.
+
+[docs/BRIEF.md](docs/BRIEF.md) is the decision record: what was built, and why, including the parts
+that turned out wrong.
 
 ## License
 

@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# The tag is the trigger, and the smoke test is the gate before it — see the release process in
+# CLAUDE.md. Nothing here replaces running the real app by hand first; this exists so the artifact
+# people download is built from a clean checkout rather than from whatever was in a working tree.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: Editor/package-lock.json
+
+      - name: Install editor dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: Editor
+
+      - name: Test PaneKit
+        run: Scripts/test.sh
+
+      - name: Version from the tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Pane.app (universal)
+        env:
+          PANE_VERSION: ${{ steps.version.outputs.version }}
+        run: Scripts/build-app.sh --universal
+
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          NAME="Pane-${{ steps.version.outputs.version }}.zip"
+          # ditto, not zip: it preserves the bundle's resource forks and — the part that matters —
+          # the ad-hoc signature. A plain `zip` produces an app that fails codesign --verify on the
+          # other end, which on an already-unsigned app reads to the user as a corrupt download.
+          ditto -c -k --keepParent build/Pane.app "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 "$NAME" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the packaged app
+        run: |
+          set -euo pipefail
+          rm -rf verify && mkdir verify
+          ditto -x -k "${{ steps.package.outputs.name }}" verify
+          codesign --verify --deep --strict verify/Pane.app
+          # Universal, or the release silently drops every Intel Mac.
+          lipo -archs verify/Pane.app/Contents/MacOS/Pane | tee /dev/stderr | grep -q "x86_64"
+          lipo -archs verify/Pane.app/Contents/MacOS/Pane | grep -q "arm64"
+          test "$(plutil -extract CFBundleShortVersionString raw verify/Pane.app/Contents/Info.plist)" \
+            = "${{ steps.version.outputs.version }}"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --draft \
+            "${{ steps.package.outputs.name }}"
+
+          # The sha256 the Homebrew cask needs, in the job log rather than only in the artifact —
+          # bumping the cask is the next manual step and this saves re-downloading to compute it.
+          echo "::notice title=Cask sha256::${{ steps.package.outputs.sha256 }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Pane ${{ steps.version.outputs.version }}"
+            echo
+            echo "Release created **as a draft** — review the notes, then publish."
+            echo
+            echo '```'
+            echo "asset:  ${{ steps.package.outputs.name }}"
+            echo "sha256: ${{ steps.package.outputs.sha256 }}"
+            echo '```'
+            echo
+            echo "Next: bump \`Casks/pane.rb\` in \`ColeMei/homebrew-pane\` with that url and sha256."
+          } >> "$GITHUB_STEP_SUMMARY"

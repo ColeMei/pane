@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: Editor/package-lock.json
+
+      - name: Install editor dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: Editor
+
+      - name: Typecheck the editor bundle
+        run: npm run typecheck
+        working-directory: Editor
+
+      # `swift test` cannot run here for the same reason it cannot run on the dev machine: neither
+      # XCTest nor swift-testing ships with the Command Line Tools. The suite is an ordinary
+      # executable target, which is what makes it runnable anywhere `swift build` is.
+      - name: Test PaneKit
+        run: Scripts/test.sh
+
+      # Assembles the real .app, so a break in the bundling script, the Info.plist substitution or
+      # the ad-hoc signature fails the build rather than waiting for a release.
+      - name: Build Pane.app
+        run: Scripts/build-app.sh
+
+      - name: Verify the bundle
+        run: |
+          set -euo pipefail
+          APP=build/Pane.app
+          test -x "$APP/Contents/MacOS/Pane"
+          test -f "$APP/Contents/Resources/Editor/index.html"
+          test -f "$APP/Contents/Resources/AppIcon.icns"
+          test -f "$APP/Contents/Resources/MenuBar@2x.png"
+          codesign --verify --deep --strict "$APP"
+
+          # Decision 9 is a promise the build can keep on its own: Pane requests no privacy
+          # permissions at all, so an NS*UsageDescription key appearing in the bundle means one of
+          # them broke. Cheaper to catch here than in a review.
+          if plutil -p "$APP/Contents/Info.plist" | grep -q "UsageDescription"; then
+            echo "error: Info.plist declares a privacy usage description — see decision 9" >&2
+            exit 1
+          fi
