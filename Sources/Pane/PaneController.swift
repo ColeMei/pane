@@ -525,10 +525,28 @@ final class PaneController: NSObject {
             "applySettings",
             [[
                 "appearance": settings.value.appearance.rawValue,
+                "accent": settings.value.accent,
                 "textSize": settings.value.textSize,
                 "translucent": settings.value.translucentPanes,
+                "shortcuts": settings.value.shortcuts,
+                // Decision 19: a theme is a CSS file, so what crosses the bridge is the file's
+                // contents. Read here rather than fetched by the web layer — the page is loaded from
+                // a file URL with read access scoped to the bundle, and widening that scope to reach
+                // Application Support would be a much bigger hole than passing a string.
+                "themeCSS": loadThemeCSS(),
             ]]
         )
+    }
+
+    /// The selected theme's stylesheet, or empty for Pane's own.
+    ///
+    /// Failure is silent and falls back to the default: a theme is a file the user dropped in a
+    /// folder, so a malformed or deleted one is an ordinary Tuesday, not an error worth a banner.
+    private func loadThemeCSS() -> String {
+        let name = settings.value.markdownTheme
+        guard !name.isEmpty else { return "" }
+        let url = settings.themesFolder.appendingPathComponent(name)
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 }
 

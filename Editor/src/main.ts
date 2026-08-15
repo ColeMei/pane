@@ -22,7 +22,7 @@ import {
   markdown,
   markdownLanguage,
 } from "@codemirror/lang-markdown";
-import { EditorState, type Extension, Prec } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemirror/view";
 
 import { livePreview, scrollReporter } from "./live-preview";
@@ -80,6 +80,12 @@ const wordCountEl = document.getElementById("word-count") as HTMLElement;
 const editorHost = document.getElementById("editor-host") as HTMLElement;
 const bannerEl = document.getElementById("banner") as HTMLElement;
 const bannerTextEl = document.getElementById("banner-text") as HTMLElement;
+
+/// Where a user's markdown theme lands (decision 19). Appended last so it wins the cascade against
+/// the bundled stylesheets without needing !important.
+const themeStyleEl = document.createElement("style");
+themeStyleEl.id = "markdown-theme";
+document.head.appendChild(themeStyleEl);
 
 /** Suppresses the `edited` message while Swift is loading a note into the buffer. */
 let applyingRemoteEdit = false;
@@ -215,6 +221,42 @@ function checkboxInputRule(): Extension {
   });
 }
 
+/**
+ * The shortcuts the Settings window can rebind (design frame 3c).
+ *
+ * Keyed by the same action names `Settings.shortcutActions` uses on the Swift side — the two lists
+ * have to agree, and naming the action rather than the key is what lets the binding change without
+ * anything here knowing.
+ */
+const DEFAULT_SHORTCUTS: Record<string, string> = {
+  newNote: "Mod-n",
+  browseNotes: "Mod-p",
+  pinPane: "Shift-Mod-p",
+  formatBar: "Alt-Mod-,",
+};
+
+const shortcutsCompartment = new Compartment();
+
+function paneShortcuts(bindings: Record<string, string>): Extension {
+  const run: Record<string, () => boolean> = {
+    newNote: () => (send({ type: "createNote", title: "" }), true),
+    browseNotes: () => (switcher.toggle(), true),
+    pinPane: () => (send({ type: "togglePin", filename: currentFilename }), true),
+    formatBar: () => (toggleFormatBar(), true),
+  };
+
+  return keymap.of(
+    Object.entries(run)
+      // A binding the user cleared, or one Swift sent for an action this build does not have, drops
+      // out rather than registering an undefined key.
+      .filter(([action]) => Boolean(bindings[action] ?? DEFAULT_SHORTCUTS[action]))
+      .map(([action, handler]) => ({
+        key: bindings[action] ?? DEFAULT_SHORTCUTS[action],
+        run: handler,
+      }))
+  );
+}
+
 function baseExtensions(): Extension[] {
   return [
     history(),
@@ -254,12 +296,12 @@ function baseExtensions(): Extension[] {
       ])
     ),
 
+    // Pane's own shortcuts, in their own compartment so the Shortcuts tab can rebind them without
+    // rebuilding the editor. Listed before the keymap below so they win over CodeMirror's defaults —
+    // within one precedence level, the earlier extension is the higher one.
+    shortcutsCompartment.of(paneShortcuts(DEFAULT_SHORTCUTS)),
+
     keymap.of([
-      // Pane's own shortcuts come first so they win over the editor's defaults.
-      { key: "Mod-p", run: () => (switcher.toggle(), true) },
-      { key: "Mod-n", run: () => (send({ type: "createNote", title: "" }), true) },
-      { key: "Shift-Mod-p", run: () => (send({ type: "togglePin", filename: currentFilename }), true) },
-      { key: "Alt-Mod-,", run: () => (toggleFormatBar(), true) },
       // The levels the heading dropdown advertises. A shortcut printed in a menu that does nothing
       // is worse than no shortcut.
       { key: "Alt-Mod-1", run: (v) => (setHeading(v, 1), true) },
@@ -372,8 +414,15 @@ const host = {
     paneEl.toggleAttribute("data-focused", focused);
   },
 
-  /** Appearance and vibrancy come from settings; the CSS keys off these attributes. */
-  applySettings(settings: { appearance?: string; textSize?: number; translucent?: boolean }): void {
+  /** Appearance, accent, theme and key bindings. The CSS keys off these attributes and variables. */
+  applySettings(settings: {
+    appearance?: string;
+    accent?: string;
+    textSize?: number;
+    translucent?: boolean;
+    themeCSS?: string;
+    shortcuts?: Record<string, string>;
+  }): void {
     const root = document.documentElement;
     if (settings.appearance && settings.appearance !== "system") {
       root.setAttribute("data-appearance", settings.appearance);
@@ -382,6 +431,18 @@ const host = {
     }
     root.setAttribute("data-vibrancy", settings.translucent === false ? "off" : "on");
     if (settings.textSize) root.style.setProperty("--text-size", `${settings.textSize}px`);
+    if (settings.accent) root.style.setProperty("--accent", settings.accent);
+
+    // Decision 19: a theme is a CSS file. Swift reads it and hands over the text; all that happens
+    // here is that it goes last in the cascade, after tokens/pane/markdown, so a theme can override
+    // any token without !important and without knowing the stylesheet order.
+    if (settings.themeCSS !== undefined) themeStyleEl.textContent = settings.themeCSS;
+
+    if (settings.shortcuts) {
+      view.dispatch({
+        effects: shortcutsCompartment.reconfigure(paneShortcuts(settings.shortcuts)),
+      });
+    }
   },
 
   showNotes(notes: NoteSummary[], total: number, query: string): void {

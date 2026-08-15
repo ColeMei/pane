@@ -18,9 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController!
     private var hotkey: GlobalHotkey!
     private var watcher: VaultWatcher?
+    private var settingsWindow: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
+        applyDockIcon()
 
         // Decision 13, and the order matters: the vault has to be resolved before anything tries to
         // read a note out of it, and "create it" is only ever allowed to happen once.
@@ -36,7 +38,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startWatching()
         applyLaunchAtLogin()
 
+        settings.onChange = { [weak self] new in self?.settingsChanged(new) }
+        // Decision 12's promise — "changing the hotkey is a one-line edit" — only holds if the edit
+        // takes effect. The Settings window is the ordinary way in now, but the file is still there
+        // and still documented, so it still has to work.
+        settings.watchForHandEdits()
+
         pruneStateForMissingNotes()
+    }
+
+    // MARK: - Settings
+
+    /// Re-applies everything after a settings change, from either the window or a hand edit.
+    ///
+    /// Everything, rather than a diff: there are a dozen settings and re-applying all of them costs
+    /// less than the bookkeeping to know which one moved — and gets the case where several changed at
+    /// once, which Restore Defaults does by design.
+    private func settingsChanged(_ new: Settings) {
+        if hotkey?.registered != new.summonHotkey { installHotkey() }
+        applyDockIcon()
+        applyLaunchAtLogin()
+        applyMenuBarIconVisibility()
+        pane?.applySettings()
+        settingsWindow?.settingsChanged(new)
+        menuBar?.rebuild(hotkey: new.summonHotkey)
+    }
+
+    /// Decision 16's window, replacing the settings *file* the menu item used to open.
+    ///
+    /// That substitute was honest while there was no window — better than an item greyed out for a
+    /// whole release — and it retires here rather than lingering as a second way to do the same job.
+    private func openSettingsWindow() {
+        if settingsWindow == nil {
+            settingsWindow = SettingsWindowController(settings: settings) { [weak self] url in
+                guard let self else { return }
+                self.vault.setVault(url)
+                self.startWatching()
+                self.pane.openLastUsedNote()
+                self.refreshMenuBar()
+            }
+        }
+        settingsWindow?.present()
+    }
+
+    /// The Dock icon is off by default (Pane lives in the menu bar) and switches the activation
+    /// policy at runtime rather than through `Info.plist`, so turning it on does not need a relaunch.
+    private func applyDockIcon() {
+        let wanted: NSApplication.ActivationPolicy = settings.value.showDockIcon ? .regular : .accessory
+        guard NSApp.activationPolicy() != wanted else { return }
+        NSApp.setActivationPolicy(wanted)
+    }
+
+    private func applyMenuBarIconVisibility() {
+        if settings.value.showMenuBarIcon {
+            if menuBar == nil { installMenuBarItem() }
+        } else {
+            menuBar = nil
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -213,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.pane.createNote(title: "")
         }
         menuBar.onBrowse = { [weak self] in self?.pane.openSwitcher() }
-        menuBar.onSettings = { [weak self] in self?.openSettingsFile() }
+        menuBar.onSettings = { [weak self] in self?.openSettingsWindow() }
         // Summon first: the pinned section exists so a pinned note is one click away from anywhere,
         // and opening one into a pane that is still offscreen would be a click that does nothing.
         menuBar.onOpenNote = { [weak self] filename in
@@ -244,23 +302,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .map { (filename: $0.key, title: titles[$0.key] ?? "") }
     }
 
-    /// Decision 16 defers the Settings window; decision 12's substitute stands until it lands, and
-    /// the substitute is a file. So "Settings…" opens that file — which is a truthful thing for the
-    /// menu item to do, and better than an item that is greyed out for a whole release.
-    private func openSettingsFile() {
-        NSWorkspace.shared.open(settings.url)
-    }
-
     // MARK: - Login item
 
     private func applyLaunchAtLogin() {
-        guard settings.value.launchAtLogin else { return }
         do {
-            if SMAppService.mainApp.status != .enabled {
+            switch (settings.value.launchAtLogin, SMAppService.mainApp.status) {
+            case (true, .enabled), (false, .notRegistered), (false, .notFound):
+                break
+            case (true, _):
                 try SMAppService.mainApp.register()
+            case (false, _):
+                try SMAppService.mainApp.unregister()
             }
         } catch {
-            NSLog("Pane: could not register the login item — %@", String(describing: error))
+            NSLog("Pane: could not update the login item — %@", String(describing: error))
         }
     }
 
@@ -322,6 +377,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        openSettingsFile()
+        openSettingsWindow()
     }
 }
