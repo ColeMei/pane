@@ -85,18 +85,30 @@ final class PanePanel: NSPanel {
 
     // MARK: - Spaces
 
-    /// Rules 1 and 5, and the fullscreen rule, are all one property.
+    /// Every pane joins every Space, pinned or not.
     ///
-    /// **Unpinned** — `.moveToActiveSpace`: summoning brings the pane to whichever Space you are on,
-    /// which is what "appears on the current Space" means for a window that already exists.
-    /// **Pinned** — `.canJoinAllSpaces`: the pane follows Space switches instead of being fetched,
-    /// which is rule 5's "a pinned pane follows Space switches".
-    /// **Both** — `.fullScreenAuxiliary`: joins a fullscreen app as an overlay rather than forcing a
-    /// Space switch out of it.
-    func applyCollectionBehaviour(pinned: Bool) {
-        collectionBehavior = pinned
-            ? [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-            : [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
+    /// This reverses the Space half of rule 5, and the reason is that the rule was built on a
+    /// conflation the design record itself makes. "Pinned" means two different things in two
+    /// different frames: in 1c it is a note sorted to the top of the switcher, and in 1g it is a
+    /// window that ignores dismiss *and* follows Space switches. Wiring one control to all three
+    /// made the Space behaviour a side effect of a list-ordering choice, which is not a thing anyone
+    /// could predict — and it showed up exactly as you would expect, as an unpinned pane refusing to
+    /// come to the Space you were on.
+    ///
+    /// `.moveToActiveSpace` was also the wrong tool for it. It is evaluated when a window is ordered
+    /// front, and this window is never ordered out — dismiss parks it offscreen so the WebContent
+    /// process stays warm, which is what keeps the 100 ms bar reachable. A window already in the
+    /// window list gets re-fronted without AppKit reconsidering its Space, so the rule failed
+    /// silently rather than loudly.
+    ///
+    /// `.canJoinAllSpaces` has neither problem: the pane is on every Space already, so summoning is
+    /// only ever a matter of moving it back on screen. Pinning keeps the two meanings that are
+    /// actually about the note and the pane — top of the switcher, and ignores the dismiss hotkey.
+    ///
+    /// `.fullScreenAuxiliary` joins a fullscreen app as an overlay rather than forcing a Space
+    /// switch out of it.
+    func applyCollectionBehaviour(pinned: Bool = false) {
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
     }
 
     // MARK: - Summon and dismiss
