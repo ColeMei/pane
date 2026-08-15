@@ -1,0 +1,312 @@
+/*
+ * The ⌘P switcher — design frame 1c, in all five states.
+ *
+ * This is the design's stated hard problem: 200 notes, and the answer is landmarks rather than
+ * search-only. Recency bands give the scroll something to land on; rows carry the first line of body
+ * so that two notes with the same title stay tellable apart.
+ *
+ * WHERE IT LIVES. Frame 1c draws the switcher standalone, with its own radius, shadow and material,
+ * and never shows it in context. Frame 2a *does* show the ⌘K panel in context — absolutely
+ * positioned inside the pane, 54px from the top, horizontally centred, with the pane's material
+ * around it. The switcher is built the same way, for two reasons: decision 14 says every control
+ * lives inside its own pane, and a second window would mean a second web view to keep warm.
+ *
+ * The consequence the design does not address: a pane sized to a three-line note is shorter than the
+ * switcher. While the switcher is open the pane grows to fit it — top edge anchored, per rule 2 —
+ * and returns to its content height on close. Recorded in the brief as a gap filled during the build.
+ */
+
+.switcher {
+  position: absolute;
+  left: 50%;
+  top: 54px;
+  transform: translateX(-50%);
+  z-index: 10;
+
+  display: flex;
+  flex-direction: column;
+  width: var(--switcher-width);
+  max-width: calc(100% - 32px);
+
+  background: var(--overlay-bg);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-overlay);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+}
+
+.pane:not([data-switcher]) .switcher {
+  display: none;
+}
+
+/* ---- Search field ------------------------------------------------------------------------------
+ * Not an <input> with a border — it is the top of the panel, separated only by a hairline. The
+ * placeholder carries the note count ("Search 214 notes…"), which is the only place that number
+ * appears before you have typed anything.
+ */
+
+.switcher__search {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--separator);
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text-primary);
+  caret-color: var(--accent);
+}
+
+.switcher__search:focus {
+  outline: none;
+}
+
+.switcher__search::placeholder {
+  color: var(--text-faint);
+}
+
+/* ---- List --------------------------------------------------------------------------------------- */
+
+.switcher__list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  max-height: var(--switcher-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* A 5px thumb and no track — the design draws the thumb alone, floating 3px from the edge. */
+.switcher__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.switcher__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.switcher__list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-right-width: 3px;
+  border-radius: 3px;
+  background: var(--scrollbar);
+  background-clip: padding-box;
+}
+
+/* Recency band header. Uppercase and letter-spaced so it reads as a label rather than as a row. */
+.switcher__group {
+  padding: 10px 16px 4px;
+  font-size: var(--size-group);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Below ~8 notes the bands disappear entirely — headers over a four-row list are chrome pretending
+ * to be structure. The threshold lives in PaneKit (NoteOrdering.groupingThreshold). */
+.switcher[data-flat] .switcher__group {
+  display: none;
+}
+
+/* ---- Row ----------------------------------------------------------------------------------------- */
+
+.switcher__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--switcher-row-padding);
+  cursor: default;
+}
+
+.switcher__row:hover {
+  background: var(--fill-row-hover);
+}
+
+.switcher__row[aria-selected="true"] {
+  background: var(--fill-hover);
+}
+
+.switcher__row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.switcher__title {
+  font-size: var(--size-title);
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.switcher__pin {
+  flex: none;
+  color: var(--accent);
+}
+
+/* The note already open. An outline rather than a fill, so it reads as a label and not as a button. */
+.switcher__badge {
+  flex: none;
+  padding: 0.5px 5px;
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
+  border-radius: var(--radius-chip);
+  font-size: var(--size-badge);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.switcher__row-spacer {
+  flex: 1;
+}
+
+/* Pin and delete, revealed on hover. Hidden rather than absent so the row never changes height. */
+.switcher__actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  color: var(--text-quaternary);
+  visibility: hidden;
+}
+
+.switcher__row:hover .switcher__actions,
+.switcher__row[aria-selected="true"] .switcher__actions {
+  visibility: visible;
+}
+
+.switcher__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+
+.switcher__action:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+/* The meta line: time · first line of body. NEVER a character count — a vault with two notes both
+ * called "8-11 - 2" is only navigable if this line says what is in them. */
+.switcher__meta {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--size-meta);
+  color: var(--text-quaternary);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.switcher__time,
+.switcher__dot {
+  flex: none;
+}
+
+.switcher__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A body match replaces the preview with the matched snippet, highlighted in place. */
+.switcher__match {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--accent) 28%, transparent);
+  color: var(--text-primary);
+}
+
+.switcher__fade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--switcher-fade-height);
+  background: linear-gradient(var(--fade-from), var(--fade-to));
+  pointer-events: none;
+}
+
+/* ---- Footer hints -------------------------------------------------------------------------------
+ * The strings differ per state and are set from script: "214 notes / ↑↓ navigate / ⏎ open / ⌘⏎ pin",
+ * "3 of 214 notes match / ⏎ open", "4 notes / ⏎ open / ⌘N new".
+ */
+
+.switcher__footer {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--separator);
+  font-size: var(--size-hint);
+  color: var(--text-faint);
+}
+
+.switcher__footer-spacer {
+  flex: 1;
+}
+
+/* ---- Empty and no-results ------------------------------------------------------------------------ */
+
+.switcher__empty {
+  padding: 36px 24px;
+  text-align: center;
+}
+
+.switcher__empty-title {
+  margin-bottom: 4px;
+  font-size: var(--size-title);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.switcher__empty-body {
+  font-size: var(--size-meta);
+  line-height: 1.5;
+  color: var(--text-quaternary);
+}
+
+.switcher__noresults {
+  padding: 22px 24px 8px;
+  text-align: center;
+  font-size: var(--size-meta);
+  color: var(--text-quaternary);
+}
+
+/* The dead end becomes capture: ⏎ creates a note whose first line is the query you just typed. */
+.switcher__create {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 10px 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--fill-subtle);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.switcher__create-spacer {
+  flex: 1;
+}
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: var(--radius-chip);
+  background: var(--fill-hover);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-quaternary);
+}

@@ -1,0 +1,306 @@
+/*
+ * The pane itself: title bar, content, footer, format bar.
+ *
+ * Design frames 1a (at rest), 1b (mid-typing), 1d (pinned), 1e (multi-pane), 1f (dark), 2b (format
+ * bar). Decision 22 governs what is allowed to be here at all — and the answer is very little.
+ */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent; /* the NSPanel draws the material; the web view must not paint over it */
+}
+
+body {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  color: var(--text-primary);
+  /* A panel is not a web page: no rubber-banding, no text selection on chrome, no callouts. */
+  overscroll-behavior: none;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  /* The window itself is borderless and transparent; the rounding and hairline live here so the
+   * material, the border and the corner radius stay in one place. */
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+}
+
+/* ---- Title bar --------------------------------------------------------------------------------
+ * One close dot. Minimise and zoom do nothing to a non-activating panel, so drawing them would be a
+ * lie about what the window can do.
+ */
+
+.pane__titlebar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: var(--titlebar-height);
+  padding: 0 var(--titlebar-padding-x);
+  gap: var(--titlebar-gap);
+  /* The whole bar is the drag handle — rule 3, "only a drag moves the pane". Buttons opt back out. */
+  -webkit-app-region: drag;
+}
+
+.pane__close {
+  flex: none;
+  width: var(--close-dot-size);
+  height: var(--close-dot-size);
+  padding: 0;
+  border: var(--close-dot-border);
+  border-radius: 50%;
+  background: var(--close-dot);
+  -webkit-app-region: no-drag;
+}
+
+/* Unfocused panes drop the red dot to neutral and hide their footer (design frame 1e). */
+.pane:not([data-focused]) .pane__close {
+  background: var(--close-dot-inactive);
+  border: none;
+}
+
+.pane:not([data-focused]) .pane__footer,
+.pane:not([data-focused]) .format-bar {
+  display: none;
+}
+
+.pane:not([data-focused]) {
+  box-shadow: var(--shadow-pane-unfocused);
+}
+
+/* Empty until you scroll past the H1 — at which point the title you scrolled away from comes back,
+ * because a pane with no visible heading is a pane you cannot identify.
+ * The design specifies the behaviour but never draws the result; centred follows the macOS
+ * convention for a title in a title bar. */
+.pane__title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: var(--size-footer);
+  font-weight: 500;
+  color: var(--text-quaternary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.pane__titlebar[data-scrolled] .pane__title {
+  opacity: 1;
+}
+
+.pane__spacer {
+  flex: 1;
+}
+
+/* When the title is showing it takes the flexible space, so the plain spacer stands down. */
+.pane__titlebar[data-scrolled] .pane__spacer {
+  display: none;
+}
+
+.icon-button {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--text-quaternary);
+  font-family: inherit;
+  -webkit-app-region: no-drag;
+}
+
+.icon-button:hover {
+  background: var(--fill-hover);
+}
+
+.icon-button--plus {
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+/* The switcher button is three rules rather than an icon font. */
+.icon-button__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5px;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button__lines i {
+  width: 12px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+/* Pinned: the ONLY signal is the filled accent pin in a tinted well. No border change, no extra
+ * chrome — decision 24's Pinned rule is explicit that this is all there is. */
+.pane[data-pinned] .icon-button[data-action="pin"] {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+/* ---- Content ---------------------------------------------------------------------------------- */
+
+.pane__content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane__scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--content-padding);
+  /* A measure, not the full pane width. Long lines that run the whole 692px are hard to read and the
+   * design gives them generous gutters instead. */
+  max-width: var(--content-measure);
+  font-size: var(--text-size);
+  line-height: var(--line-height);
+  color: var(--text-primary);
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+}
+
+/* Content fades out above the footer rather than colliding with it. */
+.pane__fade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--fade-height);
+  background: linear-gradient(var(--fade-from), var(--fade-to));
+  pointer-events: none;
+}
+
+/* ---- Footer -----------------------------------------------------------------------------------
+ * Exactly one row. The design's own markup is [spacer][word count][spacer][Aa], which centres the
+ * count in the space before the toggle rather than in the pane — replicated rather than "corrected",
+ * because that asymmetry is what the frames show.
+ */
+
+.pane__footer {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: var(--footer-height);
+  padding: 0 var(--titlebar-padding-x);
+  border-top: 1px solid var(--separator);
+  color: var(--text-quaternary);
+  font-size: var(--size-footer);
+}
+
+/* Two spacers around the count, one element each, exactly as the design's markup has them. */
+.pane__footer-spacer {
+  flex: 1;
+}
+
+.pane__words {
+  flex: none;
+}
+
+.icon-button--sm {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-button-sm);
+  font-size: 13px;
+}
+
+/* ---- Format bar -------------------------------------------------------------------------------
+ * Replaces the footer row while open — one bar, never two. The word count yields.
+ */
+
+.pane[data-format-bar] .pane__footer {
+  display: none;
+}
+
+.format-bar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  height: var(--formatbar-height);
+  padding: 0 10px;
+  border-top: 1px solid var(--separator);
+}
+
+.pane:not([data-format-bar]) .format-bar {
+  display: none;
+}
+
+.format-bar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.format-bar button:hover {
+  background: var(--fill-hover);
+}
+
+/* Active state is a pressed fill, NOT accent — accent is reserved for interactive state, and a
+ * toggled-on button is a state of the document, not of the pointer. */
+.format-bar button[aria-pressed="true"] {
+  background: var(--fill-pressed);
+  color: var(--text-primary);
+}
+
+.format-bar__heading {
+  width: auto !important;
+  gap: 2px;
+  padding: 0 7px !important;
+  font-weight: 700;
+}
+
+.format-bar__bold { font-weight: 800; }
+.format-bar__italic { font-style: italic; font-family: Georgia, serif; }
+.format-bar__strike { text-decoration: line-through; }
+.format-bar__underline { text-decoration: underline; }
+.format-bar__code { font-family: var(--font-mono); font-size: 11px; }
+
+.format-bar__separator {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  background: var(--rule);
+}
+
+.format-bar__spacer {
+  flex: 1;
+}
+
+.format-bar__close {
+  color: var(--text-quaternary);
+  font-size: 12px;
+}

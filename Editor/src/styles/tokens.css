@@ -1,0 +1,233 @@
+/*
+ * Design tokens, extracted from the Stage 2 design record.
+ *
+ * Every value here appears in `Pane Design.dc.html`. Where the design used a literal in one frame and
+ * a near-identical literal in another, the more frequent one wins and the difference is noted. Nothing
+ * is invented: if a value is needed and the design does not have one, it gets a comment saying so.
+ *
+ * Two things the design parameterises through its own props block, which `applyVars()` implements:
+ * the accent, and whether panes are translucent. Both are settings (see Settings.swift), so both are
+ * variables here rather than baked in.
+ */
+
+:root {
+  /* ---- Accent -------------------------------------------------------------------------------
+   * Reserved for interactive state only (decision 22). List markers, bullets and body text stay
+   * neutral; the format bar's active button uses a pressed fill, not this. If accent is showing up
+   * in static content, something has gone wrong.
+   * The design offers four: #c98a1f, #5b67d8, #2f9e8f, #6e7480. The picker is deferred with Settings.
+   */
+  --accent: #c98a1f;
+
+  /* ---- Material -----------------------------------------------------------------------------
+   * Vibrancy on by default. Turning it off swaps blur for a flat opaque background, exactly as the
+   * design's applyVars() does.
+   */
+  --panel-blur: saturate(1.4) blur(22px);
+  --panel-bg: rgba(247, 247, 249, 0.88);
+
+  /* The ⌘P switcher sits on top of the pane, so it is more opaque than the pane behind it —
+   * stacking two 88% surfaces would turn the note underneath into noise. */
+  --overlay-bg: rgba(250, 250, 252, 0.97);
+
+  /* ---- Text ---------------------------------------------------------------------------------
+   * Four steps, in the order the design reaches for them. The counts in the design file are
+   * 61 / 38 / 53 / 57, so all four are load-bearing rather than accidental.
+   */
+  --text-primary: #1d1d1f;    /* titles, body, active labels */
+  --text-secondary: #3a3a3e;  /* form labels, code, quieter body */
+  --text-tertiary: #6e6e73;   /* annotations, inactive tab labels */
+  --text-quaternary: #86868b; /* word count, meta lines, icon buttons at rest */
+  --text-faint: #a0a0a6;      /* placeholders, group headers, footer hints */
+
+  /* ---- Lines and fills ----------------------------------------------------------------------- */
+  --panel-border: rgba(0, 0, 0, 0.09);
+  --separator: rgba(0, 0, 0, 0.07);   /* title bar / footer / search field rules */
+  --rule: rgba(0, 0, 0, 0.1);         /* horizontal rules inside a note */
+
+  --fill-hover: rgba(0, 0, 0, 0.06);  /* icon button hover, selected switcher row */
+  --fill-row-hover: rgba(0, 0, 0, 0.05);
+  --fill-pressed: rgba(0, 0, 0, 0.08); /* format bar active button — deliberately NOT accent */
+  --fill-code: rgba(0, 0, 0, 0.045);   /* inline code and fenced blocks */
+  --fill-subtle: rgba(0, 0, 0, 0.05);  /* the "create note" row in the no-results state */
+
+  --scrollbar: rgba(0, 0, 0, 0.22);
+
+  /* ---- Chrome specifics ---------------------------------------------------------------------- */
+  --close-dot: #fe5f57;
+  --close-dot-border: 0.5px solid rgba(0, 0, 0, 0.15);
+  /* Unfocused panes drop the red dot to neutral (design frame 1e). */
+  --close-dot-inactive: #d0d0d4;
+
+  --checkbox-border: #b6b6bb;
+
+  --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-overlay: 0 20px 50px rgba(0, 0, 0, 0.3);
+  --shadow-pane-unfocused: 0 10px 30px rgba(0, 0, 0, 0.16);
+
+  /* Fades the note out above the footer instead of letting it collide (decision 22). Matches the
+   * panel background so it reads as the surface, not as a grey band. */
+  --fade-to: rgba(243, 243, 245, 0.95);
+  --fade-from: rgba(247, 247, 249, 0);
+
+  /* ---- Geometry ------------------------------------------------------------------------------ */
+  --radius-panel: 14px;
+  --radius-overlay: 12px;
+  --radius-button: 7px;
+  --radius-button-sm: 6px;
+  --radius-row: 7px;
+  --radius-chip: 4px;
+  --radius-code: 6px;
+
+  --titlebar-height: 40px;
+  --titlebar-padding-x: 14px;
+  --titlebar-gap: 8px;
+  --icon-button-size: 26px;
+  --close-dot-size: 12px;
+
+  --footer-height: 34px;
+  --formatbar-height: 38px;
+  --fade-height: 44px;
+
+  /* Fixed width — "width never changes" is rule 2. The measure inside it is narrower still, so long
+   * lines stay readable rather than running the full width of the pane. */
+  --pane-width: 692px;
+  --content-measure: 640px;
+  --content-padding: 6px 44px 40px;
+
+  --switcher-width: 460px;
+  --switcher-max-height: 430px;
+  --switcher-row-padding: 7px 16px;
+  --switcher-fade-height: 28px;
+
+  /* ---- Type ---------------------------------------------------------------------------------- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+
+  /* Body size is a setting (Settings.textSize, default 15). Swift overrides this custom property on
+   * the root, so everything scaled off it follows. */
+  --text-size: 15px;
+  --line-height: 1.55;
+
+  --size-h1: 25px;
+  --size-title: 13.5px;   /* switcher row title */
+  --size-meta: 12.5px;    /* switcher meta line */
+  --size-footer: 12px;
+  --size-hint: 11.5px;    /* switcher footer hints */
+  --size-group: 11px;     /* recency band headers */
+  --size-badge: 10px;     /* CURRENT */
+  --size-code: 13.5px;
+
+  --caret-blink: 1.1s;
+}
+
+/*
+ * Dark.
+ *
+ * Not a theme — themes are CSS files in a folder (decision 19). Light and dark both ship now, so they
+ * are two states of one stylesheet.
+ *
+ * Beyond colour, the design changes one thing: the close dot loses its border. On a dark surface the
+ * hairline reads as a smudge rather than as definition.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-appearance="light"]) {
+    --panel-bg: rgba(30, 30, 34, 0.85);
+    --overlay-bg: rgba(30, 30, 34, 0.85);
+
+    --text-primary: #e8e8ea;
+    --text-secondary: #d4d4d8;
+    --text-tertiary: #98989f;
+    --text-quaternary: #98989f;
+    --text-faint: #77777d;
+
+    /* The design uses a slightly stronger border on the switcher (0.11) than on the pane (0.1).
+     * Kept as one value: the difference is below perception and two tokens would invite drift. */
+    --panel-border: rgba(255, 255, 255, 0.1);
+    --separator: rgba(255, 255, 255, 0.09);
+    --rule: rgba(255, 255, 255, 0.12);
+
+    --fill-hover: rgba(255, 255, 255, 0.05);
+    --fill-row-hover: rgba(255, 255, 255, 0.05);
+    --fill-pressed: rgba(255, 255, 255, 0.1);
+    --fill-code: rgba(255, 255, 255, 0.06);
+    --fill-subtle: rgba(255, 255, 255, 0.07);
+
+    --scrollbar: rgba(255, 255, 255, 0.24);
+
+    --close-dot-border: none;
+    --close-dot-inactive: #4a4a4f;
+    --checkbox-border: #5a5a60;
+
+    --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.55);
+    --shadow-overlay: 0 20px 50px rgba(0, 0, 0, 0.55);
+    --shadow-pane-unfocused: 0 10px 30px rgba(0, 0, 0, 0.4);
+
+    --fade-from: rgba(30, 30, 34, 0);
+    --fade-to: rgba(26, 26, 30, 0.95);
+  }
+}
+
+/* Explicit overrides, so Settings.appearance can force light or dark against the system. Both blocks
+ * are needed: the media query above handles "system", these handle a deliberate choice. */
+:root[data-appearance="dark"] {
+  --panel-bg: rgba(30, 30, 34, 0.85);
+  --overlay-bg: rgba(30, 30, 34, 0.85);
+
+  --text-primary: #e8e8ea;
+  --text-secondary: #d4d4d8;
+  --text-tertiary: #98989f;
+  --text-quaternary: #98989f;
+  --text-faint: #77777d;
+
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --separator: rgba(255, 255, 255, 0.09);
+  --rule: rgba(255, 255, 255, 0.12);
+
+  --fill-hover: rgba(255, 255, 255, 0.05);
+  --fill-row-hover: rgba(255, 255, 255, 0.05);
+  --fill-pressed: rgba(255, 255, 255, 0.1);
+  --fill-code: rgba(255, 255, 255, 0.06);
+  --fill-subtle: rgba(255, 255, 255, 0.07);
+
+  --scrollbar: rgba(255, 255, 255, 0.24);
+
+  --close-dot-border: none;
+  --close-dot-inactive: #4a4a4f;
+  --checkbox-border: #5a5a60;
+
+  --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --shadow-overlay: 0 20px 50px rgba(0, 0, 0, 0.55);
+  --shadow-pane-unfocused: 0 10px 30px rgba(0, 0, 0, 0.4);
+
+  --fade-from: rgba(30, 30, 34, 0);
+  --fade-to: rgba(26, 26, 30, 0.95);
+}
+
+/* Vibrancy off (Settings.translucentPanes = false), matching the design's own applyVars() fallbacks. */
+:root[data-vibrancy="off"] {
+  --panel-blur: none;
+  --panel-bg: #f2f2f4;
+  --overlay-bg: #fafafc;
+}
+
+/* Both selectors below are (0,3,0), so they beat the (0,2,0) light block above regardless of order.
+ * The system-dark case must stay inside the media query — `:not([data-appearance="light"])` is also
+ * true when the attribute is absent, so unguarded it would paint light mode dark. */
+:root[data-vibrancy="off"][data-appearance="dark"] {
+  --panel-bg: #242428;
+  --overlay-bg: #242428;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-vibrancy="off"]:not([data-appearance="light"]) {
+    --panel-bg: #242428;
+    --overlay-bg: #242428;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --caret-blink: 0s;
+  }
+}

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      No viewport meta and no external anything. This document is loaded from a custom scheme inside a
+      WKWebView with no network access, so every byte it needs is inlined by the bundler. A <link> to a
+      CDN would not merely be slow here — it would not resolve at all.
+    -->
+    <title>Pane</title>
+    <style>__STYLES__</style>
+  </head>
+  <body>
+    <div class="pane" id="pane" data-focused>
+      <!--
+        Title bar: one close dot, then the title (empty until you scroll past the H1), then exactly
+        three buttons. Decision 22 fixes this list; anything new goes in ⌘K instead (decision 17).
+      -->
+      <header class="pane__titlebar" id="titlebar">
+        <button class="pane__close" id="close" aria-label="Close pane"></button>
+        <div class="pane__title" id="pane-title"></div>
+        <div class="pane__spacer"></div>
+
+        <button class="icon-button" id="pin" aria-label="Pin pane" aria-pressed="false" title="Pin ⇧⌘P">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <circle class="pin-head" cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5" />
+            <line x1="7" y1="8" x2="7" y2="13" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+        </button>
+
+        <button class="icon-button" id="browse" aria-label="Browse notes" title="Notes ⌘P">
+          <span class="icon-button__lines" aria-hidden="true"><i></i><i></i><i></i></span>
+        </button>
+
+        <button class="icon-button icon-button--plus" id="new-note" aria-label="New note" title="New note ⌘N">+</button>
+      </header>
+
+      <div class="pane__content">
+        <div class="pane__scroll" id="editor-host"></div>
+        <div class="pane__fade" aria-hidden="true"></div>
+      </div>
+
+      <!-- One footer row. The format bar replaces it rather than stacking below it. -->
+      <footer class="pane__footer">
+        <span class="pane__footer-spacer"></span>
+        <span class="pane__words" id="word-count">0 words</span>
+        <span class="pane__footer-spacer"></span>
+        <button class="icon-button icon-button--sm" id="format-toggle" aria-label="Formatting" title="Format ⌥⌘,">Aa</button>
+      </footer>
+
+      <div class="format-bar" id="format-bar" role="toolbar" aria-label="Formatting"></div>
+
+      <!-- ⌘P. Lives inside the pane; see the note at the top of switcher.css. -->
+      <div class="switcher" id="switcher" role="dialog" aria-label="Browse notes">
+        <input
+          class="switcher__search"
+          id="switcher-search"
+          type="text"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-controls="switcher-list"
+        />
+        <div class="switcher__list" id="switcher-list" role="listbox" aria-label="Notes"></div>
+        <div class="switcher__footer" id="switcher-footer"></div>
+      </div>
+    </div>
+
+    <script>__SCRIPT__</script>
+  </body>
+</html>
