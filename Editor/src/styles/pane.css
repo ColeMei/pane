@@ -5,6 +5,14 @@
  * bar). Decision 22 governs what is allowed to be here at all — and the answer is very little.
  */
 
+/* Border-box everywhere. Without it `.pane` is 100vh PLUS its 1px border, so the bottom hairline and
+ * both bottom corners get clipped by the viewport — the rounded panel loses its corners. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body {
   margin: 0;
@@ -155,10 +163,23 @@ body {
 }
 
 /* Pinned: the ONLY signal is the filled accent pin in a tinted well. No border change, no extra
- * chrome — decision 24's Pinned rule is explicit that this is all there is. */
+ * chrome — decision 24's Pinned rule is explicit that this is all there is.
+ *
+ * So the pin must actually FILL, not merely change colour: an outline pin tinted accent is too close
+ * to a hovered pin, and then nothing on screen tells you the pane will survive the dismiss hotkey.
+ * `r` and `fill` are SVG geometry/paint properties and settable from CSS in this engine. */
 .pane[data-pinned] .icon-button[data-action="pin"] {
   color: var(--accent);
   background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.pane[data-pinned] .pin-head {
+  fill: currentColor;
+  r: 3.4;
+}
+
+.pane[data-pinned] .pin-stem {
+  stroke-width: 1.8;
 }
 
 /* ---- Content ---------------------------------------------------------------------------------- */
@@ -172,8 +193,7 @@ body {
 
 .pane__scroll {
   height: 100%;
-  overflow-y: auto;
-  padding: var(--content-padding);
+  /* The padding lives on .cm-content, not here — see markdown.css. */
   /* A measure, not the full pane width. Long lines that run the whole 692px are hard to read and the
    * design gives them generous gutters instead. */
   max-width: var(--content-measure);

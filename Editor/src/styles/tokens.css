@@ -39,6 +39,8 @@
   --text-tertiary: #6e6e73;   /* annotations, inactive tab labels */
   --text-quaternary: #86868b; /* word count, meta lines, icon buttons at rest */
   --text-faint: #a0a0a6;      /* placeholders, group headers, footer hints */
+  /* Bold text. Identical to primary in light; the design brightens it in dark so weight still reads. */
+  --text-strong: #1d1d1f;
 
   /* ---- Lines and fills ----------------------------------------------------------------------- */
   --panel-border: rgba(0, 0, 0, 0.09);
@@ -140,6 +142,7 @@
     --text-tertiary: #98989f;
     --text-quaternary: #98989f;
     --text-faint: #77777d;
+    --text-strong: #f0f0f2;
 
     /* The design uses a slightly stronger border on the switcher (0.11) than on the pane (0.1).
      * Kept as one value: the difference is below perception and two tokens would invite drift. */
@@ -147,7 +150,7 @@
     --separator: rgba(255, 255, 255, 0.09);
     --rule: rgba(255, 255, 255, 0.12);
 
-    --fill-hover: rgba(255, 255, 255, 0.05);
+    --fill-hover: rgba(255, 255, 255, 0.07);
     --fill-row-hover: rgba(255, 255, 255, 0.05);
     --fill-pressed: rgba(255, 255, 255, 0.1);
     --fill-code: rgba(255, 255, 255, 0.06);
@@ -179,12 +182,13 @@
   --text-tertiary: #98989f;
   --text-quaternary: #98989f;
   --text-faint: #77777d;
+  --text-strong: #f0f0f2;
 
   --panel-border: rgba(255, 255, 255, 0.1);
   --separator: rgba(255, 255, 255, 0.09);
   --rule: rgba(255, 255, 255, 0.12);
 
-  --fill-hover: rgba(255, 255, 255, 0.05);
+  --fill-hover: rgba(255, 255, 255, 0.07);
   --fill-row-hover: rgba(255, 255, 255, 0.05);
   --fill-pressed: rgba(255, 255, 255, 0.1);
   --fill-code: rgba(255, 255, 255, 0.06);

@@ -19,8 +19,16 @@
   outline: none; /* the pane has its own focus story; a focus ring inside it is noise */
 }
 
-.cm-content {
-  padding: 0;
+/* The gutters and the trailing space belong to the scrolled document, not to the box around it.
+ * On `.pane__scroll` the 40px bottom was dead space *below* the scroller, so the last line stopped
+ * clear of the fade instead of running under it.
+ *
+ * Selector deliberately `.cm-editor .cm-content`, not bare `.cm-content`: CodeMirror injects its own
+ * base theme into <head> at runtime, and at equal specificity the later rule wins. A bare selector
+ * silently loses, which takes the left gutter to zero and — because list items carry a negative
+ * text-indent for their hanging indent — drags every list marker off the left edge of the pane. */
+.cm-editor .cm-content {
+  padding: var(--content-padding);
   font-family: var(--font-ui);
   caret-color: var(--accent);
 }
@@ -55,26 +63,73 @@
   background: color-mix(in oklab, var(--accent) 22%, transparent);
 }
 
-/* ---- Headings ---------------------------------------------------------------------------------
- * Only h1 is drawn in the design. h2 and h3 are interpolated down from it on the same curve — noted
- * because they are the one place here not taken directly from a frame.
+/* ---- Block layout -----------------------------------------------------------------------------
+ * These are LINE decorations (see live-preview.ts). Margins and indents only work because the class
+ * lands on CodeMirror's `.cm-line`, which is a block box — a mark decoration wraps an inline span
+ * and silently ignores all of this.
+ *
+ * ONE DELIBERATE DEPARTURE FROM THE DESIGN. Frame 1a gives paragraphs and list items bottom margins
+ * (12px, 10px, 8px). Those are not applied here, and the reason is that the design is *rendered
+ * markdown* while this is *live preview over the source*. In rendered HTML the blank line between
+ * two paragraphs disappears and the margin replaces it. In this editor the blank line is still in
+ * the buffer and still occupies a line box, because the user typed it and can put the caret in it.
+ * Applying the margins as well would double every gap. The blank source line IS the rhythm here.
+ * Headings keep a margin, because a heading is usually not preceded by a blank line.
  */
 
-.pane-h1,
-.pane-h2,
-.pane-h3 {
+/* Every selector below is qualified with `.cm-line`, for the same reason `.cm-content` is qualified
+ * above: CodeMirror's injected base theme sets `.cm-line { padding: 0 2px 0 6px }`, and at equal
+ * specificity the later rule wins. Unqualified, all of this loses silently and every line renders at
+ * a flat 6px indent. */
+
+.cm-line.pane-line-h1,
+.cm-line.pane-line-h2,
+.cm-line.pane-line-h3 {
   font-weight: 700;
   letter-spacing: -0.02em;
+  /* The design's h1 inherits the content block's 1.55; tightened here because a two-line heading at
+   * 1.55 looks unset next to 15px body. */
   line-height: 1.25;
+  margin: 6px 0 6px;
 }
 
-.pane-h1 { font-size: var(--size-h1); }
-.pane-h2 { font-size: calc(var(--size-h1) * 0.78); }
-.pane-h3 { font-size: calc(var(--size-h1) * 0.66); }
+.cm-line.pane-line-h1 { font-size: var(--size-h1); }
+.cm-line.pane-line-h2 { font-size: calc(var(--size-h1) * 0.78); }
+.cm-line.pane-line-h3 { font-size: calc(var(--size-h1) * 0.66); }
+
+/* Indentation comes from the nesting depth, not from the literal spaces in the buffer — rendering
+ * those in a proportional font gives about 4px a level where the design draws 22-26px.
+ *
+ * The negative text-indent is a hanging indent: a list item that wraps lines up under its own text
+ * rather than back under its bullet. Each level's padding carries that 14px back.
+ */
+.cm-line.pane-line-li {
+  text-indent: -14px;
+}
+
+.cm-line.pane-line-li-1 { padding-left: 38px; }  /* 24 + 14 */
+.cm-line.pane-line-li-2 { padding-left: 60px; }  /* 46 + 14 */
+.cm-line.pane-line-li-3 { padding-left: 82px; }  /* 68 + 14 */
+.cm-line.pane-line-li-4 { padding-left: 104px; } /* 90 + 14 */
+
+.cm-line.pane-line-code {
+  font-family: var(--font-mono);
+  font-size: var(--size-code);
+  color: var(--text-secondary);
+  background: var(--fill-code);
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.cm-line.pane-line-quote {
+  border-left: 2px solid var(--rule);
+  padding-left: 12px;
+  color: var(--text-secondary);
+}
 
 /* ---- Inline ------------------------------------------------------------------------------------ */
 
-.pane-strong { font-weight: 700; }
+.pane-strong { font-weight: 700; color: var(--text-strong); }
 .pane-em { font-style: italic; }
 
 .pane-strike {
@@ -102,22 +157,7 @@
 
 /* ---- Blocks ------------------------------------------------------------------------------------ */
 
-.pane-codeblock {
-  font-family: var(--font-mono);
-  font-size: var(--size-code);
-  color: var(--text-secondary);
-  background: var(--fill-code);
-  border-radius: var(--radius-code);
-  padding: 10px 12px;
-}
-
-.pane-quote {
-  border-left: 2px solid var(--rule);
-  padding-left: 12px;
-  color: var(--text-secondary);
-}
-
-.pane-rule {
+.cm-line.pane-rule {
   /* Drawn on the line box rather than as an <hr>, because the line still holds the literal "---"
    * the user typed and must stay selectable and editable. */
   border-bottom: 1px solid var(--rule);
@@ -155,6 +195,8 @@
   width: 15px;
   height: 15px;
   flex: none;
+  /* The design sets a 9px gap; the single literal space after "]" supplies roughly 4px of it. */
+  margin-right: 5px;
   border-radius: 4px;
   transform: translateY(2px);
   font-size: 10px;

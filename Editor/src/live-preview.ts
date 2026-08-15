@@ -29,20 +29,25 @@ import {
   WidgetType,
 } from "@codemirror/view";
 
-/** Node names whose entire range gets a styling class. */
-const BLOCK_STYLE: Record<string, string> = {
-  ATXHeading1: "pane-h1",
-  ATXHeading2: "pane-h2",
-  ATXHeading3: "pane-h3",
-  ATXHeading4: "pane-h3",
-  ATXHeading5: "pane-h3",
-  ATXHeading6: "pane-h3",
-  SetextHeading1: "pane-h1",
-  SetextHeading2: "pane-h2",
-  FencedCode: "pane-codeblock",
-  CodeBlock: "pane-codeblock",
-  Blockquote: "pane-quote",
-  HorizontalRule: "pane-rule",
+/**
+ * Block constructs are styled with **line** decorations, not marks.
+ *
+ * A mark wraps an inline span, and margins and padding do not apply to it — so heading sizes and
+ * list indents silently did nothing until this was changed. A line decoration puts the class on
+ * CodeMirror's `.cm-line` element, which is a block box and takes layout.
+ */
+const BLOCK_LINE: Record<string, string> = {
+  ATXHeading1: "pane-line-h1",
+  ATXHeading2: "pane-line-h2",
+  ATXHeading3: "pane-line-h3",
+  ATXHeading4: "pane-line-h3",
+  ATXHeading5: "pane-line-h3",
+  ATXHeading6: "pane-line-h3",
+  SetextHeading1: "pane-line-h1",
+  SetextHeading2: "pane-line-h2",
+  FencedCode: "pane-line-code",
+  CodeBlock: "pane-line-code",
+  Blockquote: "pane-line-quote",
 };
 
 const INLINE_STYLE: Record<string, string> = {
@@ -171,11 +176,33 @@ function buildDecorations(view: EditorView): DecorationSet {
           return;
         }
 
-        const blockClass = BLOCK_STYLE[name];
+        const blockClass = BLOCK_LINE[name];
         if (blockClass) {
           // Block styling survives the caret. Dropping an h1 to body size as the caret arrives
           // would reflow the document mid-keystroke.
-          decorations.push(Decoration.mark({ class: blockClass }).range(node.from, node.to));
+          const deco = Decoration.line({ class: blockClass });
+          const last = doc.lineAt(node.to).number;
+          for (let n = doc.lineAt(node.from).number; n <= last; n++) {
+            decorations.push(deco.range(doc.line(n).from));
+          }
+          return;
+        }
+
+        // List items carry their nesting depth as a class, so indentation comes from the stylesheet
+        // rather than from however many spaces happen to be in the buffer. Rendering the raw spaces
+        // in a proportional font gives ~4px a level where the design draws 22-26px.
+        if (name === "ListItem") {
+          const depth = Math.min(listDepth(view, node.from), 4);
+          // ONLY the item's own first line. A ListItem's range covers any nested list beneath it, so
+          // decorating every line in the range stamps the outer item's depth onto its children too —
+          // a third-level line ends up carrying li-1, li-2 and li-3 at once, and which indent wins is
+          // then decided by stylesheet order rather than by nesting. A soft-wrapped item is still one
+          // .cm-line, so nothing is lost by decorating just the first.
+          decorations.push(
+            Decoration.line({ class: `pane-line-li pane-line-li-${depth}` }).range(
+              doc.lineAt(node.from).from
+            )
+          );
           return;
         }
 

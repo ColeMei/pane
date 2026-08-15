@@ -91,7 +91,7 @@
 
 .switcher__list::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
-  border-right-width: 3px;
+  border-left-width: 0;
   border-radius: 3px;
   background: var(--scrollbar);
   background-clip: padding-box;
@@ -196,7 +196,7 @@
 }
 
 .switcher__action:hover {
-  background: rgba(0, 0, 0, 0.07);
+  background: var(--fill-hover);
 }
 
 /* The meta line: time · first line of body. NEVER a character count — a vault with two notes both
@@ -303,7 +303,7 @@
 
 kbd {
   padding: 1px 5px;
-  border: 1px solid rgba(0, 0, 0, 0.09);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius-chip);
   background: var(--fill-hover);
   font-family: var(--font-mono);

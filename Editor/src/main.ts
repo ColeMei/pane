@@ -92,9 +92,20 @@ function formatWordCount(n: number): string {
  * screen bottom, then the note scrolls. All the web layer contributes is the desired height.
  */
 function reportContentHeight(): void {
-  const content = editorHost.scrollHeight;
-  const chrome = titleBarEl.offsetHeight + (paneEl.querySelector(".pane__footer") as HTMLElement | null)?.offsetHeight!;
-  send({ type: "contentHeight", height: content + (Number.isFinite(chrome) ? chrome : 74) });
+  // `view.contentHeight` is CodeMirror's laid-out document height. `editorHost.scrollHeight` was the
+  // obvious choice and always wrong: the host is `height: 100%` and the editor inside it is themed
+  // to match, so scrollHeight equals clientHeight forever and the pane reports its *current* height
+  // as its desired height — which means rule 2 could never actually fire.
+  const content = view.contentHeight;
+
+  // The format bar replaces the footer rather than stacking on it, so only one of them is ever laid
+  // out. Measuring whichever is visible avoids assuming which.
+  const bar = paneEl.querySelector<HTMLElement>(
+    paneEl.hasAttribute("data-format-bar") ? ".format-bar" : ".pane__footer"
+  );
+  const chrome = titleBarEl.offsetHeight + (bar?.offsetHeight ?? 34);
+
+  send({ type: "contentHeight", height: Math.ceil(content + chrome) });
 }
 
 const updateListener = EditorView.updateListener.of((update) => {

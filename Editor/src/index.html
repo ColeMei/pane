@@ -21,18 +21,18 @@
         <div class="pane__title" id="pane-title"></div>
         <div class="pane__spacer"></div>
 
-        <button class="icon-button" id="pin" aria-label="Pin pane" aria-pressed="false" title="Pin ⇧⌘P">
+        <button class="icon-button" id="pin" data-action="pin" aria-label="Pin pane" aria-pressed="false" title="Pin ⇧⌘P">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <circle class="pin-head" cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5" />
-            <line x1="7" y1="8" x2="7" y2="13" stroke="currentColor" stroke-width="1.5" />
+            <line class="pin-stem" x1="7" y1="8" x2="7" y2="13" stroke="currentColor" stroke-width="1.5" />
           </svg>
         </button>
 
-        <button class="icon-button" id="browse" aria-label="Browse notes" title="Notes ⌘P">
+        <button class="icon-button" id="browse" data-action="browse" aria-label="Browse notes" title="Notes ⌘P">
           <span class="icon-button__lines" aria-hidden="true"><i></i><i></i><i></i></span>
         </button>
 
-        <button class="icon-button icon-button--plus" id="new-note" aria-label="New note" title="New note ⌘N">+</button>
+        <button class="icon-button icon-button--plus" id="new-note" data-action="new" aria-label="New note" title="New note ⌘N">+</button>
       </header>
 
       <div class="pane__content">
