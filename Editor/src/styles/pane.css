@@ -79,6 +79,26 @@ body {
   border: none;
 }
 
+/* An unfocused pane keeps its dot and its pin, and loses the other two buttons.
+ *
+ * Frame 1e's unfocused panes are drawn with exactly that: a neutral dot, a pin, and nothing else,
+ * while the focused pane carries all three buttons. We were showing all three on every pane, which
+ * is the frame under-implemented rather than a decision.
+ *
+ * It matters more in v0.1 than the frame suggests. Frame 1e is about telling several panes apart,
+ * but with one pane "unfocused" means *you are working in another app* — the state Pane spends most
+ * of its life in, especially pinned. Switcher and new-note are unusable there anyway: clicking one
+ * focuses the pane first. So they are noise sitting over somebody's work.
+ *
+ * The dot and the pin stay, which is where this parts company with the reference — Raycast hides
+ * its window controls entirely when unfocused. Keeping the dot means closing an unfocused pane is
+ * still one click rather than two, and the pin is state you need to be able to read at a glance
+ * precisely when you are not looking directly at it. */
+.pane:not([data-focused]) #browse,
+.pane:not([data-focused]) #new-note {
+  display: none;
+}
+
 .pane:not([data-focused]) .pane__footer,
 .pane:not([data-focused]) .format-bar {
   display: none;

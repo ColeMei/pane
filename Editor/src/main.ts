@@ -446,6 +446,10 @@ const host = {
 
   setFocused(focused: boolean): void {
     paneEl.toggleAttribute("data-focused", focused);
+    // Losing focus takes two buttons out of the title bar (frame 1e), so the draggable strip is a
+    // different shape. Neither observer below catches this — one watches the title bar's own
+    // attributes and the other the pane's size, and this changes neither.
+    reportDragRegions();
   },
 
   /** Appearance, accent, theme and key bindings. The CSS keys off these attributes and variables. */
