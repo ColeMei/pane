@@ -75,12 +75,27 @@
  * the buffer and still occupies a line box, because the user typed it and can put the caret in it.
  * Applying the margins as well would double every gap. The blank source line IS the rhythm here.
  * Headings keep a margin, because a heading is usually not preceded by a blank line.
+ *
+ * REVISED, after comparing the same note side by side with the reference. "The blank source line is
+ * the rhythm" was right about *where* the spacing comes from and wrong about *how much*: a full
+ * 22px line box plus a heading's margin put roughly twice the reference's air between every pair of
+ * blocks, and the document read as a draft rather than as a note. The blank line now gets a shorter
+ * box (see `.pane-line-blank`), which is the same trick as rendering `**bold**` bold — the newline
+ * is untouched on disk and the caret still goes in it; only its height is a rendering choice.
  */
 
 /* Every selector below is qualified with `.cm-line`, for the same reason `.cm-content` is qualified
  * above: CodeMirror's injected base theme sets `.cm-line { padding: 0 2px 0 6px }`, and at equal
  * specificity the later rule wins. Unqualified, all of this loses silently and every line renders at
  * a flat 6px indent. */
+
+/* An empty source line, at a fraction of a full line box. This is the single biggest lever on how
+ * the document reads — see the revision note above. Tuned against the reference: enough that the
+ * caret is a comfortable target and a paragraph break is unmistakable, far short of a whole line. */
+.cm-line.pane-line-blank {
+  height: var(--blank-line-height);
+  line-height: var(--blank-line-height);
+}
 
 .cm-line.pane-line-h1,
 .cm-line.pane-line-h2,
@@ -90,7 +105,9 @@
   /* The design's h1 inherits the content block's 1.55; tightened here because a two-line heading at
    * 1.55 looks unset next to 15px body. */
   line-height: 1.25;
-  margin: 6px 0 6px;
+  /* Bottom margin only. The gap *above* a heading is the blank line the user typed; adding a top
+   * margin to it was half of why every section break was twice the reference's. */
+  margin: 0 0 4px;
 }
 
 .cm-line.pane-line-h1 { font-size: var(--size-h1); }

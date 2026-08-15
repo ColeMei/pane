@@ -78,6 +78,7 @@ const hide = Decoration.replace({});
 
 /** A rule spans its whole line, so it is drawn on the line box rather than on the three characters. */
 const ruleLine = Decoration.line({ class: "pane-rule" });
+const blankLine = Decoration.line({ class: "pane-line-blank" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
 
@@ -162,6 +163,10 @@ function buildDecorations(view: EditorView): DecorationSet {
   const active = activeLines(view);
   const tree = syntaxTree(view.state);
 
+  /// Line numbers inside a fenced or indented code block, so the blank-line pass below can leave
+  /// their empty lines at full height.
+  const codeLines = new Set<number>();
+
   // Only the visible ranges. A 3,000-word note must not be fully decorated to draw one screen —
   // that cost lands on every keystroke, and it is where these editors get slow.
   for (const { from, to } of view.visibleRanges) {
@@ -187,6 +192,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           const last = doc.lineAt(node.to).number;
           for (let n = doc.lineAt(node.from).number; n <= last; n++) {
             decorations.push(deco.range(doc.line(n).from));
+            if (blockClass === "pane-line-code") codeLines.add(n);
           }
           return;
         }
@@ -264,6 +270,32 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       },
     });
+  }
+
+  // Blank lines get a shorter line box.
+  //
+  // This is the difference between live preview and rendered markdown, and it is what made Pane's
+  // block rhythm visibly looser than the reference. In rendered HTML the blank line between two
+  // paragraphs *disappears* and a margin replaces it; here the user typed it, it is in the buffer,
+  // and it occupies a full 22px line box — so every gap is a whole line plus whatever margin the
+  // next block carries. Shrinking the empty line keeps the source honest (the newline is still
+  // there, the caret still goes in it) while giving the document the spacing of the thing it is
+  // pretending to be.
+  //
+  // Deliberately *not* exempting the caret's line, unlike every other rule here. Growing the line
+  // back as the caret arrives would shift everything below it by 10px on an arrow keypress, and
+  // cursor instability is the stated way this whole approach fails.
+  for (const { from, to } of view.visibleRanges) {
+    const first = doc.lineAt(from).number;
+    const last = doc.lineAt(to).number;
+    for (let n = first; n <= last; n++) {
+      const line = doc.line(n);
+      // Inside a fenced block a blank line is content with a background, and collapsing it would
+      // put a notch in the block's left edge.
+      if (line.length === 0 && !codeLines.has(n)) {
+        decorations.push(blankLine.range(line.from));
+      }
+    }
   }
 
   // Sorted on construction rather than fed through a RangeSetBuilder: the tree yields nodes in
