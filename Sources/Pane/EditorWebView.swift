@@ -25,6 +25,14 @@ enum PaneMessage {
     case actionsOpen(open: Bool, height: CGFloat)
     case revealInFinder
     case openSettings
+    /// The buffer travels with both of these rather than Swift using its own copy, which the write
+    /// debounce (decision 10) leaves up to 500 ms behind what is on screen.
+    case copyAsMarkdown(text: String)
+    case exportNote(text: String)
+    /// `NSWindow.sharingType` is a window property, so the web layer can only ask (decision 36).
+    case toggleHideFromCapture
+    case requestDeleted
+    case restoreDeleted(storedName: String)
     /// Where the window may be dragged from, in CSS pixels with a top-left origin. Sent by the web
     /// layer because only it knows where its own buttons ended up.
     case dragRegions(titleBar: CGRect, exclusions: [CGRect])
@@ -68,6 +76,16 @@ enum PaneMessage {
             )
         case "revealInFinder":
             self = .revealInFinder
+        case "copyAsMarkdown":
+            self = .copyAsMarkdown(text: string("text"))
+        case "exportNote":
+            self = .exportNote(text: string("text"))
+        case "toggleHideFromCapture":
+            self = .toggleHideFromCapture
+        case "requestDeleted":
+            self = .requestDeleted
+        case "restoreDeleted":
+            self = .restoreDeleted(storedName: string("storedName"))
         case "openSettings":
             self = .openSettings
         case "dragRegions":

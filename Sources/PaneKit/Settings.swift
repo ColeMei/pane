@@ -73,8 +73,12 @@ public struct Settings: Codable, Equatable, Sendable {
         ("browseNotes", "Browse Notes", "Mod-p"),
         ("actionPanel", "Action Panel", "Mod-k"),
         ("pinPane", "Pin Pane", "Shift-Mod-p"),
+        ("findInNote", "Find in Note", "Mod-f"),
+        ("copyAsMarkdown", "Copy as Markdown", "Shift-Mod-c"),
         ("formatBar", "Show Format Bar", "Alt-Mod-,"),
         ("revealInFinder", "Reveal in Finder", "Alt-Mod-r"),
+        ("exportNote", "Export…", "Shift-Mod-e"),
+        ("hideFromCapture", "Hide from Screen Capture", "Shift-Mod-h"),
         ("deleteNote", "Delete Note", "Ctrl-x"),
     ]
 
@@ -129,6 +133,13 @@ public struct Settings: Codable, Equatable, Sendable {
     /// the design's own props block does exactly this.
     public var translucentPanes: Bool
 
+    /// Frame 2a's "Hide While Screen Sharing", as `NSWindow.sharingType` (decision 36).
+    ///
+    /// A setting rather than a per-session toggle because the reason anyone turns it on — I present
+    /// from this machine — outlives the pane, and a protection that quietly lapses on restart is
+    /// worse than one that was never offered.
+    public var hideFromScreenCapture: Bool
+
     // MARK: Defaults
 
     public init(
@@ -145,7 +156,8 @@ public struct Settings: Codable, Equatable, Sendable {
         accent: String = "#c98a1f",
         markdownTheme: String = "",
         textSize: Double = 15,
-        translucentPanes: Bool = true
+        translucentPanes: Bool = true,
+        hideFromScreenCapture: Bool = false
     ) {
         self.schemaVersion = schemaVersion
         self.vaultPath = vaultPath
@@ -161,6 +173,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.markdownTheme = markdownTheme
         self.textSize = textSize
         self.translucentPanes = translucentPanes
+        self.hideFromScreenCapture = hideFromScreenCapture
     }
 
     /// Every key is optional on the way in. This file is meant to be hand-edited, which means it
@@ -188,6 +201,8 @@ public struct Settings: Codable, Equatable, Sendable {
         markdownTheme = try c.decodeIfPresent(String.self, forKey: .markdownTheme) ?? d.markdownTheme
         textSize = try c.decodeIfPresent(Double.self, forKey: .textSize) ?? d.textSize
         translucentPanes = try c.decodeIfPresent(Bool.self, forKey: .translucentPanes) ?? d.translucentPanes
+        hideFromScreenCapture =
+            try c.decodeIfPresent(Bool.self, forKey: .hideFromScreenCapture) ?? d.hideFromScreenCapture
 
         // Clamp rather than reject: a hand-typed 0 or 9999 should land somewhere sensible.
         textSize = min(max(textSize, 10), 32)

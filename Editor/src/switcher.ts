@@ -28,8 +28,21 @@ interface SwitcherOptions {
   onCreate: (title: string) => void;
   onPin: (filename: string) => void;
   onDelete: (filename: string) => void;
+  /** Recently Deleted (decision 20). `storedName` is the timestamped name in the holding folder. */
+  onRestore: (storedName: string) => void;
+  onRequestDeleted: () => void;
   onVisibilityChange: (open: boolean) => void;
 }
+
+/**
+ * Which list is on screen.
+ *
+ * Recently Deleted is the same list with a different source and one different verb, so it is a mode
+ * here rather than a second component: the rows, the bands, the keyboard model, the fade and the
+ * stylesheet are all already right, and a second near-identical list is the kind of thing that
+ * drifts out of step one fix at a time.
+ */
+type Mode = "notes" | "deleted";
 
 const PIN_SVG = `<svg width="11" height="11" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="5" r="3.4" fill="currentColor"/><line x1="7" y1="8" x2="7" y2="13.5" stroke="currentColor" stroke-width="1.8"/></svg>`;
 const PIN_OUTLINE_SVG = `<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="7" y1="8" x2="7" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>`;
@@ -43,20 +56,41 @@ export function mountSwitcher(options: SwitcherOptions) {
   let rows: NoteSummary[] = [];
   let selected = 0;
   let query = "";
+  let mode: Mode = "notes";
+  /** Every deleted note, unfiltered. Searching this list is done here — see `applyQuery`. */
+  let deleted: NoteSummary[] = [];
 
   function isOpen(): boolean {
     return pane.hasAttribute("data-switcher");
   }
 
-  function open(): void {
-    if (isOpen()) return;
+  function show(): void {
     pane.setAttribute("data-switcher", "");
     search.value = "";
     query = "";
     selected = 0;
-    options.onQuery("");
     search.focus();
     options.onVisibilityChange(true);
+  }
+
+  function open(): void {
+    if (isOpen()) return;
+    mode = "notes";
+    show();
+    options.onQuery("");
+  }
+
+  /**
+   * Recently Deleted, in the switcher's clothes.
+   *
+   * Always opens rather than toggling: this arrives from a ⌘K row, and a row that sometimes closes
+   * the thing it names is a row that does nothing half the time.
+   */
+  function openDeleted(): void {
+    mode = "deleted";
+    deleted = [];
+    show();
+    options.onRequestDeleted();
   }
 
   function close(): void {
@@ -96,6 +130,10 @@ export function mountSwitcher(options: SwitcherOptions) {
   }
 
   function render(notes: NoteSummary[], total: number, forQuery: string): void {
+    // A `requestNotes` already in flight when Recently Deleted opened would otherwise land here and
+    // replace the deleted list with the vault's — the two share one panel and one round trip.
+    if (mode !== "notes") return;
+
     rows = notes;
     query = forQuery;
     if (selected >= rows.length) selected = Math.max(0, rows.length - 1);
@@ -115,6 +153,62 @@ export function mountSwitcher(options: SwitcherOptions) {
       return;
     }
     renderRows(total);
+  }
+
+  /**
+   * The deleted list arrives whole and is searched here rather than in Swift.
+   *
+   * The vault's search is in Swift because it is full-text over 200 notes and needs the index
+   * (decision 23). This one is a title match over a handful of rows that are already in hand, and
+   * routing every keystroke through the bridge to do it would be slower and more code.
+   */
+  function renderDeleted(notes: NoteSummary[]): void {
+    if (mode !== "deleted") return;
+    deleted = notes;
+    applyQuery();
+  }
+
+  function applyQuery(): void {
+    const needle = query.toLowerCase().trim();
+    rows = needle
+      ? deleted.filter((n) => n.title.toLowerCase().includes(needle))
+      : deleted.slice();
+
+    if (selected >= rows.length) selected = Math.max(0, rows.length - 1);
+    root.toggleAttribute("data-flat", true);
+    // Naming the place rather than offering to search nothing — the empty panel below already says
+    // what is going on, and "Search 0 deleted notes…" reads like a bug.
+    search.placeholder =
+      deleted.length === 0
+        ? "Recently Deleted"
+        : deleted.length === 1
+          ? "Search 1 deleted note…"
+          : `Search ${deleted.length} deleted notes…`;
+
+    if (deleted.length === 0) {
+      renderNothingDeleted();
+      return;
+    }
+    if (rows.length === 0) {
+      list.innerHTML = `<div class="switcher__noresults">No deleted notes match “${escapeHtml(query)}”</div>`;
+      footer.innerHTML = "";
+      footer.style.display = "none";
+      return;
+    }
+    renderRows(deleted.length);
+  }
+
+  function renderNothingDeleted(): void {
+    list.innerHTML = `
+      <div class="switcher__empty">
+        <div class="switcher__empty-title">Nothing deleted</div>
+        <div class="switcher__empty-body">
+          Deleted notes wait here before they go for good. How long is up to you, on the
+          Storage tab.
+        </div>
+      </div>`;
+    footer.innerHTML = "";
+    footer.style.display = "none";
   }
 
   function renderEmptyVault(): void {
@@ -175,10 +269,17 @@ export function mountSwitcher(options: SwitcherOptions) {
             ${note.pinned ? `<span class="switcher__pin">${PIN_SVG}</span>` : ""}
             ${note.current ? `<span class="switcher__badge">CURRENT</span>` : ""}
             <span class="switcher__row-spacer"></span>
-            <span class="switcher__actions">
+            ${
+              // Neither action means anything to a note that is already deleted: pinning it would
+              // put it at the top of a list it is not in, and the only other thing to do to it is
+              // erase it for good, which is not a button this app is going to grow.
+              mode === "deleted"
+                ? ""
+                : `<span class="switcher__actions">
               <button class="switcher__action" data-pin title="Pin">${PIN_OUTLINE_SVG}</button>
               <button class="switcher__action" data-delete title="Delete">✕</button>
-            </span>
+            </span>`
+            }
           </div>
           <div class="switcher__meta">${meta}</div>
         </div>`;
@@ -187,11 +288,14 @@ export function mountSwitcher(options: SwitcherOptions) {
     list.innerHTML = html + `<div class="switcher__fade" aria-hidden="true"></div>`;
 
     footer.style.display = "";
-    const hints = query
-      ? `<span>${rows.length} of ${total} notes match</span><span class="switcher__footer-spacer"></span><span>⏎ open</span>`
-      : total < 8
-        ? `<span>${total} notes</span><span class="switcher__footer-spacer"></span><span>⏎ open</span><span>⌘N new</span>`
-        : `<span>${total} notes</span><span class="switcher__footer-spacer"></span><span>↑↓ navigate</span><span>⏎ open</span><span>⌘⏎ pin</span>`;
+    const hints =
+      mode === "deleted"
+        ? `<span>${total} deleted</span><span class="switcher__footer-spacer"></span><span>↑↓ navigate</span><span>⏎ restore</span>`
+        : query
+          ? `<span>${rows.length} of ${total} notes match</span><span class="switcher__footer-spacer"></span><span>⏎ open</span>`
+          : total < 8
+            ? `<span>${total} notes</span><span class="switcher__footer-spacer"></span><span>⏎ open</span><span>⌘N new</span>`
+            : `<span>${total} notes</span><span class="switcher__footer-spacer"></span><span>↑↓ navigate</span><span>⏎ open</span><span>⌘⏎ pin</span>`;
     footer.innerHTML = hints;
 
     scrollSelectedIntoView();
@@ -213,6 +317,18 @@ export function mountSwitcher(options: SwitcherOptions) {
   }
 
   function activate(): void {
+    if (mode === "deleted") {
+      // No "create from the query" fallback here: the point of this list is getting something
+      // specific back, and inventing a new note out of a failed search for an old one is a
+      // different intention wearing the same keystroke.
+      const row = rows[selected];
+      if (row) {
+        options.onRestore(row.filename);
+        close();
+      }
+      return;
+    }
+
     if (rows.length === 0) {
       // Empty vault or no results — either way, ⏎ makes a note.
       options.onCreate(query);
@@ -227,7 +343,12 @@ export function mountSwitcher(options: SwitcherOptions) {
 
   search.addEventListener("input", () => {
     selected = 0;
-    options.onQuery(search.value);
+    if (mode === "deleted") {
+      query = search.value;
+      applyQuery();
+    } else {
+      options.onQuery(search.value);
+    }
   });
 
   search.addEventListener("keydown", (event) => {
@@ -242,7 +363,7 @@ export function mountSwitcher(options: SwitcherOptions) {
         break;
       case "Enter":
         event.preventDefault();
-        if (event.metaKey && rows.length > 0) {
+        if (event.metaKey && mode === "notes" && rows.length > 0) {
           options.onPin(rows[selected]!.filename);
         } else {
           activate();
@@ -272,7 +393,11 @@ export function mountSwitcher(options: SwitcherOptions) {
     if (!note) return;
 
     event.preventDefault();
-    if (target.closest("[data-pin]")) {
+    selected = index;
+    if (mode === "deleted") {
+      options.onRestore(note.filename);
+      close();
+    } else if (target.closest("[data-pin]")) {
       options.onPin(note.filename);
     } else if (target.closest("[data-delete]")) {
       options.onDelete(note.filename);
@@ -282,5 +407,5 @@ export function mountSwitcher(options: SwitcherOptions) {
     }
   });
 
-  return { open, close, toggle, render, isOpen };
+  return { open, close, toggle, render, renderDeleted, openDeleted, isOpen };
 }

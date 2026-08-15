@@ -7,10 +7,16 @@ import PaneKit
 /// control style. The summon row is the global hotkey (Carbon, decision 9); the rest are bindings
 /// the web layer installs inside a pane.
 ///
-/// Frame 3c lists eight rows and this ships five. The missing three — Action Panel, Open in New Pane,
-/// Find in Note — belong to the ⌘K panel and multi-pane, neither of which is in v0.1. A recordable
-/// row that binds nothing would be a worse lie than an absent row, and adding each back is one entry
-/// in `Settings.shortcutActions`.
+/// Frame 3c lists eight rows and this ships twelve, which is the table doing exactly what the frame
+/// said it was for: every feature that lands adds a row, never a new control style. Seven of the
+/// frame's eight are here; the eighth, Open in New Pane, belongs to multi-pane and is still deferred
+/// (decision 18). The five beyond the frame — Reveal in Finder, Delete Note, Copy as Markdown,
+/// Export…, Hide from Screen Capture — each arrived with its ⌘K row.
+///
+/// The rule that governs this list has not moved: a recordable row that binds nothing is a worse lie
+/// than an absent row, so a row appears here only when `Settings.shortcutActions` has an entry doing
+/// something. Recently Deleted is the one ⌘K row with no entry, because the design gives it no
+/// shortcut and a blank waiting to be filled in is the same lie in a different shape.
 @MainActor
 final class ShortcutsSettingsViewController: NSViewController {
 

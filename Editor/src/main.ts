@@ -27,6 +27,7 @@ import { Compartment, EditorState, type Extension, Prec } from "@codemirror/stat
 import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemirror/view";
 
 import { mountActionPanel } from "./action-panel";
+import { findHighlighting, mountFind } from "./find";
 import { livePreview, scrollReporter } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
 import { mountFormatBar, setHeading } from "./format-bar";
@@ -51,6 +52,11 @@ type OutboundMessage =
   | { type: "actionsOpen"; open: boolean; height: number }
   | { type: "revealInFinder" }
   | { type: "openSettings" }
+  | { type: "copyAsMarkdown"; text: string }
+  | { type: "exportNote"; text: string }
+  | { type: "toggleHideFromCapture" }
+  | { type: "requestDeleted" }
+  | { type: "restoreDeleted"; storedName: string }
   | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
   | { type: "headingMenu"; button: Rect; level: number | null };
 
@@ -179,6 +185,9 @@ const updateListener = EditorView.updateListener.of((update) => {
 });
 
 let formatBar: ReturnType<typeof mountFormatBar> | undefined;
+/// Declared here rather than at its mount, for the same reason `formatBar` is: `toggleFormatBar`
+/// closes the find bar, and a `const` mounted further down would still be in its temporal dead zone.
+let find: ReturnType<typeof mountFind> | undefined;
 
 /**
  * `- []` + space becomes `- [ ] `, which is how everyone actually types a checkbox.
@@ -241,6 +250,10 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
   actionPanel: "Mod-k",
   revealInFinder: "Alt-Mod-r",
   deleteNote: "Ctrl-x",
+  findInNote: "Mod-f",
+  copyAsMarkdown: "Shift-Mod-c",
+  exportNote: "Shift-Mod-e",
+  hideFromCapture: "Shift-Mod-h",
 };
 
 const shortcutsCompartment = new Compartment();
@@ -263,6 +276,14 @@ const actionHandlers: Record<string, () => boolean> = {
   settings: () => (send({ type: "openSettings" }), true),
   deleteNote: () =>
     currentFilename ? (send({ type: "deleteNote", filename: currentFilename }), true) : false,
+  findInNote: () => (find?.open(), true),
+  // The buffer goes with the message rather than Swift using its own copy. Swift's copy is up to
+  // 500 ms stale by design (decision 10's debounce), and a copy that silently omits the last
+  // sentence you typed is the kind of bug nobody reports because they blame the paste.
+  copyAsMarkdown: () => (send({ type: "copyAsMarkdown", text: view.state.doc.toString() }), true),
+  exportNote: () => (send({ type: "exportNote", text: view.state.doc.toString() }), true),
+  hideFromCapture: () => (send({ type: "toggleHideFromCapture" }), true),
+  recentlyDeleted: () => (switcher.openDeleted(), true),
 };
 
 function paneShortcuts(bindings: Record<string, string>): Extension {
@@ -298,6 +319,7 @@ function baseExtensions(): Extension[] {
     closeBrackets(),
 
     livePreview(),
+    findHighlighting(),
     checkboxInputRule(),
     editorTheme,
     updateListener,
@@ -354,6 +376,9 @@ const view = new EditorView({
 // ---------------------------------------------------------------------------------------------
 
 function toggleFormatBar(): void {
+  // One footer row, never two (decision 22). Find and the format bar are both that row, so opening
+  // either has to put the other away.
+  find?.close();
   paneEl.toggleAttribute("data-format-bar");
   formatBar?.refresh();
   // The bar and the footer are different heights, so swapping them changes how much room the note
@@ -379,10 +404,24 @@ formatBar = mountFormatBar(
   (button, level) => send({ type: "headingMenu", button, level })
 );
 
+find = mountFind({
+  root: document.getElementById("find") as HTMLElement,
+  pane: paneEl,
+  view,
+  onLayoutChange: () => {
+    reportContentHeight();
+    reportDragRegions();
+  },
+});
+
+/** Swift owns this — it is a window property, not a document one — and mirrors it back here. */
+let hiddenFromCapture = false;
+
 const actions = mountActionPanel({
   root: document.getElementById("actions") as HTMLElement,
   pane: paneEl,
   isPinned: () => paneEl.hasAttribute("data-pinned"),
+  isHiddenFromCapture: () => hiddenFromCapture,
   run: (id) => actionHandlers[id]?.(),
   onVisibilityChange: (open, height) => {
     send({ type: "actionsOpen", open, height });
@@ -398,6 +437,8 @@ const switcher = mountSwitcher({
   onCreate: (title) => send({ type: "createNote", title }),
   onPin: (filename) => send({ type: "togglePin", filename }),
   onDelete: (filename) => send({ type: "deleteNote", filename }),
+  onRequestDeleted: () => send({ type: "requestDeleted" }),
+  onRestore: (storedName) => send({ type: "restoreDeleted", storedName }),
   onVisibilityChange: (open) => {
     send({ type: "switcherOpen", open });
     if (!open) view.focus();
@@ -485,6 +526,15 @@ const host = {
 
   showNotes(notes: NoteSummary[], total: number, query: string): void {
     switcher.render(notes, total, query);
+  },
+
+  /** Recently Deleted's rows (decision 20). Same shape, same list, different verb on ⏎. */
+  showDeleted(notes: NoteSummary[]): void {
+    switcher.renderDeleted(notes);
+  },
+
+  setHiddenFromCapture(hidden: boolean): void {
+    hiddenFromCapture = hidden;
   },
 
   openSwitcher(): void {

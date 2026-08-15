@@ -6,16 +6,15 @@
  * (decision 14 wants every control in its own pane) rather than as a second window that would be a
  * second web view to keep warm.
  *
- * Frame 2a lists thirteen rows and this ships seven. What is missing, and why:
+ * Frame 2a lists thirteen rows and this ships twelve. The one that is missing:
  *
- *   Find in Note, Export…, Copy as Markdown, Hide While Screen Sharing — each is a feature in its
- *     own right hiding inside a list row, not wiring. Scoped separately.
- *   Recently Deleted — decision 20's behaviour does not exist yet; only its setting does.
  *   Disable Auto-sizing — retired outright. It was the answer to the problem decision 29 solved
- *     better, and the brief says so.
+ *     better, and the design never specified it beyond the row label: it appears exactly once in
+ *     the whole design record, with no frame and no annotation behind it. A dragged height is
+ *     already a floor, so there is nothing left for it to switch off.
  *
- * The rows that are here are all things Pane already does, so none of them is a row that does
- * nothing — the same rule the Shortcuts tab follows (decision 31).
+ * Every other row here is a thing Pane actually does, so none of them is a row that does nothing —
+ * the same rule the Shortcuts tab follows (decision 31).
  */
 
 export interface ActionRow {
@@ -33,6 +32,8 @@ interface ActionPanelOptions {
   pane: HTMLElement;
   /** Whether the current pane is pinned, so the Pin row can say which way it goes. */
   isPinned: () => boolean;
+  /** Same, for the capture toggle. */
+  isHiddenFromCapture: () => boolean;
   run: (id: string) => void;
   onVisibilityChange: (open: boolean, height: number) => void;
 }
@@ -45,15 +46,50 @@ const GROUPS: ActionRow[][] = [
   ],
   [
     { id: "pinPane", label: "Pin Pane", d: "M7 2a3 3 0 110 6 3 3 0 010-6zM7 8v5", keys: ["⇧", "⌘", "P"] },
+    {
+      id: "findInNote",
+      label: "Find in Note",
+      d: "M6 2a4 4 0 110 8 4 4 0 010-8zM9.2 9.2l3.3 3.3",
+      keys: ["⌘", "F"],
+    },
+    {
+      id: "copyAsMarkdown",
+      label: "Copy as Markdown",
+      d: "M3 5h7v8H3zM5 2h7v8",
+      keys: ["⇧", "⌘", "C"],
+    },
     { id: "revealInFinder", label: "Reveal in Finder", d: "M2 4h4l1 1.5h5V11H2z", keys: ["⌥", "⌘", "R"] },
+    {
+      id: "exportNote",
+      label: "Export…",
+      d: "M7 9V2M4.5 4L7 1.5 9.5 4M3 8v4h8V8",
+      keys: ["⇧", "⌘", "E"],
+    },
   ],
-  [{ id: "formatBar", label: "Show Format Bar", d: "M3 3h8M7 3v9", keys: ["⌥", "⌘", ","] }],
+  [
+    { id: "formatBar", label: "Show Format Bar", d: "M3 3h8M7 3v9", keys: ["⌥", "⌘", ","] },
+    {
+      id: "hideFromCapture",
+      label: "Hide from Screen Capture",
+      d: "M2 3.5h10v7H2zM1.5 2l11 10",
+      keys: ["⇧", "⌘", "H"],
+    },
+  ],
   [
     {
       id: "settings",
       label: "Settings…",
       d: "M7 4.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM7 1v2M7 11v2M1 7h2M11 7h2M2.8 2.8l1.4 1.4M9.8 9.8l1.4 1.4M2.8 11.2l1.4-1.4M9.8 4.2l1.4-1.4",
       keys: ["⌘", ","],
+    },
+    {
+      id: "recentlyDeleted",
+      label: "Recently Deleted",
+      d: "M3 4h8l-.7 8.5H3.7zM2 4h10M5.5 4V2.5h3V4",
+      // The one row the design gives no shortcut, and it is right: this is a place you go looking
+      // for, not a thing you fire off. Decision 31 keeps it out of the Shortcuts table for the
+      // same reason — an unbound row there would be a blank waiting to be filled in.
+      keys: [],
     },
     {
       id: "deleteNote",
@@ -113,9 +149,13 @@ export function mountActionPanel(options: ActionPanelOptions) {
   }
 
   function labelFor(row: ActionRow): string {
-    // The one row whose label depends on state. "Pin Pane" on a pinned pane would be a lie about
-    // what pressing it does.
+    // The two rows whose label depends on state. "Pin Pane" on a pinned pane would be a lie about
+    // what pressing it does, and the same goes for a pane already hidden from capture — with no
+    // checkmark column in this list, the label is the only place the current state can show.
     if (row.id === "pinPane" && options.isPinned()) return "Unpin Pane";
+    if (row.id === "hideFromCapture" && options.isHiddenFromCapture()) {
+      return "Show in Screen Capture";
+    }
     return row.label;
   }
 

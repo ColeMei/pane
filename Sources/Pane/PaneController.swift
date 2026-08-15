@@ -549,6 +549,7 @@ final class PaneController: NSObject {
 
     func applySettings() {
         editor.isTranslucent = settings.value.translucentPanes
+        applyHiddenFromCapture()
 
         // The material picks its light or dark variant from the window's appearance, so the two have
         // to be told the same thing — otherwise a dark-mode pane gets a light blur behind dark text.
@@ -573,6 +574,58 @@ final class PaneController: NSObject {
                 "themeCSS": loadThemeCSS(),
             ]]
         )
+    }
+
+    // MARK: - Hide from Screen Capture
+
+    /// Frame 2a's "Hide While Screen Sharing", decided by decision 36.
+    ///
+    /// The design's label implies detection: notice a screen-sharing session, hide until it ends.
+    /// `NSWindow.sharingType = .none` is better than that and simpler — the window is excluded from
+    /// capture at the window-server level, so there is no session to detect, no race between the
+    /// share starting and the pane reacting, and no Screen Recording permission, which decision 9
+    /// would otherwise have made this row impossible to build at all.
+    private func applyHiddenFromCapture() {
+        let hidden = settings.value.hideFromScreenCapture
+        panel.sharingType = hidden ? .none : .readOnly
+        editor.call("setHiddenFromCapture", [hidden])
+    }
+
+    private func setHiddenFromCapture(_ hidden: Bool) {
+        settings.update { $0.hideFromScreenCapture = hidden }
+        // `settings.update` comes back through `applySettings`, but not synchronously, and the ⌘K
+        // row's label is read the moment the panel next opens.
+        applyHiddenFromCapture()
+    }
+
+    // MARK: - Export
+
+    /// Frame 2a's Export…, and the one row whose meaning had to be decided rather than implemented
+    /// (decision 37). The note is already a file the user owns, and Reveal in Finder already reaches
+    /// it, so "export the markdown" would be a save panel wrapped around a copy they could make in
+    /// the Finder. What they cannot get anywhere else is the *rendered* note.
+    private func exportNote(text: String) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.html]
+        panel.nameFieldStringValue = MarkdownDocument.title(of: text).isEmpty
+            ? "Note.html"
+            : "\(MarkdownDocument.title(of: text)).html"
+        panel.canCreateDirectories = true
+        panel.title = "Export Note"
+
+        // The one place other than "choose vault" (decision 27) where Pane activates on purpose:
+        // a save panel behind every other window is a hang as far as the user is concerned.
+        NSApp.activate(ignoringOtherApps: true)
+
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            let html = MarkdownExport.html(
+                from: text,
+                title: MarkdownDocument.title(of: text),
+                accent: self.settings.value.accent
+            )
+            try? html.data(using: .utf8)?.write(to: url, options: .atomic)
+        }
     }
 
     /// The selected theme's stylesheet, or empty for Pane's own.
@@ -654,6 +707,31 @@ extension PaneController: EditorWebViewDelegate {
 
         case .openSettings:
             onOpenSettings?()
+
+        case .copyAsMarkdown(let text):
+            // The markdown *is* the note (decision 5), so there is nothing to convert — which is the
+            // whole reason frame 2a has this row where Raycast has "copy deeplink".
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+
+        case .exportNote(let text):
+            exportNote(text: text)
+
+        case .toggleHideFromCapture:
+            setHiddenFromCapture(!settings.value.hideFromScreenCapture)
+
+        case .requestDeleted:
+            vault.deletedRows { [weak self] rows in
+                self?.editor.callJSON("showDeleted", [EditorWebView.encode(rows)])
+            }
+
+        case .restoreDeleted(let storedName):
+            vault.restoreDeleted(storedName) { [weak self] restored in
+                guard let self, let restored else { return }
+                // Opening it is the point. A restore that puts the note back but leaves you looking
+                // at a different one makes you go and find it again.
+                self.open(restored)
+            }
 
         case .dragRegions(let titleBar, let exclusions):
             editor.setDragRegions(titleBar: titleBar, exclusions: exclusions)
