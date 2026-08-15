@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>Pane</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.colemei.pane</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Pane</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+
+	<!-- Pane lives in the menu bar. The Dock icon is opt-in (Settings > General), and turning it on
+	     switches the activation policy at runtime rather than changing this key. -->
+	<key>LSUIElement</key>
+	<true/>
+
+	<!-- Deliberately absent: every NS*UsageDescription key. Global hotkeys go through
+	     RegisterEventHotKey, which needs no Accessibility permission, and no network code ships.
+	     Pane requests no privacy permissions at all — see decision 14. Adding a usage-description
+	     key here means a promise was broken somewhere else. -->
+</dict>
+</plist>
