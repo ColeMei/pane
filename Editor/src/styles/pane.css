@@ -84,9 +84,15 @@ body {
   display: none;
 }
 
-.pane:not([data-focused]) {
-  box-shadow: var(--shadow-pane-unfocused);
-}
+/* NO CSS SHADOW ON THE PANE, focused or not.
+ *
+ * A web view cannot paint outside its window, so a box-shadow on the pane is clipped to the window
+ * bounds — and since the shadow is offset downward, the clip lands as a straight grey band with
+ * square ends under the two bottom corners. It looked like the corners had stopped being round.
+ *
+ * The window already has AppKit's own shadow (`hasShadow = true`), which is drawn by the window
+ * server *outside* the frame and is the only kind that can be. Same lesson as `backdrop-filter`:
+ * anything that has to escape the window is Swift's job, not the page's. */
 
 /* Empty until you scroll past the H1 — at which point the title you scrolled away from comes back,
  * because a pane with no visible heading is a pane you cannot identify.
