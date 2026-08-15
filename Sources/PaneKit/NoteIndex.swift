@@ -48,6 +48,29 @@ public struct SwitcherRow: Codable, Equatable, Sendable {
     public var pinned: Bool?
     public var current: Bool?
     public var match: Match?
+
+    /// Public because the Recently Deleted list is built in the app target rather than here — it is
+    /// the same row drawn by the same switcher, just sourced from the holding folder (decision 20).
+    /// The four optionals default to nil so that caller states its four fields and no more.
+    public init(
+        filename: String,
+        title: String,
+        time: String,
+        preview: String,
+        band: String? = nil,
+        pinned: Bool? = nil,
+        current: Bool? = nil,
+        match: Match? = nil
+    ) {
+        self.filename = filename
+        self.title = title
+        self.time = time
+        self.preview = preview
+        self.band = band
+        self.pinned = pinned
+        self.current = current
+        self.match = match
+    }
 }
 
 /// Everything the ⌘P switcher does to a vault: keeps a cheap index of it, orders it, and answers

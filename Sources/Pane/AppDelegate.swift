@@ -52,6 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.watchForHandEdits()
 
         pruneStateForMissingNotes()
+
+        // Decision 20's retention, enforced at the only moment it can be: Pane is not running most
+        // of the time, so there is no timer that could have fired. Launch is when the clock is read.
+        vault.purgeDeleted(keepingDays: settings.value.recentlyDeletedDays)
     }
 
     // MARK: - Settings
@@ -83,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pane?.applySettings()
         settingsWindow?.settingsChanged(new)
         menuBar?.rebuild(hotkey: new.summonHotkey)
+        // Shortening the retention should take effect now rather than at the next launch — the
+        // reason someone reaches for that control is usually that they want something gone.
+        vault?.purgeDeleted(keepingDays: new.recentlyDeletedDays)
     }
 
     /// Decision 16's window, replacing the settings *file* the menu item used to open.

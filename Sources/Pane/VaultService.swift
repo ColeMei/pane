@@ -187,17 +187,89 @@ final class VaultService: @unchecked Sendable {
         }
     }
 
-    /// Moves a note to the Trash rather than unlinking it.
+    /// Moves a note into Recently Deleted rather than unlinking it (decision 20).
     ///
-    /// Decision 20 ships Recently Deleted later; until it does, the Finder's own Trash is the undo,
-    /// and it is a much better one than nothing. `trashItem` also puts the note somewhere the user
-    /// already knows how to look.
+    /// This used to call `trashItem`, which was the honest stand-in while the retention control in
+    /// Settings had nothing behind it. The Finder's Trash is a fine undo but it is not the one the
+    /// Storage tab promises, and two undo systems for one action is worse than either alone.
     func delete(_ filename: String, completion: @escaping @MainActor (Bool) -> Void) {
         queue.async {
-            let url = self.vaultURL.appendingPathComponent(filename)
-            let ok = (try? FileManager.default.trashItem(at: url, resultingItemURL: nil)) != nil
+            var ok = false
+            if let store = self.deletedStore {
+                ok = (try? RecentlyDeleted.accept(filename, from: self.vaultURL, into: store)) != nil
+            }
             if ok { self.index.forget(filename) }
             DispatchQueue.main.async { MainActor.assumeIsolated { completion(ok) } }
+        }
+    }
+
+    // MARK: - Recently Deleted
+
+    /// Resolved once, and — like `vaultURL` and the index — only ever touched from `queue`, which is
+    /// what makes a plain `lazy var` safe here. A failure means Application Support is unwritable,
+    /// in which case delete fails rather than falling back to unlinking the note.
+    private lazy var deletedStore: URL? = try? RecentlyDeleted.standardStore()
+
+    /// The holding folder as switcher rows, so the restore list is the ⌘P list rather than a second
+    /// piece of chrome that has to be designed, styled and learned separately.
+    ///
+    /// `filename` carries the *stored* name — the timestamped one — because that is what `restore`
+    /// takes. The row's visible title comes from the note's own first line, as everywhere else.
+    func deletedRows(completion: @escaping @MainActor ([SwitcherRow]) -> Void) {
+        queue.async {
+            let now = Date()
+            guard let store = self.deletedStore else {
+                DispatchQueue.main.async { MainActor.assumeIsolated { completion([]) } }
+                return
+            }
+            var rows: [SwitcherRow] = []
+            for record in RecentlyDeleted.list(in: store) {
+                let url = store.appendingPathComponent(record.storedName)
+
+                // A note evicted by iCloud before it was deleted is still dataless here, and reading
+                // it would block for seconds (decision 13). The filename is a worse title than the
+                // first line, and it is not worth a hang.
+                var text = ""
+                if VaultIO.availability(of: url) == .available,
+                   let loaded = try? VaultIO.loadText(url) {
+                    text = loaded.text
+                }
+
+                let summary = MarkdownDocument.summary(of: text)
+                rows.append(
+                    SwitcherRow(
+                        filename: record.storedName,
+                        title: summary.title.isEmpty ? record.originalName : summary.title,
+                        time: NoteOrdering.relativeTime(record.deletedAt, now: now),
+                        preview: summary.preview
+                    )
+                )
+            }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(rows) } }
+        }
+    }
+
+    /// Puts a deleted note back and hands over the filename it landed under, which is not
+    /// necessarily the one it left as — see `RecentlyDeleted.restore`.
+    func restoreDeleted(_ storedName: String, completion: @escaping @MainActor (String?) -> Void) {
+        queue.async {
+            var restored: String?
+            if let store = self.deletedStore {
+                restored = try? RecentlyDeleted.restore(storedName, from: store, into: self.vaultURL)
+            }
+            // The note is back in the vault but not in the index, so the switcher would not list it
+            // until something else happened to refresh.
+            if restored != nil { _ = try? self.index.refresh(vault: self.vaultURL) }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(restored) } }
+        }
+    }
+
+    /// Runs at launch and whenever the retention setting changes. Cheap — it reads one directory
+    /// listing and unlinks whatever has aged out.
+    func purgeDeleted(keepingDays days: Int) {
+        queue.async {
+            guard let store = self.deletedStore else { return }
+            _ = RecentlyDeleted.purge(in: store, keepingDays: days)
         }
     }
 
