@@ -9,7 +9,7 @@
 
 cask "pane" do
   version "0.1.0"
-  sha256 "REPLACE_WITH_RELEASE_ASSET_SHA256"
+  sha256 "e630f3791aec06969043d4e757ea72103dc063b48cbac084e257e9f753041ec4"
 
   url "https://github.com/ColeMei/pane/releases/download/v#{version}/Pane-#{version}.zip"
   name "Pane"
