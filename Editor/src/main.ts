@@ -14,14 +14,20 @@ import "./styles/pane.css";
 import "./styles/markdown.css";
 import "./styles/switcher.css";
 
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { EditorState, type Extension } from "@codemirror/state";
+import {
+  deleteMarkupBackward,
+  insertNewlineContinueMarkupCommand,
+  markdown,
+  markdownLanguage,
+} from "@codemirror/lang-markdown";
+import { EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemirror/view";
 
 import { livePreview, scrollReporter } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
-import { mountFormatBar } from "./format-bar";
+import { mountFormatBar, setHeading } from "./format-bar";
 import { countWords } from "./word-count";
 
 // ---------------------------------------------------------------------------------------------
@@ -39,7 +45,16 @@ type OutboundMessage =
   | { type: "deleteNote"; filename: string }
   | { type: "close" }
   | { type: "contentHeight"; height: number }
-  | { type: "switcherOpen"; open: boolean };
+  | { type: "switcherOpen"; open: boolean }
+  | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
+  | { type: "headingMenu"; button: Rect; level: number | null };
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 declare global {
   interface Window {
@@ -63,6 +78,8 @@ const titleBarEl = document.getElementById("titlebar") as HTMLElement;
 const paneTitleEl = document.getElementById("pane-title") as HTMLElement;
 const wordCountEl = document.getElementById("word-count") as HTMLElement;
 const editorHost = document.getElementById("editor-host") as HTMLElement;
+const bannerEl = document.getElementById("banner") as HTMLElement;
+const bannerTextEl = document.getElementById("banner-text") as HTMLElement;
 
 /** Suppresses the `edited` message while Swift is loading a note into the buffer. */
 let applyingRemoteEdit = false;
@@ -103,9 +120,32 @@ function reportContentHeight(): void {
   const bar = paneEl.querySelector<HTMLElement>(
     paneEl.hasAttribute("data-format-bar") ? ".format-bar" : ".pane__footer"
   );
-  const chrome = titleBarEl.offsetHeight + (bar?.offsetHeight ?? 34);
+  const chrome = titleBarEl.offsetHeight + (bar?.offsetHeight ?? 34) + bannerEl.offsetHeight;
 
   send({ type: "contentHeight", height: Math.ceil(content + chrome) });
+}
+
+/**
+ * Tells Swift where the window may be dragged from.
+ *
+ * `-webkit-app-region: drag` in `pane.css` is what the design's markup uses, and it is an
+ * Electron/Tauri extension that a WKWebView ignores entirely — so the title bar would not move the
+ * window at all without this. The web layer is the only place that knows where the buttons ended up
+ * after layout, so it measures and Swift hit-tests: rule 3, "only a drag moves a pane", without
+ * hard-coding a single button position into Swift.
+ */
+function reportDragRegions(): void {
+  const bar = titleBarEl.getBoundingClientRect();
+  const exclusions = Array.from(titleBarEl.querySelectorAll("button")).map((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
+
+  send({
+    type: "dragRegions",
+    titleBar: { x: bar.x, y: bar.y, width: bar.width, height: bar.height },
+    exclusions,
+  });
 }
 
 const updateListener = EditorView.updateListener.of((update) => {
@@ -119,7 +159,61 @@ const updateListener = EditorView.updateListener.of((update) => {
       scrollLine: update.state.doc.lineAt(head).number,
     });
   }
+
+  // The format bar's pressed fill follows the caret, so it has to be refreshed on both — a doc
+  // change can move in or out of a construct without the selection being "set".
+  // Optional because CodeMirror can fire an update during its own construction, before the bar
+  // below has been mounted.
+  if (update.docChanged || update.selectionSet) formatBar?.refresh();
 });
+
+let formatBar: ReturnType<typeof mountFormatBar> | undefined;
+
+/**
+ * `- []` + space becomes `- [ ] `, which is how everyone actually types a checkbox.
+ *
+ * Typora, Obsidian and Bear all do this, and it is the one markdown construct whose real syntax
+ * nobody remembers — `[ ]` with a space inside the brackets. Getting it wrong produces literal text
+ * that looks like a bug in the renderer.
+ *
+ * An input handler rather than a decoration, because it must change the buffer: decision 5 says what
+ * is on disk is what was typed, so a checkbox the user can see has to be a checkbox on disk.
+ */
+function checkboxInputRule(): Extension {
+  return EditorView.inputHandler.of((view, from, to, text) => {
+    if (text !== " ") return false;
+
+    const line = view.state.doc.lineAt(from);
+    const before = line.text.slice(0, from - line.from);
+
+    // After a list marker: `- []`, `* []`, `1. []`.
+    const marker = /^(\s*(?:[-*+]|\d+[.)])\s+)\[\]$/.exec(before)?.[1];
+    if (marker !== undefined) {
+      const start = line.from + marker.length;
+      view.dispatch({
+        changes: { from: start, to, insert: "[ ] " },
+        selection: { anchor: start + 4 },
+        userEvent: "input.type",
+      });
+      return true;
+    }
+
+    // On a line of its own — `[]` becomes a whole list item, which is what Typora does and what you
+    // mean when you start a line that way.
+    const indent = /^(\s*)\[\]$/.exec(before)?.[1];
+    if (indent !== undefined) {
+      const start = line.from + indent.length;
+      view.dispatch({
+        changes: { from: start, to, insert: "- [ ] " },
+        selection: { anchor: start + 6 },
+        userEvent: "input.type",
+      });
+      return true;
+    }
+
+    return false;
+  });
+}
 
 function baseExtensions(): Extension[] {
   return [
@@ -127,21 +221,58 @@ function baseExtensions(): Extension[] {
     drawSelection(),
     rectangularSelection(),
     EditorView.lineWrapping,
-    markdown({ base: markdownLanguage }),
+
+    // `addKeymap: false` because the default Enter binding is wrong for a notes app — see the
+    // high-precedence keymap below.
+    markdown({ base: markdownLanguage, addKeymap: false }),
+
+    // Auto-close only the three that help in prose. The CodeMirror default also closes `'` and `"`,
+    // which in a document made of sentences is a liability rather than a feature — an apostrophe is
+    // not an opening quote.
+    markdownLanguage.data.of({ closeBrackets: { brackets: ["(", "[", "`"] } }),
+    closeBrackets(),
+
     livePreview(),
+    checkboxInputRule(),
     editorTheme,
     updateListener,
     scrollReporter((scrolled) => {
       // Decision 22: the title bar stays empty until you scroll past the H1.
       titleBarEl.toggleAttribute("data-scrolled", scrolled);
     }),
+    // Enter and Backspace, above everything else.
+    //
+    // `nonTightLists: false` is the whole reason this is hand-bound. CodeMirror's default, on Enter
+    // in an empty list item, inserts a blank line *above* it and keeps the marker — turning a tight
+    // list into a loose one, which is CommonMark-correct and is what nobody wants. Every notes app
+    // ever written exits the list instead, and pressing Enter twice to get out of a list is muscle
+    // memory older than markdown.
+    Prec.high(
+      keymap.of([
+        { key: "Enter", run: insertNewlineContinueMarkupCommand({ nonTightLists: false }) },
+        { key: "Backspace", run: deleteMarkupBackward },
+      ])
+    ),
+
     keymap.of([
       // Pane's own shortcuts come first so they win over the editor's defaults.
-      { key: "Mod-p", run: () => (switcher.open(), true) },
+      { key: "Mod-p", run: () => (switcher.toggle(), true) },
       { key: "Mod-n", run: () => (send({ type: "createNote", title: "" }), true) },
       { key: "Shift-Mod-p", run: () => (send({ type: "togglePin", filename: currentFilename }), true) },
       { key: "Alt-Mod-,", run: () => (toggleFormatBar(), true) },
+      // The levels the heading dropdown advertises. A shortcut printed in a menu that does nothing
+      // is worse than no shortcut.
+      { key: "Alt-Mod-1", run: (v) => (setHeading(v, 1), true) },
+      { key: "Alt-Mod-2", run: (v) => (setHeading(v, 2), true) },
+      { key: "Alt-Mod-3", run: (v) => (setHeading(v, 3), true) },
+      // Escape dismisses the pane. The switcher handles its own Escape while it is open, so this
+      // only ever fires with the caret in the editor — where the reflex is "put this away", not
+      // "cancel something".
+      { key: "Escape", run: () => (send({ type: "close" }), true) },
       indentWithTab,
+      // After the markdown bindings above, so Backspace only deletes a bracket pair once
+      // `deleteMarkupBackward` has declined the position.
+      ...closeBracketsKeymap,
       ...defaultKeymap,
       ...historyKeymap,
     ]),
@@ -159,6 +290,11 @@ const view = new EditorView({
 
 function toggleFormatBar(): void {
   paneEl.toggleAttribute("data-format-bar");
+  formatBar?.refresh();
+  // The bar and the footer are different heights, so swapping them changes how much room the note
+  // has — and the window has to follow.
+  reportContentHeight();
+  reportDragRegions();
 }
 
 document.getElementById("format-toggle")!.addEventListener("click", toggleFormatBar);
@@ -169,9 +305,14 @@ document.getElementById("new-note")!.addEventListener("click", () =>
 document.getElementById("pin")!.addEventListener("click", () =>
   send({ type: "togglePin", filename: currentFilename })
 );
-document.getElementById("browse")!.addEventListener("click", () => switcher.open());
+document.getElementById("browse")!.addEventListener("click", () => switcher.toggle());
 
-mountFormatBar(document.getElementById("format-bar") as HTMLElement, view, toggleFormatBar);
+formatBar = mountFormatBar(
+  document.getElementById("format-bar") as HTMLElement,
+  view,
+  toggleFormatBar,
+  (button, level) => send({ type: "headingMenu", button, level })
+);
 
 const switcher = mountSwitcher({
   root: document.getElementById("switcher") as HTMLElement,
@@ -248,10 +389,53 @@ const host = {
   },
 
   openSwitcher(): void {
-    switcher.open();
+    // Toggle, not open: this is what ⌘P and the menu bar's "Browse Notes…" both land on, and a
+    // second press of either should close the list rather than silently do nothing.
+    switcher.toggle();
+  },
+
+  /** Chosen from the native heading menu. */
+  setHeadingLevel(level: number): void {
+    setHeading(view, level);
+  },
+
+  /**
+   * The one-line status row: a conflict sibling was written, a note is downloading, or something
+   * failed. Never steals the caret and never blocks typing (decision 8).
+   */
+  showBanner(kind: string, text: string): void {
+    bannerEl.setAttribute("data-kind", kind);
+    bannerTextEl.textContent = text;
+    bannerEl.hidden = false;
+    reportContentHeight();
+  },
+
+  hideBanner(): void {
+    if (bannerEl.hidden) return;
+    bannerEl.hidden = true;
+    bannerEl.removeAttribute("data-kind");
+    reportContentHeight();
   },
 };
 
 window.paneHost = host;
 
+// Clicking the banner acknowledges it. That is the whole dismissal affordance: a conflict banner
+// with an ✕ would be a control the user must operate before the pane looks normal again, which is
+// the interruption decision 8 rules out.
+bannerEl.addEventListener("click", () => host.hideBanner());
+
+// The draggable strip changes whenever the title bar relays out — the pane resizing, the title
+// fading in past the H1, the format bar swapping the footer out.
+new ResizeObserver(() => {
+  reportDragRegions();
+  reportContentHeight();
+}).observe(paneEl);
+
+new MutationObserver(reportDragRegions).observe(titleBarEl, {
+  attributes: true,
+  attributeFilter: ["data-scrolled"],
+});
+
+reportDragRegions();
 send({ type: "ready" });

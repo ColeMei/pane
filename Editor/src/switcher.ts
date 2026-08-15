@@ -65,6 +65,29 @@ export function mountSwitcher(options: SwitcherOptions) {
     options.onVisibilityChange(false);
   }
 
+  /// What both entry points actually want. Pressing ⌘P or the switcher button a second time means
+  /// "put this away" — the old `open()`-only binding made the button a one-way door.
+  function toggle(): void {
+    isOpen() ? close() : open();
+  }
+
+  // Escape, wherever the focus happens to be.
+  //
+  // The search field's own keydown handler covers the normal case, but focus inside the pane can sit
+  // on a row, on a button, or nowhere at all after a click — and then Escape fell through to
+  // CodeMirror's binding, which dismisses the whole pane instead of the list. Capture phase so it
+  // wins before the editor sees it.
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key !== "Escape" || !isOpen()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    },
+    true
+  );
+
   function escapeHtml(text: string): string {
     return text.replace(
       /[&<>"']/g,
@@ -131,9 +154,18 @@ export function mountSwitcher(options: SwitcherOptions) {
       }
 
       // A body match replaces the first-line preview with the matched snippet.
-      const meta = note.match
+      const preview = note.match
         ? `<span class="switcher__preview">${escapeHtml(note.match.pre)}<span class="switcher__match">${escapeHtml(note.match.hit)}</span>${escapeHtml(note.match.post)}</span>`
         : `<span class="switcher__preview">${escapeHtml(note.preview)}</span>`;
+
+      // While searching, the time moves to the right edge and the separator dot goes with it.
+      // `time · preview` reads as one phrase, which is right when the preview is the note's own first
+      // line — but a search snippet is an answer to the query, not a continuation of the timestamp,
+      // and leading with the date buries it. Swift suppresses recency bands during a search for the
+      // same reason: the list is ordered by relevance, so a date is metadata, not structure.
+      const meta = query
+        ? `${preview}<span class="switcher__meta-spacer"></span><span class="switcher__time">${escapeHtml(note.time)}</span>`
+        : `<span class="switcher__time">${escapeHtml(note.time)}</span><span class="switcher__dot">·</span>${preview}`;
 
       html += `
         <div class="switcher__row" role="option" data-index="${index}"
@@ -148,11 +180,7 @@ export function mountSwitcher(options: SwitcherOptions) {
               <button class="switcher__action" data-delete title="Delete">✕</button>
             </span>
           </div>
-          <div class="switcher__meta">
-            <span class="switcher__time">${escapeHtml(note.time)}</span>
-            <span class="switcher__dot">·</span>
-            ${meta}
-          </div>
+          <div class="switcher__meta">${meta}</div>
         </div>`;
     });
 
@@ -254,5 +282,5 @@ export function mountSwitcher(options: SwitcherOptions) {
     }
   });
 
-  return { open, close, render, isOpen };
+  return { open, close, toggle, render, isOpen };
 }
