@@ -5,5 +5,6 @@ runNoteFilenameTests()
 runMarkdownDocumentTests()
 runNoteOrderingTests()
 runPanelGeometryTests()
+runStateTests()
 
 exit(Check.finish())
