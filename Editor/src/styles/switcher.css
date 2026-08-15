@@ -221,6 +221,13 @@
   text-overflow: ellipsis;
 }
 
+/* Searching: the snippet leads and the time sits against the right edge. See the note in
+ * switcher.ts for why the row reorders rather than keeping `time · snippet`. */
+.switcher__meta-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
 /* A body match replaces the preview with the matched snippet, highlighted in place. */
 .switcher__match {
   padding: 0 1px;

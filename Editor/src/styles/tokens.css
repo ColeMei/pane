@@ -94,8 +94,11 @@
   /* Fixed width — "width never changes" is rule 2. The measure inside it is narrower still, so long
    * lines stay readable rather than running the full width of the pane. */
   --pane-width: 692px;
-  --content-measure: 640px;
-  --content-padding: 6px 44px 40px;
+  /* The measure exists for a pane dragged wide, not for the default one. At 692 pt it barely binds,
+   * which is the point — 640 px against a 692 pt pane meant the text sat in a 44 px gutter on the
+   * left and a 96 px one on the right, and the pane read as mostly empty. */
+  --content-measure: 680px;
+  --content-padding: 6px 22px 32px;
 
   --switcher-width: 460px;
   --switcher-max-height: 430px;
@@ -109,7 +112,10 @@
   /* Body size is a setting (Settings.textSize, default 15). Swift overrides this custom property on
    * the root, so everything scaled off it follows. */
   --text-size: 15px;
-  --line-height: 1.55;
+  /* 1.55 in the design record, tightened one notch: the design's frames are a rendered document,
+   * where blank lines have collapsed into margins. Here every blank line the user typed is still a
+   * line box, so the same leading reads as noticeably airier than the frames look. */
+  --line-height: 1.5;
 
   --size-h1: 25px;
   --size-title: 13.5px;   /* switcher row title */
@@ -206,6 +212,21 @@
 
   --fade-from: rgba(30, 30, 34, 0);
   --fade-to: rgba(26, 26, 30, 0.95);
+}
+
+/* Vibrancy ON, inside the app.
+ *
+ * The bare `:root` values above are the design's own — 88% over a 22 px blur — and they are correct
+ * when this bundle is opened in a browser for design work, where `backdrop-filter` has page content
+ * to blur. Inside a WKWebView it has nothing: the window is transparent and the desktop behind it is
+ * not part of this document. So Swift puts an NSVisualEffectView behind the web view instead, and the
+ * page must not paint over it — an 88% fill on top of a real material is just a fogged material.
+ *
+ * Only the panel surfaces go transparent. The switcher keeps its own 97%, because it sits over the
+ * note *inside* the page, which is exactly the case backdrop-filter does handle. */
+:root[data-vibrancy="on"] {
+  --panel-bg: transparent;
+  --panel-blur: none;
 }
 
 /* Vibrancy off (Settings.translucentPanes = false), matching the design's own applyVars() fallbacks. */

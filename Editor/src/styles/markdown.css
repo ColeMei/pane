@@ -167,13 +167,28 @@
 }
 
 /* ---- Lists -------------------------------------------------------------------------------------
- * Markers stay neutral. This is decision 22's rule, and it is why an ordered list's numbers do not
- * pick up the accent: accent means "you can interact with this", and a bullet cannot be interacted
- * with.
+ * Markers carry the accent.
+ *
+ * This REVERSES the second half of decision 22, which reserved accent for interactive state and said
+ * bullets and numbers stay neutral. The argument was that accent means "you can interact with this".
+ * In use that reads as under-designed rather than disciplined: the reference this product is measured
+ * against tints every marker, and a marker is not chrome — it is the one piece of a list that tells
+ * you, at a glance and without reading, what kind of list you are looking at. Neutral markers make a
+ * numbered list and a bulleted list look like the same grey texture.
+ *
+ * What survives from decision 22 is the part that was actually load-bearing: accent never lands on
+ * body text, and the format bar's active button still uses a pressed fill rather than the accent.
  */
 
-.pane-list-marker {
-  color: var(--text-quaternary);
+.pane-list-marker,
+.pane-list-number {
+  color: var(--accent);
+}
+
+/* The blockquote bar too — same argument, and it is the only thing distinguishing a quote from
+ * indented text at a glance. */
+.cm-line.pane-line-quote {
+  border-left-color: color-mix(in oklab, var(--accent) 55%, transparent);
 }
 
 /* Nested unordered lists step disc → circle, matching frame 1a. */
@@ -203,6 +218,9 @@
   line-height: 1;
   cursor: pointer;
   vertical-align: top;
+  /* List lines carry `text-indent: -14px` for their hanging indent, and text-indent inherits into
+   * this inline-flex box — which dragged the tick 14px left, out of its own amber square. */
+  text-indent: 0;
 }
 
 .pane-task--done {
