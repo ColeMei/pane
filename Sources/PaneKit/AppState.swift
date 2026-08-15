@@ -26,14 +26,24 @@ public struct AppState: Codable, Equatable, Sendable {
     /// (decision 9). v0.1 shows one; nothing here assumes that.
     public var panes: [PaneState]
 
+    /// Set the first time Pane creates a vault, and never cleared.
+    ///
+    /// This one flag is the whole of decision 13's hard case. A vault that has never existed and a
+    /// vault that has been deleted are the same absence on disk; without a record kept *outside* the
+    /// vault, "create it silently" and "ask" cannot be told apart — and picking wrong means a user
+    /// whose notes are gone sees a cheerful empty panel instead of a question.
+    public var vaultEverCreated: Bool
+
     public init(
         schemaVersion: Int = AppState.currentSchemaVersion,
         notes: [String: NoteState] = [:],
-        panes: [PaneState] = []
+        panes: [PaneState] = [],
+        vaultEverCreated: Bool = false
     ) {
         self.schemaVersion = schemaVersion
         self.notes = notes
         self.panes = panes
+        self.vaultEverCreated = vaultEverCreated
     }
 
     // Hand-written so a state.json missing any key still decodes — a file written by an older build
@@ -43,6 +53,11 @@ public struct AppState: Codable, Equatable, Sendable {
         schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? Self.currentSchemaVersion
         notes = try c.decodeIfPresent([String: NoteState].self, forKey: .notes) ?? [:]
         panes = try c.decodeIfPresent([PaneState].self, forKey: .panes) ?? []
+
+        // Defaults to false, but a state file that already knows about notes plainly had a vault —
+        // so an upgrade from a build predating this flag does not get offered a fresh welcome note.
+        vaultEverCreated =
+            try c.decodeIfPresent(Bool.self, forKey: .vaultEverCreated) ?? !notes.isEmpty
     }
 }
 
@@ -123,16 +138,29 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
     /// it *on that screen* — plugging in a monitor must not shuffle the panes on the built-in one.
     public var frames: [String: StoredFrame]
 
+    /// A height the user set by dragging, which auto-sizing may grow past but never shrink below.
+    ///
+    /// Rule 2 says height follows content, and read literally that makes the resize handle a lie:
+    /// drag the pane taller and the next keystroke snaps it back. Treating a dragged height as a
+    /// *floor* keeps both halves true — the pane still grows with the note, and "I want more room
+    /// than this note needs" is a thing you can ask for and have honoured.
+    ///
+    /// `nil` until the user drags. The design's own answer, "Disable Auto-sizing" in ⌘K, is a harder
+    /// version of this and lands with that panel.
+    public var manualHeight: Double?
+
     public init(
         id: UUID = UUID(),
         noteFilename: String? = nil,
         showsFormatBar: Bool = false,
-        frames: [String: StoredFrame] = [:]
+        frames: [String: StoredFrame] = [:],
+        manualHeight: Double? = nil
     ) {
         self.id = id
         self.noteFilename = noteFilename
         self.showsFormatBar = showsFormatBar
         self.frames = frames
+        self.manualHeight = manualHeight
     }
 
     public init(from decoder: any Decoder) throws {
@@ -141,6 +169,7 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         noteFilename = try c.decodeIfPresent(String.self, forKey: .noteFilename)
         showsFormatBar = try c.decodeIfPresent(Bool.self, forKey: .showsFormatBar) ?? false
         frames = try c.decodeIfPresent([String: StoredFrame].self, forKey: .frames) ?? [:]
+        manualHeight = try c.decodeIfPresent(Double.self, forKey: .manualHeight)
     }
 }
 
