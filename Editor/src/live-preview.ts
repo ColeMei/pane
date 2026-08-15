@@ -79,6 +79,7 @@ const hide = Decoration.replace({});
 /** A rule spans its whole line, so it is drawn on the line box rather than on the three characters. */
 const ruleLine = Decoration.line({ class: "pane-rule" });
 const blankLine = Decoration.line({ class: "pane-line-blank" });
+const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
 
@@ -189,10 +190,21 @@ function buildDecorations(view: EditorView): DecorationSet {
           // Block styling survives the caret. Dropping an h1 to body size as the caret arrives
           // would reflow the document mid-keystroke.
           const deco = Decoration.line({ class: blockClass });
+          const first = doc.lineAt(node.from).number;
           const last = doc.lineAt(node.to).number;
-          for (let n = doc.lineAt(node.from).number; n <= last; n++) {
+          for (let n = first; n <= last; n++) {
             decorations.push(deco.range(doc.line(n).from));
             if (blockClass === "pane-line-code") codeLines.add(n);
+          }
+
+          // A fenced block's first and last lines are its ``` fences, and on the opening one the
+          // language tag too. Neither is content: Pane has no syntax highlighting and no language
+          // picker, so `python` is a word the user has to look at that changes nothing. Collapsing
+          // both to a thin strip turns them into the block's own top and bottom padding, which is
+          // what a code block looks like everywhere it is rendered rather than edited.
+          if (name === "FencedCode") {
+            decorations.push(fenceLine.range(doc.line(first).from));
+            if (last > first) decorations.push(fenceLine.range(doc.line(last).from));
           }
           return;
         }

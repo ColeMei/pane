@@ -97,6 +97,19 @@
   line-height: var(--blank-line-height);
 }
 
+/* A fenced block's ``` lines, collapsed into the block's own padding.
+ *
+ * `font-size: 0` rather than hiding the marks as decorations: Pane ships no syntax highlighting and
+ * no language picker, so the `python` after the backticks is a word that changes nothing and only
+ * has to be read. Kept as a real line at a real height, so the caret can still be put in it and the
+ * fence is still exactly three backticks on disk — decision 5's bar is what lands in the file, not
+ * what is drawn over it. */
+.cm-line.pane-line-fence {
+  height: var(--blank-line-height);
+  line-height: var(--blank-line-height);
+  font-size: 0;
+}
+
 .cm-line.pane-line-h1,
 .cm-line.pane-line-h2,
 .cm-line.pane-line-h3 {
