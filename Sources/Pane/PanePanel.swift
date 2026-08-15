@@ -69,8 +69,19 @@ final class PanePanel: NSPanel {
         // and a second click to place the caret.
         acceptsMouseMovedEvents = true
 
+        // A resizable window with no floor can be dragged to nothing, and a pane dragged to nothing
+        // is unrecoverable: there is no title bar left to grab and no close dot left to click.
+        // `PanelGeometry.minimumHeight` is the same floor auto-sizing already respects — title bar,
+        // one line, footer — and the width keeps the three title bar buttons and the footer's word
+        // count from colliding.
+        minSize = NSSize(width: Self.minimumWidth, height: PanelGeometry.minimumHeight)
+
         applyCollectionBehaviour(pinned: false)
     }
+
+    /// Narrowest the pane may be dragged. Below this the title bar's three buttons and the footer's
+    /// centred word count start overlapping each other.
+    static let minimumWidth: CGFloat = 320
 
     // MARK: - Spaces
 
@@ -96,10 +107,23 @@ final class PanePanel: NSPanel {
     ///
     /// - Parameter frame: where to appear. Rule 3 — "only a drag moves a pane" — so this is the
     ///   remembered frame, already reconciled against the connected displays by `PanelGeometry`.
-    func summon(at frame: CGRect) {
+    func summon(at frame: CGRect, pinned: Bool) {
         onscreenFrame = frame
         setFrame(frame, display: false)
+
+        // Re-assert the collection behaviour on every summon, not just when the pin state changes.
+        //
+        // `.moveToActiveSpace` is evaluated when a window is *ordered front*, and this window is
+        // never ordered out — dismiss parks it offscreen so the web view stays warm (measured:
+        // `setIsVisible(false)` suspends it). A window that is already in the window list can be
+        // re-fronted without AppKit reconsidering which Space it belongs on, which is rule 1
+        // silently failing: summon on another Space and nothing appears.
+        applyCollectionBehaviour(pinned: pinned)
+
         makeKeyAndOrderFront(nil)
+        // `orderFrontRegardless` is the one that crosses a Space boundary without activating the
+        // app. `makeKeyAndOrderFront` alone gives the pane key status on the Space it is already on.
+        orderFrontRegardless()
     }
 
     /// Moves the pane out of sight without letting the web view go to sleep.

@@ -154,6 +154,11 @@ final class PaneController: NSObject {
     func summon() {
         // The active display is the one the pointer is on — Spotlight's convention, and the only
         // definition that matches where the user is looking.
+        //
+        // `NSScreen.main` is the fallback rather than the first choice on purpose: it means "the
+        // screen with the key window", and Pane's whole trick is not owning the key window, so it
+        // reports whichever display the *other* app is on. That is right often enough to hide the
+        // bug and wrong exactly when the user has moved.
         let pointer = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(pointer) }
             ?? NSScreen.main
@@ -169,7 +174,7 @@ final class PaneController: NSObject {
             defaultHeight: max(PanelGeometry.minimumHeight, lastContentHeight)
         )
 
-        panel.summon(at: frame)
+        panel.summon(at: frame, pinned: isPinned)
         // The height the note wanted may have moved while the pane was away — an external edit, or a
         // note switched from the menu bar. Reconciling here rather than waiting for the web layer's
         // next report keeps the first frame the user sees the right size.
