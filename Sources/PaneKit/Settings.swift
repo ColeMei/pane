@@ -24,10 +24,14 @@ public struct Settings: Codable, Equatable, Sendable {
         URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath)
     }
 
-    /// Optional housekeeping: delete notes untouched for this many days. Off by default, and
-    /// deliberately opt-in — a notes app that silently deletes is not one you can trust with the
-    /// thought you had four months ago.
-    public var deleteAfterDays: Int?
+    /// How long a deleted note stays recoverable (decision 20). The Storage tab's control.
+    ///
+    /// This replaced `deleteAfterDays`, which was the opposite feature wearing the same shape: that
+    /// one deleted notes for the crime of being old, which is the thing a notes app must never do to
+    /// a thought you had four months ago. This one only ever counts from the moment you asked.
+    public var recentlyDeletedDays: Int
+
+    public static let recentlyDeletedOptions = [7, 30, 90]
 
     // MARK: Hotkey
 
@@ -41,6 +45,41 @@ public struct Settings: Codable, Equatable, Sendable {
     }
 
     public var dismissMode: DismissMode
+
+    // MARK: In-pane shortcuts
+
+    /// The shortcuts that work inside a pane, keyed by action — design frame 3c's table.
+    ///
+    /// Only the summon hotkey is global (Carbon, `GlobalHotkey`); these are ordinary key bindings the
+    /// web layer installs, so they are stored as CodeMirror binding strings — `"Mod-p"` — rather than
+    /// as `Hotkey`, which exists to carry Carbon key codes.
+    ///
+    /// A dictionary rather than one field per action for the reason the design gives for the table
+    /// being a plain table: every future feature adds a row, never a new control. Unknown keys are
+    /// kept on load so a newer Pane's settings file survives a downgrade.
+    public var shortcuts: [String: String]
+
+    /// Action key, the label the tab shows, and the binding Pane ships with.
+    ///
+    /// Deliberately only the actions that exist. Frame 3c also lists Action Panel, Open in New Pane
+    /// and Find in Note; all three belong to features that are not in v0.1, and a recordable row
+    /// that binds nothing is worse than an absent one. Adding them later is one entry each, which is
+    /// the property the design wanted from the table.
+    public static let shortcutActions: [(key: String, label: String, standard: String)] = [
+        ("newNote", "New Note", "Mod-n"),
+        ("browseNotes", "Browse Notes", "Mod-p"),
+        ("pinPane", "Pin Pane", "Shift-Mod-p"),
+        ("formatBar", "Show Format Bar", "Alt-Mod-,"),
+    ]
+
+    public static var standardShortcuts: [String: String] {
+        Dictionary(uniqueKeysWithValues: shortcutActions.map { ($0.key, $0.standard) })
+    }
+
+    /// The binding for `action`, falling back to what Pane ships with.
+    public func shortcut(_ action: String) -> String {
+        shortcuts[action] ?? Settings.standardShortcuts[action] ?? ""
+    }
 
     // MARK: Launch
 
@@ -57,12 +96,27 @@ public struct Settings: Codable, Equatable, Sendable {
         case system, light, dark
     }
 
-    /// Light and dark both ship in v0.1 (design frame 1f). The *switcher* for them is part of the
-    /// deferred Settings window, so until that lands this is the one-line edit.
+    /// Light and dark both ship in v0.1 (design frame 1f), and the Appearance tab switches them.
     public var appearance: Appearance
 
-    /// Editor body text size in points. The design's ⌘= / ⌘− live in the deferred Settings window;
-    /// the value is honoured now.
+    /// The accent, as the hex the web layer's `--accent` wants.
+    ///
+    /// Reserved for interactive state and for list markers (decisions 22 and 28) — never body text.
+    /// Frame 3b offers four; any hex parses, because the value reaches CSS either way and refusing a
+    /// hand-typed colour in a file built to be hand-edited would be pure ceremony.
+    public var accent: String
+
+    public static let accentOptions: [(name: String, hex: String)] = [
+        ("Amber", "#c98a1f"), ("Indigo", "#5b67d8"), ("Teal", "#2f9e8f"), ("Graphite", "#6e7480"),
+    ]
+
+    /// Filename of the markdown theme CSS in the themes folder, or empty for Pane's own.
+    ///
+    /// Decision 19: a theme *is* a CSS file in a folder, so this is a filename rather than an enum —
+    /// which is what lets a theme arrive without any new UI or any new code.
+    public var markdownTheme: String
+
+    /// Editor body text size in points. ⌘= / ⌘− adjust it from any pane.
     public var textSize: Double
 
     /// Translucent panes. Turning this off swaps the vibrancy material for a flat background —
@@ -74,25 +128,31 @@ public struct Settings: Codable, Equatable, Sendable {
     public init(
         schemaVersion: Int = Settings.currentSchemaVersion,
         vaultPath: String = Settings.defaultVaultPath,
-        deleteAfterDays: Int? = nil,
+        recentlyDeletedDays: Int = 30,
         summonHotkey: Hotkey = .defaultSummon,
         dismissMode: DismissMode = .sameHotkeyToggles,
+        shortcuts: [String: String] = Settings.standardShortcuts,
         launchAtLogin: Bool = false,
         showMenuBarIcon: Bool = true,
         showDockIcon: Bool = false,
         appearance: Appearance = .system,
+        accent: String = "#c98a1f",
+        markdownTheme: String = "",
         textSize: Double = 15,
         translucentPanes: Bool = true
     ) {
         self.schemaVersion = schemaVersion
         self.vaultPath = vaultPath
-        self.deleteAfterDays = deleteAfterDays
+        self.recentlyDeletedDays = recentlyDeletedDays
         self.summonHotkey = summonHotkey
         self.dismissMode = dismissMode
+        self.shortcuts = shortcuts
         self.launchAtLogin = launchAtLogin
         self.showMenuBarIcon = showMenuBarIcon
         self.showDockIcon = showDockIcon
         self.appearance = appearance
+        self.accent = accent
+        self.markdownTheme = markdownTheme
         self.textSize = textSize
         self.translucentPanes = translucentPanes
     }
@@ -105,18 +165,40 @@ public struct Settings: Codable, Equatable, Sendable {
         let d = Settings()
         schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? d.schemaVersion
         vaultPath = try c.decodeIfPresent(String.self, forKey: .vaultPath) ?? d.vaultPath
-        deleteAfterDays = try c.decodeIfPresent(Int.self, forKey: .deleteAfterDays)
+        recentlyDeletedDays =
+            try c.decodeIfPresent(Int.self, forKey: .recentlyDeletedDays) ?? d.recentlyDeletedDays
         summonHotkey = try c.decodeIfPresent(Hotkey.self, forKey: .summonHotkey) ?? d.summonHotkey
         dismissMode = try c.decodeIfPresent(DismissMode.self, forKey: .dismissMode) ?? d.dismissMode
+        // Merged over the standards rather than replacing them, so a file that names one shortcut
+        // still gets the other three — the same forgiveness every other key here gets.
+        shortcuts = Settings.standardShortcuts.merging(
+            try c.decodeIfPresent([String: String].self, forKey: .shortcuts) ?? [:]
+        ) { _, fromFile in fromFile }
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? d.launchAtLogin
         showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? d.showMenuBarIcon
         showDockIcon = try c.decodeIfPresent(Bool.self, forKey: .showDockIcon) ?? d.showDockIcon
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
+        accent = try c.decodeIfPresent(String.self, forKey: .accent) ?? d.accent
+        markdownTheme = try c.decodeIfPresent(String.self, forKey: .markdownTheme) ?? d.markdownTheme
         textSize = try c.decodeIfPresent(Double.self, forKey: .textSize) ?? d.textSize
         translucentPanes = try c.decodeIfPresent(Bool.self, forKey: .translucentPanes) ?? d.translucentPanes
 
         // Clamp rather than reject: a hand-typed 0 or 9999 should land somewhere sensible.
         textSize = min(max(textSize, 10), 32)
-        if let days = deleteAfterDays, days < 1 { deleteAfterDays = nil }
+        // 0 would mean "delete immediately, no undo" — the one value this control must never carry.
+        recentlyDeletedDays = min(max(recentlyDeletedDays, 1), 365)
+        // The accent lands in CSS, so anything that is not a colour has to be caught here rather
+        // than silently blanking `--accent` and taking every interactive affordance with it.
+        if !Settings.isHexColour(accent) { accent = d.accent }
+        // A theme is a bare filename in the themes folder. A path would let a hand-edited settings
+        // file reach outside it, which is not what decision 19 offers.
+        if markdownTheme.contains("/") || markdownTheme.hasPrefix(".") { markdownTheme = "" }
+    }
+
+    static func isHexColour(_ value: String) -> Bool {
+        guard value.hasPrefix("#") else { return false }
+        let digits = value.dropFirst()
+        return (digits.count == 6 || digits.count == 3)
+            && digits.allSatisfy(\.isHexDigit)
     }
 }

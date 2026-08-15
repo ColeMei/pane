@@ -192,6 +192,28 @@ public enum KeyCode {
         return named.first { $0.value == code }?.key
     }
 
+    /// The name CodeMirror binds by, which is `KeyboardEvent.key` rather than a hardware position.
+    ///
+    /// Separate from `displayName` because the two answer different questions: one is what to draw in
+    /// a recorder, the other is what to put in a keymap. `⌫` and `"Backspace"` are the same key and
+    /// neither string works in the other place.
+    public static func bindingName(for code: UInt32) -> String? {
+        let special: [UInt32: String] = [
+            49: "Space", 36: "Enter", 48: "Tab", 53: "Escape",
+            51: "Backspace", 117: "Delete",
+            123: "ArrowLeft", 124: "ArrowRight", 125: "ArrowDown", 126: "ArrowUp",
+            115: "Home", 119: "End", 116: "PageUp", 121: "PageDown",
+            24: "=", 27: "-", 30: "]", 33: "[",
+            39: "'", 41: ";", 42: "\\", 43: ",", 44: "/", 47: ".", 50: "`",
+        ]
+        if let s = special[code] { return s }
+        guard let n = name(for: code), n.count == 1 else {
+            // Function keys keep their own names; anything else has no keymap spelling.
+            return name(for: code).flatMap { $0.hasPrefix("f") ? $0.uppercased() : nil }
+        }
+        return n
+    }
+
     static func displayName(for code: UInt32) -> String? {
         let symbols: [UInt32: String] = [
             49: "Space", 36: "↩", 48: "⇥", 53: "⎋", 51: "⌫", 117: "⌦",

@@ -91,10 +91,12 @@ func runStateTests() {
             Check.equal(s.vaultPath, "~/Documents/Pane")
             Check.equal(s.summonHotkey, Hotkey.defaultSummon)
             Check.equal(s.dismissMode, Settings.DismissMode.sameHotkeyToggles)
-            Check.expect(s.deleteAfterDays == nil, "housekeeping is off by default")
+            Check.equal(s.recentlyDeletedDays, 30)
             Check.expect(!s.showDockIcon, "Pane lives in the menu bar")
             Check.expect(s.showMenuBarIcon)
             Check.equal(s.appearance, Settings.Appearance.system)
+            Check.equal(s.accent, "#c98a1f")
+            Check.equal(s.markdownTheme, "")
             Check.expect(s.translucentPanes)
         }
 
@@ -118,9 +120,37 @@ func runStateTests() {
             let small = try? JSONDecoder().decode(Settings.self, from: Data(#"{"textSize":1}"#.utf8))
             Check.equal(small?.textSize, 10)
             let zeroDays = try? JSONDecoder().decode(
-                Settings.self, from: Data(#"{"deleteAfterDays":0}"#.utf8)
+                Settings.self, from: Data(#"{"recentlyDeletedDays":0}"#.utf8)
             )
-            Check.expect(zeroDays?.deleteAfterDays == nil, "0 days must not mean delete everything")
+            Check.equal(zeroDays?.recentlyDeletedDays, 1, "0 days would mean delete with no undo")
+        }
+
+        Check.test("an accent that is not a colour falls back rather than blanking the CSS") {
+            // `##"…"##`, because `"#` inside a `#"…"#` literal closes it — and every hex here has one.
+            let bads = [
+                ##"{"accent":"rebeccapurple"}"##,
+                ##"{"accent":"#12345"}"##,
+                ##"{"accent":""}"##,
+            ]
+            for bad in bads {
+                let s = try? JSONDecoder().decode(Settings.self, from: Data(bad.utf8))
+                Check.equal(s?.accent, "#c98a1f", "for \(bad)")
+            }
+            let short = try? JSONDecoder().decode(
+                Settings.self, from: Data(##"{"accent":"#abc"}"##.utf8)
+            )
+            Check.equal(short?.accent, "#abc", "three-digit hex is a colour")
+        }
+
+        Check.test("a markdown theme is a bare filename, never a path out of the folder") {
+            for escape in [#"{"markdownTheme":"../../etc/passwd"}"#, #"{"markdownTheme":".hidden"}"#] {
+                let s = try? JSONDecoder().decode(Settings.self, from: Data(escape.utf8))
+                Check.equal(s?.markdownTheme, "", "for \(escape)")
+            }
+            let ok = try? JSONDecoder().decode(
+                Settings.self, from: Data(#"{"markdownTheme":"solarized.css"}"#.utf8)
+            )
+            Check.equal(ok?.markdownTheme, "solarized.css")
         }
     }
 
