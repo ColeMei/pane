@@ -112,8 +112,9 @@ Swift + AppKit owns the panel, hotkey, menu bar and file I/O; the editor is Code
 `WKWebView`. No Node process, no Rust core, no Electron. The buffer *is* the markdown — live preview
 is view-only decoration, so what lands on disk is byte-for-byte what you typed.
 
-[docs/BRIEF.md](docs/BRIEF.md) is the decision record: what was built, and why, including the parts
-that turned out wrong.
+Every non-obvious choice here has a reason, and most of them are written down in the commit that
+made them — including the ones that turned out wrong and were reversed. `git log` is the decision
+record.
 
 ## License
 

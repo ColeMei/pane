@@ -58,3 +58,12 @@ pnpm-debug.log*
 # ---- Local scratch ----
 *.local
 .vault/
+
+# ---- Local-only working docs ----
+# The decision record and the agent brief stay on this machine. BRIEF.md in particular is written in
+# the first person and carries personal context — what the itch was, what the alternatives cost —
+# that belongs to the author rather than to the repository. Both are still the source of truth for
+# *why*; they are simply not published.
+docs/
+CLAUDE.md
+AGENTS.md
