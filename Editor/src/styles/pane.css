@@ -423,3 +423,98 @@ body {
   color: var(--text-quaternary);
   font-size: 12px;
 }
+
+/* ---- Find bar ---------------------------------------------------------------------------------
+ * The footer row's third state. Same height and same border as the format bar, because it is the
+ * same row — swapping between them must not move the text above by a pixel.
+ */
+
+.pane[data-find] .pane__footer,
+.pane[data-find] .format-bar {
+  display: none;
+}
+
+.find {
+  display: none;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  height: var(--formatbar-height);
+  padding: 0 10px;
+  border-top: 1px solid var(--separator);
+}
+
+.pane[data-find] .find {
+  display: flex;
+}
+
+.find__icon {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.find__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.find__input::placeholder {
+  color: var(--text-quaternary);
+}
+
+.find__count {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Not red. Nothing has gone wrong when a search misses — decision 25's argument for the banner's
+   6px dot over a tinted row is the same argument here. */
+.find[data-empty] .find__count {
+  color: var(--text-tertiary);
+}
+
+.find__step,
+.find__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button-sm);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: default;
+}
+
+.find__step:hover,
+.find__close:hover {
+  background: var(--fill-hover);
+  color: var(--text-secondary);
+}
+
+/* ---- Find matches -----------------------------------------------------------------------------
+ * Decision 28 puts the accent on markers and interactive state. A match is neither, so the run of
+ * matches is a neutral fill and only the one you are standing on takes the accent.
+ */
+
+.cm-find-match {
+  background: var(--fill-subtle);
+  border-radius: 2px;
+}
+
+.cm-find-current {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
