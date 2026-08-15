@@ -214,6 +214,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menuBar.onBrowse = { [weak self] in self?.pane.openSwitcher() }
         menuBar.onSettings = { [weak self] in self?.openSettingsFile() }
+        // Summon first: the pinned section exists so a pinned note is one click away from anywhere,
+        // and opening one into a pane that is still offscreen would be a click that does nothing.
+        menuBar.onOpenNote = { [weak self] filename in
+            self?.pane.summon()
+            self?.pane.open(filename)
+        }
     }
 
     /// Note titles by filename, kept warm for the menu bar.
