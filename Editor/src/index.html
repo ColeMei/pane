@@ -35,6 +35,18 @@
         <button class="icon-button icon-button--plus" id="new-note" data-action="new" aria-label="New note" title="New note ⌘N">+</button>
       </header>
 
+      <!--
+        One line, above the content, for the three states the design record never drew: a conflict
+        sibling was written (decision 8), a note is coming down from iCloud (decision 13), or
+        something went wrong. No button — decision 8 is explicit that the pane is never made
+        read-only and that typing must not have to be resumed. It is dismissed by being fixed, or by
+        clicking it.
+      -->
+      <div class="pane__banner" id="banner" role="status" hidden>
+        <span class="pane__banner-dot" aria-hidden="true"></span>
+        <span class="pane__banner-text" id="banner-text"></span>
+      </div>
+
       <div class="pane__content">
         <div class="pane__scroll" id="editor-host"></div>
         <div class="pane__fade" aria-hidden="true"></div>

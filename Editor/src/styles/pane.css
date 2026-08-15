@@ -182,6 +182,75 @@ body {
   stroke-width: 1.8;
 }
 
+/* ---- Banner ------------------------------------------------------------------------------------
+ * The brief calls this "the hardest piece of chrome in the product: maximum information density,
+ * zero interruption." So it is one line at the footer's own type size, it never takes the caret, and
+ * it carries no button — because in two of its three cases nothing went wrong, and a dialog would
+ * make a successfully-preserved copy look like a failure.
+ *
+ * Accent is reserved for interactive state (decision 22), so the status colour is carried by a 6 px
+ * dot rather than by tinting the row: a coloured strip across the top of a pane this small reads as
+ * an error bar no matter what it says.
+ */
+
+.pane__banner {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  padding: 7px var(--titlebar-padding-x);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+  background: var(--fill-hover);
+  color: var(--text-secondary);
+  font-size: var(--size-footer);
+}
+
+.pane__banner[hidden] {
+  display: none;
+}
+
+.pane__banner-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-quaternary);
+}
+
+/* A conflict is not an error — the text was saved, in full, under a name the user can open. Amber
+ * says "look at this when you get a moment", which is exactly the urgency it has. */
+.pane__banner[data-kind="conflict"] .pane__banner-dot {
+  background: #e0a02a;
+}
+
+.pane__banner[data-kind="problem"] .pane__banner-dot {
+  background: #d9544f;
+}
+
+/* Downloading is the one state that resolves itself, so it pulses instead of sitting there. */
+.pane__banner[data-kind="downloading"] .pane__banner-dot {
+  animation: pane-banner-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pane-banner-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.pane__banner-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane__banner[data-kind="downloading"] .pane__banner-dot {
+    animation: none;
+  }
+}
+
 /* ---- Content ---------------------------------------------------------------------------------- */
 
 .pane__content {
@@ -194,9 +263,11 @@ body {
 .pane__scroll {
   height: 100%;
   /* The padding lives on .cm-content, not here — see markdown.css. */
-  /* A measure, not the full pane width. Long lines that run the whole 692px are hard to read and the
-   * design gives them generous gutters instead. */
+  /* A measure, not the full pane width: long lines are hard to read, so a pane dragged very wide
+   * keeps its column. `margin: 0 auto` centres it — left-aligned, the measure put all the slack on
+   * the right and the note looked pushed into a corner. */
   max-width: var(--content-measure);
+  margin: 0 auto;
   font-size: var(--text-size);
   line-height: var(--line-height);
   color: var(--text-primary);
@@ -297,16 +368,18 @@ body {
 
 .format-bar__heading {
   width: auto !important;
-  gap: 2px;
+  gap: 3px;
   padding: 0 7px !important;
   font-weight: 700;
 }
 
-.format-bar__bold { font-weight: 800; }
-.format-bar__italic { font-style: italic; font-family: Georgia, serif; }
-.format-bar__strike { text-decoration: line-through; }
-.format-bar__underline { text-decoration: underline; }
-.format-bar__code { font-family: var(--font-mono); font-size: 11px; }
+.format-bar__chevron {
+  opacity: 0.55;
+}
+
+/* The heading list is a native NSMenu, opened by Swift — see the note in format-bar.ts. It has to
+ * hang below the format bar, past the window's own edge, and nothing rendered in this document can
+ * leave the window. So there are no styles for it here, on purpose. */
 
 .format-bar__separator {
   flex: none;
