@@ -9,5 +9,6 @@ runStateTests()
 runVaultSyncTests()
 runVaultIOTests()
 runRecentlyDeletedTests()
+runMarkdownExportTests()
 
 exit(Check.finish())
