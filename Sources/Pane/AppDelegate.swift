@@ -20,6 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var watcher: VaultWatcher?
     private var settingsWindow: SettingsWindowController?
 
+    /// Where `vault` is currently pointed, so a settings change can tell a vault move from any other
+    /// edit. Read back from the service instead would mean hopping onto its queue to answer a
+    /// question the main actor already knows.
+    private var currentVaultURL: URL?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
         applyDockIcon()
@@ -29,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard prepareVault() else { return }
 
         vault = VaultService(vault: settings.value.vaultURL)
+        currentVaultURL = settings.value.vaultURL
         pane = PaneController(vault: vault, state: state, settings: settings)
         pane.onPinsChanged = { [weak self] in self?.refreshMenuBar() }
         pane.onVaultMissing = { [weak self] in self?.handleVaultMissing() }
@@ -56,6 +62,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// less than the bookkeeping to know which one moved — and gets the case where several changed at
     /// once, which Restore Defaults does by design.
     private func settingsChanged(_ new: Settings) {
+        // The vault path is the one setting that is not a preference — it is which files the app is
+        // looking at. Everything else here re-applies in place; this has to re-point the service,
+        // restart the watcher and reopen a note, in that order.
+        //
+        // Missing from the first version of this method, which made decision 32's promise a
+        // half-truth: every key in settings.json reloaded live except the one whose stale value is
+        // most visible, and a hand-edited vaultPath silently did nothing until the next launch.
+        if new.vaultURL.standardizedFileURL != currentVaultURL?.standardizedFileURL {
+            currentVaultURL = new.vaultURL
+            vault?.setVault(new.vaultURL)
+            startWatching()
+            pane?.openLastUsedNote()
+        }
+
         if hotkey?.registered != new.summonHotkey { installHotkey() }
         applyDockIcon()
         applyLaunchAtLogin()
