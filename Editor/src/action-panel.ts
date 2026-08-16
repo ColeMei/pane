@@ -6,15 +6,16 @@
  * (decision 14 wants every control in its own pane) rather than as a second window that would be a
  * second web view to keep warm.
  *
- * Frame 2a lists thirteen rows and this ships twelve. The one that is missing:
+ * Frame 2a lists thirteen rows and this ships fourteen — all thirteen, plus Duplicate Note, which
+ * Raycast carries on ⌘D and decision 39 took across with the rest of its key map.
  *
- *   Disable Auto-sizing — retired outright. It was the answer to the problem decision 29 solved
- *     better, and the design never specified it beyond the row label: it appears exactly once in
- *     the whole design record, with no frame and no annotation behind it. A dragged height is
- *     already a floor, so there is nothing left for it to switch off.
+ * The thirteenth row came back. It was retired on the reasoning that decision 29 had already
+ * answered it — a dragged height was a floor, so there was nothing left to switch off — and
+ * decision 40 reversed decision 29 outright: a drag now turns auto-sizing OFF and the pane holds
+ * that height, so the row is the way back on, on Raycast's own ⇧⌘/.
  *
- * Every other row here is a thing Pane actually does, so none of them is a row that does nothing —
- * the same rule the Shortcuts tab follows (decision 31).
+ * Every row here is a thing Pane actually does, so none of them is a row that does nothing — the
+ * same rule the Shortcuts tab follows (decision 31).
  */
 
 export interface ActionRow {

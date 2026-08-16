@@ -34,7 +34,7 @@
 
 	<!-- Deliberately absent: every NS*UsageDescription key. Global hotkeys go through
 	     RegisterEventHotKey, which needs no Accessibility permission, and no network code ships.
-	     Pane requests no privacy permissions at all — see decision 14. Adding a usage-description
+	     Pane requests no privacy permissions at all — see decision 9. Adding a usage-description
 	     key here means a promise was broken somewhere else. -->
 </dict>
 </plist>

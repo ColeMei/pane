@@ -61,7 +61,8 @@ Or download the `.zip` from the [latest release](https://github.com/ColeMei/pane
 - **<kbd>⌘N</kbd>** new note. Pin notes to the top of the switcher.
 - **Deleted notes are recoverable**, for as long as you choose. They wait outside your vault so they
   don't sync back, and nothing about them lives in a database — the folder *is* the record.
-- Height follows the note; drag to set a floor. Word count in the footer, format bar behind `Aa`.
+- Height follows the note; dragging it switches that off and holds the height you chose (<kbd>⇧⌘/</kbd>
+  turns it back on). Word count in the footer, format bar behind `Aa`.
 - Menu bar item, launch at login, light and dark.
 - External edits picked up automatically. **Pane never silently overwrites a file that changed
   underneath it** — it writes your version to a sibling and tells you where it went.
