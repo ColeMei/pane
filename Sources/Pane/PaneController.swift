@@ -85,6 +85,8 @@ final class PaneController: NSObject {
     // MARK: Layout
 
     private var lastContentHeight: CGFloat = PanePanel.defaultHeight
+    private let autoSizeBadge = AutoSizeBadge()
+    private var mouseMonitors: [Any] = []
     private var switcherIsOpen = false
     private var actionsIsOpen = false
     private var actionsPaneHeight: CGFloat = 0
@@ -198,9 +200,24 @@ final class PaneController: NSObject {
         editor.call("setFocused", [true])
         editor.focusEditor()
 
+        // Re-assert key status once the current event has finished.
+        //
+        // Summoning from the menu bar item ran inside `NSMenu`'s own tracking loop, and a menu
+        // restores key status to whatever held it before when it closes — undoing the
+        // `makeKeyAndOrderFront` above. The pane appeared, correctly, and then quietly did not take
+        // a single keystroke, which looked like the hotkey working and the menu item being broken.
+        // Idempotent on the hotkey path, which never had the problem.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.panel.isSummoned else { return }
+            self.panel.makeKeyAndOrderFront(nil)
+            self.editor.focusEditor()
+        }
+
         if currentFilename == nil {
             openLastUsedNote()
         }
+
+        startTrackingResizeEdge()
     }
 
     func dismiss() {
@@ -208,6 +225,7 @@ final class PaneController: NSObject {
         rememberFrame()
         panel.dismiss()
         editor.call("setFocused", [false])
+        stopTrackingResizeEdge()
 
         // Hands the front back to whatever was there. Summoning never activated the app — measured:
         // `frontmostApplication` stays with the other app throughout — so in the common case this is
@@ -838,6 +856,11 @@ extension PaneController: NSWindowDelegate {
         pane.manualHeight = Double(panel.frame.height)
         paneState = pane
         rememberFrame()
+
+        // The mode changed without anyone pressing the row, so the row's label is now a lie until
+        // it is told. This is the only path that turns auto-sizing off silently, which is exactly
+        // why it is the one that must announce it.
+        editor.call("setAutoSizing", [false])
     }
 
     /// ⇧⌘/ — frame 2a's thirteenth row, and Raycast's key for it.
@@ -856,6 +879,49 @@ extension PaneController: NSWindowDelegate {
     }
 
     var isAutoSizing: Bool { paneState.autoSizing }
+
+    // MARK: - The auto-size pill
+
+    /// Watches the pointer only while the pane is on screen.
+    ///
+    /// Two monitors because one is not enough: the global one sees events delivered to *other* apps,
+    /// which is where the pointer is most of the time given Pane never activates (decision 9), and
+    /// the local one sees events that land on the pane itself. Neither needs a permission — the
+    /// accessibility gate is on keyboard taps, not mouse observation.
+    private func startTrackingResizeEdge() {
+        guard mouseMonitors.isEmpty else { return }
+        let refresh: @Sendable (NSEvent) -> Void = { [weak self] _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.refreshAutoSizeBadge() } }
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved], handler: refresh) {
+            mouseMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved], handler: { event in
+            refresh(event)
+            return event
+        }) {
+            mouseMonitors.append(local)
+        }
+    }
+
+    private func stopTrackingResizeEdge() {
+        for monitor in mouseMonitors { NSEvent.removeMonitor(monitor) }
+        mouseMonitors.removeAll()
+        autoSizeBadge.hide()
+    }
+
+    private func refreshAutoSizeBadge() {
+        guard panel.isSummoned else {
+            autoSizeBadge.hide()
+            return
+        }
+        // Never over an open overlay: the switcher and ⌘K own the pane's whole height while they are
+        // up, so the pill would be captioning a panel rather than the note.
+        let frame = panel.frame
+        let near = !switcherIsOpen && !actionsIsOpen
+            && AutoSizeBadge.isNearResizeEdge(NSEvent.mouseLocation, of: frame)
+        autoSizeBadge.update(near: frame, autoSizing: paneState.autoSizing, visible: near)
+    }
 
     /// Rule 3, "stay put": the drag is the only thing that moves a pane, so the drag is the only
     /// thing worth recording. Persisting here rather than only at dismiss means the position also
