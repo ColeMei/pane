@@ -705,23 +705,25 @@ extension PaneController: EditorWebViewDelegate {
         case .close:
             dismiss()
 
+        // All three of these go through `heightWanted` rather than working out a height themselves.
+        // Doing the arithmetic here was how closing an overlay came to ignore the mode: it handed
+        // back the *note's* height, so a pane the user had dragged small stayed at panel height once
+        // the note was taller than the drag — and, worse, typing resized a pane whose whole point
+        // was that it had stopped resizing.
         case .contentHeight(let height):
             lastContentHeight = height
-            // An overlay is holding the pane open at its own height; shrinking to the note's height
-            // now would clip the thing the user is looking at.
-            guard !switcherIsOpen, !actionsIsOpen else { return }
-            applyContentHeight(height)
+            applyContentHeight(heightWanted)
 
         case .switcherOpen(let open):
             switcherIsOpen = open
-            applyContentHeight(open ? max(lastContentHeight, Self.switcherPaneHeight) : lastContentHeight)
+            applyContentHeight(heightWanted)
 
         case .actionsOpen(let open, let height):
             actionsIsOpen = open
             // The panel is positioned 54 px down like the switcher, and wants the same 16 px of pane
             // below it. Its height is measured rather than assumed because filtering changes it.
             actionsPaneHeight = open ? 54 + height + 16 : 0
-            applyContentHeight(open ? max(lastContentHeight, actionsPaneHeight) : lastContentHeight)
+            applyContentHeight(heightWanted)
 
         case .revealInFinder:
             guard let filename = currentFilename else { return }

@@ -66,6 +66,26 @@ func runAutoSizingTests() {
             Check.equal(back?.manualHeight, 275)
         }
 
+        Check.test("closing an overlay returns to the dragged height, not the note's") {
+            // The regression this suite exists to catch twice over. Working the height out at each
+            // call site meant closing ⌘K handed back `lastContentHeight`, so a pane dragged small
+            // stayed at panel height on any note taller than the drag — which looked like the panel
+            // had simply never closed.
+            let dragged = PaneState(autoSizing: false, manualHeight: 180)
+            let tallNote: CGFloat = 620
+
+            Check.equal(heightWanted(dragged, content: tallNote, actions: 534), 534, "open: panel fits")
+            Check.equal(heightWanted(dragged, content: tallNote), 180, "closed: back to the drag")
+        }
+
+        Check.test("typing does not resize a pane whose auto-sizing is off") {
+            // Same root cause: the content-height message used to apply its own number directly.
+            let dragged = PaneState(autoSizing: false, manualHeight: 180)
+            for typed in [200, 400, 800] as [CGFloat] {
+                Check.equal(heightWanted(dragged, content: typed), 180)
+            }
+        }
+
         Check.test("growth still stops short of the screen bottom in either mode") {
             // Decision 40 changes which height is asked for, not the cap on it.
             let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
