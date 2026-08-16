@@ -548,11 +548,10 @@ const host = {
   },
 
   setFocused(focused: boolean): void {
+    // Kept for anything that genuinely cares about key state. It no longer drives the chrome —
+    // decision 41 moved that to the cursor — and so it no longer changes the title bar's layout,
+    // which is why the drag regions do not need re-reporting here any more.
     paneEl.toggleAttribute("data-focused", focused);
-    // Losing focus takes two buttons out of the title bar (frame 1e), so the draggable strip is a
-    // different shape. Neither observer below catches this — one watches the title bar's own
-    // attributes and the other the pane's size, and this changes neither.
-    reportDragRegions();
   },
 
   /** Appearance, accent, theme and key bindings. The CSS keys off these attributes and variables. */
@@ -603,6 +602,18 @@ const host = {
     autoSizing = on;
   },
 
+  /**
+   * Seeds the hover state when the pane appears (decision 41).
+   *
+   * `mouseenter` fires on a pointer crossing a boundary, and summoning moves the boundary instead —
+   * so a pane that opens underneath a stationary cursor is hovered without any event ever saying
+   * so, and would sit there dimmed until the mouse twitched. Swift knows where the pointer is
+   * relative to the new frame; the web layer cannot.
+   */
+  setHover(inside: boolean): void {
+    paneEl.toggleAttribute("data-hover", inside);
+  },
+
   openSwitcher(): void {
     // Toggle, not open: this is what ⌘P and the menu bar's "Browse Notes…" both land on, and a
     // second press of either should close the list rather than silently do nothing.
@@ -634,6 +645,24 @@ const host = {
 };
 
 window.paneHost = host;
+
+/*
+ * Hover is what shows the chrome (decision 41).
+ *
+ * On the root element rather than the pane: the pane fills the window, but a pointer crossing the
+ * rounded corners or the resize edge is briefly over neither, and `mouseleave` on the pane would
+ * flicker the whole title bar there. The root has no such gap.
+ *
+ * No `reportContentHeight` call, deliberately. Everything hover changes is opacity and colour, so
+ * the pane's height is identical in both states — which is the only reason this is safe to do while
+ * auto-sizing is on.
+ */
+document.documentElement.addEventListener("mouseenter", () =>
+  paneEl.setAttribute("data-hover", "")
+);
+document.documentElement.addEventListener("mouseleave", () =>
+  paneEl.removeAttribute("data-hover")
+);
 
 // Clicking the banner acknowledges it. That is the whole dismissal affordance: a conflict banner
 // with an ✕ would be a control the user must operate before the pane looks normal again, which is

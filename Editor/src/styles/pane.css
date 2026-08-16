@@ -73,36 +73,63 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Unfocused panes drop the red dot to neutral and hide their footer (design frame 1e). */
-.pane:not([data-focused]) .pane__close {
+/* ---- Chrome follows the cursor, not the focus -------------------------------------------------
+ *
+ * Decision 41. Frame 1e keyed this off focus, which is the wrong signal for this product: a pane
+ * that accompanies another app is *meant* to be up while you work elsewhere, so "unfocused" is the
+ * normal state rather than a quiet one, and chrome that hides on blur hides almost always. Hovering
+ * is the signal that actually means "I am about to touch this". Raycast Notes does the same, and
+ * dims its title with it.
+ *
+ * **Nothing here may use `display`.** The footer's height feeds `reportContentHeight`, so taking it
+ * out of layout changes what the pane asks Swift for — and with auto-sizing on (decision 40) the
+ * window would then grow and shrink every time the mouse crossed the edge. Everything fades in
+ * place and keeps its box. That also holds the title bar's drag-exclusion rects still, which used
+ * to churn on every focus change.
+ */
+.pane__close,
+#browse,
+#new-note,
+.pane__footer,
+.format-bar,
+.pane__title {
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.pane:not([data-hover]) .pane__close {
   background: var(--close-dot-inactive);
   border: none;
 }
 
-/* An unfocused pane keeps its dot and its pin, and loses the other two buttons.
- *
- * Frame 1e's unfocused panes are drawn with exactly that: a neutral dot, a pin, and nothing else,
- * while the focused pane carries all three buttons. We were showing all three on every pane, which
- * is the frame under-implemented rather than a decision.
- *
- * It matters more in v0.1 than the frame suggests. Frame 1e is about telling several panes apart,
- * but with one pane "unfocused" means *you are working in another app* — the state Pane spends most
- * of its life in, especially pinned. Switcher and new-note are unusable there anyway: clicking one
- * focuses the pane first. So they are noise sitting over somebody's work.
- *
- * The dot and the pin stay, which is where this parts company with the reference — Raycast hides
- * its window controls entirely when unfocused. Keeping the dot means closing an unfocused pane is
- * still one click rather than two, and the pin is state you need to be able to read at a glance
- * precisely when you are not looking directly at it. */
-.pane:not([data-focused]) #browse,
-.pane:not([data-focused]) #new-note {
-  display: none;
+/* Buttons fade rather than leave: clicking one would have to focus the pane first anyway, so they
+   are noise over somebody else's work — but their boxes stay, so nothing reflows. */
+.pane:not([data-hover]) #browse,
+.pane:not([data-hover]) #new-note {
+  opacity: 0;
+  pointer-events: none;
 }
 
-.pane:not([data-focused]) .pane__footer,
-.pane:not([data-focused]) .format-bar {
-  display: none;
+.pane:not([data-hover]) .pane__footer,
+.pane:not([data-hover]) .format-bar {
+  opacity: 0;
+  pointer-events: none;
 }
+
+/* The title dims with the rest. It is the one piece of chrome that is also content, so it fades to
+   a muted ink rather than out entirely — you should still be able to read which note this is from
+   across the desk. */
+.pane:not([data-hover]) .pane__title {
+  color: var(--text-quaternary);
+}
+
+/* The pin never fades, unlike the other two buttons.
+ *
+ * It is the one control that is also *state*: whether this pane ignores the dismiss hotkey is
+ * something you need to read at a glance precisely when you are not looking straight at it. The
+ * close dot stays for the same reason it did under frame 1e — closing a pane you are not hovering
+ * should still be one click, not two. This is where Pane parts company with the reference, which
+ * drops its window controls entirely.
+ */
 
 /* NO CSS SHADOW ON THE PANE, focused or not.
  *

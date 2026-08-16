@@ -186,6 +186,10 @@ final class PaneController: NSObject {
         )
 
         panel.summon(at: frame, pinned: isPinned)
+        // Decision 41: the chrome follows the cursor, and summoning moves the pane rather than the
+        // cursor — so a pane that opens under a stationary pointer gets no `mouseenter` and would
+        // sit dimmed until the mouse moved. Only Swift knows the new frame and the pointer at once.
+        editor.call("setHover", [frame.contains(NSEvent.mouseLocation)])
         // The height the note wanted may have moved while the pane was away — an external edit, or a
         // note switched from the menu bar. Reconciling here rather than waiting for the web layer's
         // next report keeps the first frame the user sees the right size.
