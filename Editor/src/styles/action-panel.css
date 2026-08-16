@@ -22,6 +22,11 @@
   width: 400px;
   max-width: calc(100% - 32px);
 
+  /* Never taller than the pane — same reasoning as the switcher's, and the same numbers: 54px down
+   * from the top, 16px of room underneath. Without it a fourteen-row panel on a short pane runs off
+   * the bottom edge and the last rows are simply unreachable. */
+  max-height: calc(100% - 54px - 16px);
+
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--panel-blur);
   backdrop-filter: var(--panel-blur);
@@ -71,6 +76,10 @@
 
 .actions__list {
   overflow-y: auto;
+  /* `min-height: 0` so the list can actually shrink inside the panel's flex column when the panel is
+   * capped by the pane's height — without it a flex item refuses to go below its content size and
+   * the cap does nothing. */
+  min-height: 0;
   max-height: 420px;
 }
 

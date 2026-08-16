@@ -28,6 +28,15 @@
   width: var(--switcher-width);
   max-width: calc(100% - 32px);
 
+  /* Never taller than the pane it is drawn inside.
+   *
+   * The list's own `--switcher-max-height` is an absolute cap and says nothing about the window it
+   * has to fit in, so on a short pane the panel simply ran off the bottom edge — the last row cut in
+   * half by the pane's own rounded corner. The pane grows to make room (decision 40), but it cannot
+   * grow past the screen, and it was never obliged to grow this far in the first place. 54px is the
+   * offset from the top, 16px the breathing room under it. */
+  max-height: calc(100% - 54px - 16px);
+
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--panel-blur);
   backdrop-filter: var(--panel-blur);

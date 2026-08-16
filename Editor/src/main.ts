@@ -455,7 +455,7 @@ const shortcutsCompartment = new Compartment();
  */
 const actionHandlers: Record<string, () => boolean> = {
   newNote: () => (send({ type: "createNote", title: "" }), true),
-  browseNotes: () => (switcher.toggle(), true),
+  browseNotes: () => (toggleSwitcher(), true),
   pinPane: () => (send({ type: "togglePin", filename: currentFilename }), true),
   formatBar: () => (toggleFormatBar(), true),
   revealInFinder: () => (send({ type: "revealInFinder" }), true),
@@ -475,7 +475,7 @@ const actionHandlers: Record<string, () => boolean> = {
 };
 
 function paneShortcuts(bindings: Record<string, string>): Extension {
-  const run: Record<string, () => boolean> = { ...actionHandlers, actionPanel: () => (actions.toggle(), true) };
+  const run: Record<string, () => boolean> = { ...actionHandlers, actionPanel: () => (toggleActions(), true) };
 
   return keymap.of(
     Object.entries(run)
@@ -587,7 +587,7 @@ document.getElementById("new-note")!.addEventListener("click", () =>
 document.getElementById("pin")!.addEventListener("click", () =>
   send({ type: "togglePin", filename: currentFilename })
 );
-document.getElementById("browse")!.addEventListener("click", () => switcher.toggle());
+document.getElementById("browse")!.addEventListener("click", () => toggleSwitcher());
 
 formatBar = mountFormatBar(
   document.getElementById("format-bar") as HTMLElement,
@@ -640,6 +640,107 @@ const switcher = mountSwitcher({
     if (!open) view.focus();
   },
 });
+
+/**
+ * The switcher and ⌘K occupy the same slot, so only one of them is ever open.
+ *
+ * They are absolutely positioned at the same offset with adjacent z-indexes, so opening the second
+ * simply stacked it on the first — two search fields and two lists on screen at once, with the
+ * keystrokes going to whichever happened to hold focus. Every entry point goes through these rather
+ * than calling `toggle` directly, because "close the other one first" is not something a call site
+ * should be able to forget.
+ */
+function toggleSwitcher(): void {
+  actions.close();
+  switcher.toggle();
+}
+
+function toggleActions(): void {
+  switcher.close();
+  actions.toggle();
+}
+
+/**
+ * Does this keydown match a CodeMirror-style binding string — "Mod-k", "Shift-Mod-p", "Alt-Mod-,"?
+ *
+ * Needed only by the overlay-closing listener below. Everything else goes through CodeMirror's own
+ * keymap, which does this properly; this is the one place a key has to be recognised outside it.
+ */
+function matchesBinding(event: KeyboardEvent, binding: string): boolean {
+  const parts = binding.split("-");
+  const wanted = parts.pop()?.toLowerCase() ?? "";
+  let mod = false;
+  let shift = false;
+  let alt = false;
+  let ctrl = false;
+  for (const part of parts) {
+    switch (part.toLowerCase()) {
+      case "mod":
+      case "cmd":
+      case "meta":
+        mod = true;
+        break;
+      case "shift":
+        shift = true;
+        break;
+      case "alt":
+      case "option":
+        alt = true;
+        break;
+      case "ctrl":
+      case "control":
+        ctrl = true;
+        break;
+    }
+  }
+  return (
+    event.key.toLowerCase() === wanted &&
+    event.metaKey === mod &&
+    event.shiftKey === shift &&
+    event.altKey === alt &&
+    event.ctrlKey === ctrl
+  );
+}
+
+/** The bindings in force, so the listener below follows a rebind from the Settings window. */
+let liveShortcuts: Record<string, string> = { ...DEFAULT_SHORTCUTS };
+
+/**
+ * An open overlay's own shortcut closes it.
+ *
+ * Opening either panel moves focus into its `<input>`, a plain DOM node outside CodeMirror — so the
+ * keymap that opened the panel never sees the second press. ⌘K opened the action panel and then did
+ * nothing at all for as long as it was up. Escape still worked, which is what disguised it.
+ *
+ * Capture phase, and only while that overlay is open, so it cannot shadow the editor's own bindings
+ * the rest of the time.
+ */
+document.addEventListener(
+  "keydown",
+  (event) => {
+    // Only while an overlay is up. With the caret in the editor, CodeMirror's keymap is already
+    // handling both of these properly and this must stay out of its way.
+    if (!actions.isOpen() && !switcher.isOpen()) return;
+
+    const binding = (action: string) => liveShortcuts[action] ?? DEFAULT_SHORTCUTS[action] ?? "";
+
+    // Each key keeps its own meaning from inside either panel: it closes its own panel, and swaps
+    // to it from the other one. Handling only the closing half left ⌘K doing nothing at all while
+    // the switcher was open, which is a different kind of dead key from the one being fixed.
+    if (matchesBinding(event, binding("actionPanel"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      actions.isOpen() ? actions.close() : toggleActions();
+      return;
+    }
+    if (matchesBinding(event, binding("browseNotes"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      switcher.isOpen() ? switcher.close() : toggleSwitcher();
+    }
+  },
+  true
+);
 
 // ---------------------------------------------------------------------------------------------
 // Inbound — everything Swift can ask the web layer to do
@@ -713,6 +814,7 @@ const host = {
     if (settings.themeCSS !== undefined) themeStyleEl.textContent = settings.themeCSS;
 
     if (settings.shortcuts) {
+      liveShortcuts = { ...DEFAULT_SHORTCUTS, ...settings.shortcuts };
       view.dispatch({
         effects: shortcutsCompartment.reconfigure(paneShortcuts(settings.shortcuts)),
       });
@@ -751,7 +853,7 @@ const host = {
   openSwitcher(): void {
     // Toggle, not open: this is what ⌘P and the menu bar's "Browse Notes…" both land on, and a
     // second press of either should close the list rather than silently do nothing.
-    switcher.toggle();
+    toggleSwitcher();
   },
 
   /** Chosen from the native heading menu. */

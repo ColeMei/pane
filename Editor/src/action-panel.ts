@@ -127,6 +127,23 @@ export function mountActionPanel(options: ActionPanelOptions) {
     return pane.hasAttribute("data-actions");
   }
 
+  /**
+   * The height the panel wants, which is not the height it currently has.
+   *
+   * `offsetHeight` is capped by the pane (see `max-height` in action-panel.css), so reporting it
+   * would tell Swift the panel already fits and the pane would never grow — on a short note ⌘K came
+   * up two and a half rows tall with everything else scrolled out of reach. The pane still has to
+   * grow to hold the panel (decision 40); the CSS cap exists for when it *cannot*, because the
+   * screen ran out, and then a clipped panel is the lesser of the two evils.
+   *
+   * So: what the panel is now, minus what the list is showing, plus what the list would show.
+   */
+  function desiredHeight(): number {
+    const listCap = Number.parseFloat(getComputedStyle(list).maxHeight);
+    const listWanted = Math.min(list.scrollHeight, Number.isFinite(listCap) ? listCap : Infinity);
+    return root.offsetHeight - list.clientHeight + listWanted;
+  }
+
   function open(): void {
     if (isOpen()) return;
     pane.setAttribute("data-actions", "");
@@ -136,7 +153,7 @@ export function mountActionPanel(options: ActionPanelOptions) {
     search.focus();
     // Measured rather than assumed: the pane has to grow to hold this, and the panel's height
     // depends on how many rows survived the filter.
-    options.onVisibilityChange(true, root.offsetHeight);
+    options.onVisibilityChange(true, desiredHeight());
   }
 
   function close(): void {
@@ -255,7 +272,7 @@ export function mountActionPanel(options: ActionPanelOptions) {
   search.addEventListener("input", () => {
     selected = 0;
     render(search.value);
-    if (isOpen()) options.onVisibilityChange(true, root.offsetHeight);
+    if (isOpen()) options.onVisibilityChange(true, desiredHeight());
   });
 
   search.addEventListener("keydown", (event) => {
