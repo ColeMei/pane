@@ -54,6 +54,11 @@
 
       <!-- One footer row. The format bar replaces it rather than stacking below it. -->
       <footer class="pane__footer">
+        <!-- Frame 2a drops Raycast's ⌘ toolbar button on the stated grounds that "⌘K is discoverable
+             via the footer hint and menu bar". The button went; neither discovery path was ever
+             built, so the whole action panel had none. This is the hint half. It is text in a row
+             whose height is a fixed token, so it cannot move `reportContentHeight`. -->
+        <span class="pane__hint" aria-hidden="true">⌘K</span>
         <span class="pane__footer-spacer"></span>
         <span class="pane__words" id="word-count">0 words</span>
         <span class="pane__footer-spacer"></span>

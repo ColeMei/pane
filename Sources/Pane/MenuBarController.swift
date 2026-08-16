@@ -16,6 +16,7 @@ final class MenuBarController: NSObject {
     var onShow: (() -> Void)?
     var onNewNote: (() -> Void)?
     var onBrowse: (() -> Void)?
+    var onActions: (() -> Void)?
     var onOpenNote: ((String) -> Void)?
     var onSettings: (() -> Void)?
 
@@ -52,6 +53,10 @@ final class MenuBarController: NSObject {
 
         menu.addItem(action("New Note", key: "n", selector: #selector(newNote)))
         menu.addItem(action("Browse Notes…", key: "p", selector: #selector(browse)))
+        // Frame 2a justifies having no ⌘ toolbar button by pointing at "the footer hint and menu
+        // bar". This is the menu bar half — without it, and without the footer hint, ⌘K was a panel
+        // with no way to find out it existed.
+        menu.addItem(action("Actions…", key: "k", selector: #selector(actionPanel)))
 
         let pinned = pinnedNotes()
         if !pinned.isEmpty {
@@ -119,6 +124,7 @@ final class MenuBarController: NSObject {
     @objc private func showPane() { onShow?() }
     @objc private func newNote() { onNewNote?() }
     @objc private func browse() { onBrowse?() }
+    @objc private func actionPanel() { onActions?() }
     @objc private func settings() { onSettings?() }
     @objc private func quit() { NSApp.terminate(nil) }
 

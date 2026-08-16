@@ -539,6 +539,11 @@ final class PaneController: NSObject {
         editor.call("openSwitcher")
     }
 
+    func openActions() {
+        if !isVisible { summon() }
+        editor.call("openActions")
+    }
+
     // MARK: - Banner
 
     private func showBanner(_ banner: Banner) {

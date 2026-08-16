@@ -364,6 +364,15 @@ body {
   flex: none;
 }
 
+/* The ⌘K hint (see the note in index.html). Quiet enough to read as an affordance rather than as
+   content — the switcher's own footer hints use the same size and colour, so this is the vocabulary
+   the pane already has for "here is a key you can press". */
+.pane__hint {
+  flex: none;
+  font-size: var(--size-hint);
+  color: var(--text-faint);
+}
+
 .icon-button--sm {
   width: 24px;
   height: 24px;

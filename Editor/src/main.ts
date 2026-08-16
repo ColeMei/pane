@@ -856,6 +856,12 @@ const host = {
     toggleSwitcher();
   },
 
+  openActions(): void {
+    // Same contract as `openSwitcher`, for the menu bar's "Actions…". Frame 2a leans on the menu bar
+    // as one of ⌘K's two discovery paths; this is that path.
+    toggleActions();
+  },
+
   /** Chosen from the native heading menu. */
   setHeadingLevel(level: number): void {
     setHeading(view, level);
