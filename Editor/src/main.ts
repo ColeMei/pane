@@ -326,6 +326,97 @@ function escapeCodeBlock(view: EditorView): boolean {
   return true;
 }
 
+/** Walks up from `pos` looking for an enclosing node — the same walk `escapeCodeBlock` does. */
+function inside(state: EditorState, pos: number, nodeName: string): boolean {
+  let node = syntaxTree(state).resolveInner(pos, -1);
+  while (node.name !== nodeName && node.parent) node = node.parent;
+  return node.name === nodeName;
+}
+
+/** Built once. It is the ⏎ binding as well, so the two keys cannot drift apart. */
+const continueMarkup = insertNewlineContinueMarkupCommand({ nonTightLists: false });
+
+/**
+ * Tries each command in turn, stopping at the first that handles the key.
+ *
+ * Written out rather than relying on two entries for one key inside a single `keymap.of`: the order
+ * matters here and this way it is readable at the binding.
+ */
+function chain(...commands: ((view: EditorView) => boolean)[]) {
+  return (view: EditorView): boolean => commands.some((run) => run(view));
+}
+
+/**
+ * ⏎ on a line holding nothing but blockquote markers leaves the quote.
+ *
+ * Every list type already does this — `continueMarkup` exits an empty item, and pressing Enter twice
+ * to get out is muscle memory older than markdown. A blockquote was the single construct that did
+ * not: `> quoted` and then ⏎ on the empty `> ` gave a bare `>` and another `> `, so the quote
+ * continued for as long as you kept pressing and there was no way out but Backspace. Measured across
+ * every block type; it was the only exception, which is the argument for fixing it rather than
+ * calling it markdown's behaviour.
+ *
+ * One level at a time, because that is what an empty nested list item does.
+ */
+function exitEmptyBlockquote(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const line = state.doc.lineAt(range.head);
+  const match = /^(\s*)((?:>[ \t]*)+)$/.exec(line.text);
+  const [, indent, markers] = match ?? [];
+  if (indent === undefined || markers === undefined) return false;
+
+  // The regex on its own would also fire on a `>` typed inside a code block, where it is just text.
+  if (!inside(state, range.head, "Blockquote")) return false;
+
+  // Drop the last `>` and keep the rest of the prefix exactly as it was typed. Rebuilding it as
+  // `"> ".repeat(n)` would turn `>>>` into `> > ` — both are valid two-level quotes, but silently
+  // restyling markdown the user wrote is not something a byte-for-byte editor gets to do.
+  const outer = markers.slice(0, markers.lastIndexOf(">")).replace(/[ \t]+$/, "");
+  const next = outer ? `${indent}${outer} ` : "";
+
+  view.dispatch({
+    changes: { from: line.from, to: line.to, insert: next },
+    selection: { anchor: line.from + next.length },
+    userEvent: "input",
+  });
+  return true;
+}
+
+/**
+ * A line whose entire content is a list marker — `-`, `*`, `+`, `1.`, `1)`, with or without `[ ]`.
+ *
+ * The optional `>` prefix is there because a list inside a blockquote is still an empty list item:
+ * without it `> - ` fell through to a plain newline and left the marker behind, which is the exact
+ * debris this command exists to stop.
+ */
+const EMPTY_LIST_ITEM = /^[ \t]*(?:>[ \t]*)*(?:[-*+]|\d+[.)])[ \t]*(?:\[[ xX]\][ \t]*)?$/;
+
+/**
+ * ⇧⏎ on a line that is nothing but markup does what ⏎ does.
+ *
+ * ⇧⏎ means "newline, do not continue the markup", and on a line whose only content IS markup there
+ * is nothing to carry forward — so the old behaviour left the marker sitting there: `- item`, an
+ * empty `- `, and ⇧⏎ gave `- item`, `- `, and a new line, i.e. a bullet with nothing after it that
+ * the user then has to delete. Delegates to `continueMarkup` rather than reimplementing the exit, so
+ * nested items outdent exactly as they do on ⏎.
+ */
+function exitEmptyMarkup(view: EditorView): boolean {
+  if (exitEmptyBlockquote(view)) return true;
+
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const line = state.doc.lineAt(range.head);
+  if (!EMPTY_LIST_ITEM.test(line.text)) return false;
+  if (!inside(state, range.head, "ListItem")) return false;
+
+  return continueMarkup(view);
+}
+
 /**
  * The shortcuts the Settings window can rebind (design frame 3c).
  *
@@ -431,8 +522,11 @@ function baseExtensions(): Extension[] {
     // memory older than markdown.
     Prec.high(
       keymap.of([
-        { key: "Shift-Enter", run: escapeCodeBlock },
-        { key: "Enter", run: insertNewlineContinueMarkupCommand({ nonTightLists: false }) },
+        // ⇧⏎, in order: get out of a code block, else leave an empty marker line, else fall through
+        // to CodeMirror's plain newline. Every one of those is "a newline that does not carry the
+        // markup forward"; the chain is which flavour of that applies where.
+        { key: "Shift-Enter", run: chain(escapeCodeBlock, exitEmptyMarkup) },
+        { key: "Enter", run: chain(exitEmptyBlockquote, continueMarkup) },
         { key: "Backspace", run: deleteMarkupBackward },
       ])
     ),
