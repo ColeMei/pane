@@ -29,7 +29,7 @@ import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemi
 
 import { mountActionPanel } from "./action-panel";
 import { findHighlighting, mountFind } from "./find";
-import { livePreview, scrollReporter } from "./live-preview";
+import { caretBlankLineSlack, livePreview, scrollReporter } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
 import { mountFormatBar, setHeading } from "./format-bar";
 import { countWords } from "./word-count";
@@ -159,7 +159,9 @@ function reportContentHeight(): void {
   // obvious choice and always wrong: the host is `height: 100%` and the editor inside it is themed
   // to match, so scrollHeight equals clientHeight forever and the pane reports its *current* height
   // as its desired height — which means rule 2 could never actually fire.
-  const content = view.contentHeight;
+  // Minus the caret's blank-line exemption: that 12px is a rendering choice, and a window that
+  // followed it would pulse every time the caret crossed a blank line. See `caretBlankLineSlack`.
+  const content = view.contentHeight - caretBlankLineSlack(view);
 
   // The format bar replaces the footer rather than stacking on it, so only one of them is ever laid
   // out. Measuring whichever is visible avoids assuming which.

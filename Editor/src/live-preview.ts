@@ -312,9 +312,26 @@ function buildDecorations(view: EditorView): DecorationSet {
   // there, the caret still goes in it) while giving the document the spacing of the thing it is
   // pretending to be.
   //
-  // Deliberately *not* exempting the caret's line, unlike every other rule here. Growing the line
-  // back as the caret arrives would shift everything below it by 10px on an arrow keypress, and
-  // cursor instability is the stated way this whole approach fails.
+  // THE CARET'S LINE IS EXEMPT, reversing what this comment used to say.
+  //
+  // It used to argue that growing the line back as the caret arrives would shift everything below it
+  // on an arrow keypress, and that cursor instability is how this approach fails. The first half is
+  // true and the second half is what made it the wrong call: the shift happens either way, and
+  // leaving it in meant it happened *while typing* instead of while navigating.
+  //
+  // What that felt like, which is how it was reported: press Return in prose, and the caret lands in
+  // a 10px box hard against the line above; type one character, the line becomes an ordinary
+  // paragraph, and the text appears 12px BELOW where the caret just was. Every Return in prose, which
+  // is the most common thing anyone does in a notes app. A caret that is not where the text lands is
+  // exactly the instability the warning was about — it just arrived through the keyboard rather than
+  // through the arrow keys.
+  //
+  // Exempting the caret's line makes typing dead stable: the line is already at its full height when
+  // the caret gets there, so the first keystroke moves nothing. The cost moves to leaving a blank
+  // line, where a 12px shift reads as the document closing up behind you rather than as the text
+  // jumping out from under the caret. It also makes the rule uniform — every line in the document now
+  // renders at its natural size under the caret, blank lines included, which is what decisions 42
+  // and 34 were already reaching for.
   for (const { from, to } of view.visibleRanges) {
     const first = doc.lineAt(from).number;
     const last = doc.lineAt(to).number;
@@ -322,7 +339,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       const line = doc.line(n);
       // Inside a fenced block a blank line is content with a background, and collapsing it would
       // put a notch in the block's left edge.
-      if (line.length === 0 && !codeLines.has(n)) {
+      if (line.length === 0 && !codeLines.has(n) && !active.has(n)) {
         decorations.push(blankLine.range(line.from));
       }
     }
@@ -408,6 +425,47 @@ export function scrollReporter(onScroll: (scrolledPastHeading: boolean) => void)
       return false;
     },
   });
+}
+
+/**
+ * How much taller the caret's line is than the collapsed blank line it would otherwise be.
+ *
+ * The caret's blank line is exempt from the collapse above, so that typing the first character moves
+ * nothing. That exemption is a *rendering* choice and the window must not follow it: without this,
+ * arrowing across the blank lines of a short note grows and shrinks the pane by 12px each time,
+ * because every height decision goes through the content height the web layer reports (decision 40).
+ * The pane would pulse for the whole length of a note.
+ *
+ * So the height that goes to Swift is reported as though the caret's line were still collapsed.
+ * Content below the caret still opens and closes inside the pane, which is what the exemption is
+ * for; the window simply does not chase it. The cost is that while the caret sits on a blank line
+ * the note is 12px taller than the pane admits, so a note filling the pane exactly can put its last
+ * line under the fade until the caret moves — much cheaper than a window that breathes.
+ *
+ * Lives here rather than in the reporter because the rule that creates the slack is the rule that
+ * has to measure it; splitting them is how the two come to disagree.
+ */
+export function caretBlankLineSlack(view: EditorView): number {
+  const range = view.state.selection.main;
+  if (!range.empty) return 0;
+
+  const line = view.state.doc.lineAt(range.head);
+  if (line.length !== 0) return 0;
+
+  // A blank line inside a code block is never collapsed, so it has no slack to give back.
+  let node = syntaxTree(view.state).resolveInner(line.from, 1);
+  while (node.parent) {
+    if (node.name === "FencedCode" || node.name === "CodeBlock") return 0;
+    node = node.parent;
+  }
+
+  const collapsed = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--blank-line-height")
+  );
+  if (!Number.isFinite(collapsed)) return 0;
+
+  const slack = view.lineBlockAt(line.from).height - collapsed;
+  return slack > 0 ? slack : 0;
 }
 
 /**
