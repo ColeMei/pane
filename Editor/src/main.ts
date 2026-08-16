@@ -685,22 +685,14 @@ const host = {
 window.paneHost = host;
 
 /*
- * Hover is what shows the chrome (decision 41).
+ * Hover arrives from Swift (`setHover`), not from listeners here.
  *
- * On the root element rather than the pane: the pane fills the window, but a pointer crossing the
- * rounded corners or the resize edge is briefly over neither, and `mouseleave` on the pane would
- * flicker the whole title bar there. The root has no such gap.
- *
- * No `reportContentHeight` call, deliberately. Everything hover changes is opacity and colour, so
- * the pane's height is identical in both states — which is the only reason this is safe to do while
- * auto-sizing is on.
+ * `mouseenter`/`mouseleave` in the page only fired once the pane had been clicked: a WKWebView in a
+ * window that is not key receives no mouse events at all, so the chrome stayed dim wherever the
+ * pointer went — in precisely the situation decision 41 exists for, the pane sitting over another
+ * app you are working in. Swift's mouse monitors see the pointer regardless of which app is active,
+ * which is also the rule everywhere else here: the web layer owns no truth.
  */
-document.documentElement.addEventListener("mouseenter", () =>
-  paneEl.setAttribute("data-hover", "")
-);
-document.documentElement.addEventListener("mouseleave", () =>
-  paneEl.removeAttribute("data-hover")
-);
 
 // Clicking the banner acknowledges it. That is the whole dismissal affordance: a conflict banner
 // with an ✕ would be a control the user must operate before the pane looks normal again, which is

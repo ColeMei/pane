@@ -87,6 +87,7 @@ final class PaneController: NSObject {
     private var lastContentHeight: CGFloat = PanePanel.defaultHeight
     private let autoSizeBadge = AutoSizeBadge()
     private var mouseMonitors: [Any] = []
+    private var isHovered = false
     private var switcherIsOpen = false
     private var actionsIsOpen = false
     private var actionsPaneHeight: CGFloat = 0
@@ -191,7 +192,8 @@ final class PaneController: NSObject {
         // Decision 41: the chrome follows the cursor, and summoning moves the pane rather than the
         // cursor — so a pane that opens under a stationary pointer gets no `mouseenter` and would
         // sit dimmed until the mouse moved. Only Swift knows the new frame and the pointer at once.
-        editor.call("setHover", [frame.contains(NSEvent.mouseLocation)])
+        isHovered = frame.contains(NSEvent.mouseLocation)
+        editor.call("setHover", [isHovered])
         // The height the note wanted may have moved while the pane was away — an external edit, or a
         // note switched from the menu bar. Reconciling here rather than waiting for the web layer's
         // next report keeps the first frame the user sees the right size.
@@ -920,7 +922,23 @@ extension PaneController: NSWindowDelegate {
         autoSizeBadge.hide()
     }
 
+    /// Hover state, decided in Swift rather than in the page.
+    ///
+    /// The web layer's own `mouseenter`/`mouseleave` only fired once the pane had been clicked: a
+    /// WKWebView in a window that is not key gets no mouse events at all, so the chrome stayed dim
+    /// no matter where the pointer went — in exactly the situation decision 41 exists for, which is
+    /// the pane sitting over another app you are working in. These monitors already watch the
+    /// pointer for the pill and do not care which app is active, so hover comes from the same place.
+    private func refreshHover() {
+        guard panel.isSummoned else { return }
+        let inside = panel.frame.contains(NSEvent.mouseLocation)
+        guard inside != isHovered else { return }
+        isHovered = inside
+        editor.call("setHover", [inside])
+    }
+
     private func refreshAutoSizeBadge() {
+        refreshHover()
         guard panel.isSummoned else {
             autoSizeBadge.hide()
             return
