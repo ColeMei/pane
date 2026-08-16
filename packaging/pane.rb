@@ -26,8 +26,8 @@ cask "pane" do
   # effect of uninstalling. Anything added here later has to answer the same question: is it Pane's,
   # or is it the user's?
   zap trash: [
-    "~/Library/Application Support/Pane/state.json",
     "~/Library/Application Support/Pane/settings.json",
+    "~/Library/Application Support/Pane/state.json",
     "~/Library/Application Support/Pane/Themes",
   ]
 
