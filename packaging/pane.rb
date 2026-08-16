@@ -20,11 +20,21 @@ cask "pane" do
 
   app "Pane.app"
 
-  zap trash: "~/Library/Application Support/Pane"
+  # Enumerated rather than trashing the whole support directory, because it is no longer only the
+  # app's own leavings. Decision 35 put "Recently Deleted" in there — up to 30 days of notes the user
+  # deleted and can still get back — so `--zap` would have swept away recoverable documents as a side
+  # effect of uninstalling. Anything added here later has to answer the same question: is it Pane's,
+  # or is it the user's?
+  zap trash: [
+    "~/Library/Application Support/Pane/state.json",
+    "~/Library/Application Support/Pane/settings.json",
+    "~/Library/Application Support/Pane/Themes",
+  ]
 
-  # Deliberately NOT listing the vault. `zap` is for the app's own leavings, and the vault is the
-  # user's documents — the entire premise of the product is that those files are theirs and outlive
-  # the app. Uninstalling Pane must never be a way to lose them.
+  # Deliberately NOT listing the vault, and no longer the Recently Deleted folder either. `zap` is
+  # for the app's own leavings, and both of those are the user's documents — the entire premise of
+  # the product is that those files are theirs and outlive the app. Uninstalling Pane must never be
+  # a way to lose them.
 
   caveats <<~EOS
     Pane is unsigned — there is no Apple Developer ID behind it.
