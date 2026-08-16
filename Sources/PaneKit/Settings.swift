@@ -80,11 +80,13 @@ public struct Settings: Codable, Equatable, Sendable {
     /// the recorder is for (decision 15) — not a reason to move the shipped default.
     public static let shortcutActions: [(key: String, label: String, standard: String)] = [
         ("newNote", "New Note", "Mod-n"),
+        ("duplicateNote", "Duplicate Note", "Mod-d"),
         ("browseNotes", "Browse Notes", "Mod-p"),
         ("actionPanel", "Action Panel", "Mod-k"),
         ("pinPane", "Pin Pane", "Shift-Mod-p"),
         ("findInNote", "Find in Note", "Mod-f"),
         ("copyAsMarkdown", "Copy as Markdown", "Shift-Mod-c"),
+        ("autoSizing", "Window Auto-sizing", "Shift-Mod-/"),
         ("formatBar", "Show Format Bar", "Alt-Mod-,"),
         ("revealInFinder", "Reveal in Finder", "Alt-Mod-r"),
         ("exportNote", "Export…", "Shift-Mod-e"),

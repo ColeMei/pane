@@ -31,6 +31,11 @@ enum PaneMessage {
     case exportNote(text: String)
     /// `NSWindow.sharingType` is a window property, so the web layer can only ask (decision 36).
     case toggleHideFromCapture
+    /// ⇧⌘/. Auto-sizing is window state, so only Swift can hold it (decision 40).
+    case toggleAutoSizing
+    /// ⌘D. Carries the buffer rather than re-reading the file, so a duplicate taken mid-sentence
+    /// contains the sentence.
+    case duplicateNote(text: String)
     case requestDeleted
     case restoreDeleted(storedName: String)
     /// Where the window may be dragged from, in CSS pixels with a top-left origin. Sent by the web
@@ -82,6 +87,10 @@ enum PaneMessage {
             self = .exportNote(text: string("text"))
         case "toggleHideFromCapture":
             self = .toggleHideFromCapture
+        case "toggleAutoSizing":
+            self = .toggleAutoSizing
+        case "duplicateNote":
+            self = .duplicateNote(text: string("text"))
         case "requestDeleted":
             self = .requestDeleted
         case "restoreDeleted":

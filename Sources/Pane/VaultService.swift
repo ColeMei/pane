@@ -187,6 +187,41 @@ final class VaultService: @unchecked Sendable {
         }
     }
 
+    /// Copies `text` into a brand-new note and returns its filename.
+    ///
+    /// The copy gets its own frozen name derived from the same title, which `NoteFilename.unique`
+    /// then disambiguates — so duplicating "Standup" twice gives `…-standup-2.md` and `…-standup-3.md`
+    /// rather than anything trying to be clever about "copy of". Decision 2 freezes a name at
+    /// creation; a duplicate is a creation.
+    func duplicate(
+        text: String,
+        completion: @escaping @MainActor (Result<String, any Error>) -> Void
+    ) {
+        queue.async {
+            let result: Result<String, any Error>
+            do {
+                let existing = Set(
+                    (try? VaultIO.listNotes(in: self.vaultURL))?.map(\.lastPathComponent) ?? []
+                )
+                let filename = NoteFilename.unique(
+                    title: MarkdownDocument.title(of: text),
+                    date: Date(),
+                    existing: existing
+                )
+                try VaultIO.write(
+                    text: text,
+                    to: self.vaultURL.appendingPathComponent(filename),
+                    expectedHash: nil
+                )
+                self.index.update(filename: filename, text: text, modified: Date())
+                result = .success(filename)
+            } catch {
+                result = .failure(error)
+            }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(result) } }
+        }
+    }
+
     /// Moves a note into Recently Deleted rather than unlinking it (decision 20).
     ///
     /// This used to call `trashItem`, which was the honest stand-in while the retention control in

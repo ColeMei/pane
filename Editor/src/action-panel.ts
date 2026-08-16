@@ -34,6 +34,8 @@ interface ActionPanelOptions {
   isPinned: () => boolean;
   /** Same, for the capture toggle. */
   isHiddenFromCapture: () => boolean;
+  /** Same, for auto-sizing — which a drag can turn off without anyone pressing this row. */
+  isAutoSizing: () => boolean;
   run: (id: string) => void;
   onVisibilityChange: (open: boolean, height: number) => void;
 }
@@ -42,6 +44,12 @@ interface ActionPanelOptions {
 const GROUPS: ActionRow[][] = [
   [
     { id: "newNote", label: "New Note", d: "M7 2v10M2 7h10", keys: ["⌘", "N"] },
+    {
+      id: "duplicateNote",
+      label: "Duplicate Note",
+      d: "M3 5h7v8H3zM5 2h7v8",
+      keys: ["⌘", "D"],
+    },
     { id: "browseNotes", label: "Browse Notes", d: "M2 3h10M2 7h10M2 11h10", keys: ["⌘", "P"] },
   ],
   [
@@ -67,6 +75,12 @@ const GROUPS: ActionRow[][] = [
     },
   ],
   [
+    {
+      id: "autoSizing",
+      label: "Disable Window Auto-sizing",
+      d: "M7 1v12M4.5 3.5L7 1l2.5 2.5M4.5 10.5L7 13l2.5-2.5",
+      keys: ["⇧", "⌘", "/"],
+    },
     { id: "formatBar", label: "Show Format Bar", d: "M3 3h8M7 3v9", keys: ["⌥", "⌘", ","] },
     {
       id: "hideFromCapture",
@@ -155,6 +169,11 @@ export function mountActionPanel(options: ActionPanelOptions) {
     if (row.id === "pinPane" && options.isPinned()) return "Unpin Pane";
     if (row.id === "hideFromCapture" && options.isHiddenFromCapture()) {
       return "Show in Screen Capture";
+    }
+    // This one matters more than the other two, because auto-sizing turns itself off when the pane
+    // is dragged (decision 40). The label is the only place that silent change is ever stated.
+    if (row.id === "autoSizing" && !options.isAutoSizing()) {
+      return "Enable Window Auto-sizing";
     }
     return row.label;
   }
