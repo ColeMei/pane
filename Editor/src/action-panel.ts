@@ -48,7 +48,11 @@ const GROUPS: ActionRow[][] = [
     {
       id: "duplicateNote",
       label: "Duplicate Note",
-      d: "M3 5h7v8H3zM5 2h7v8",
+      // Two sheets side by side, not the offset pair. This row arrived with decision 39 and took
+      // its path from its neighbour, so Duplicate Note and Copy as Markdown drew the *same* icon —
+      // and both are visible together every time the panel opens. The design only ever assigned
+      // `M3 5h7v8H3zM5 2h7v8` to Copy as Markdown, so that one keeps it and this one gets its own.
+      d: "M2 3h4.5v8H2zM7.5 3H12v8H7.5z",
       keys: ["⌘", "D"],
     },
     { id: "browseNotes", label: "Browse Notes", d: "M2 3h10M2 7h10M2 11h10", keys: ["⌘", "P"] },
