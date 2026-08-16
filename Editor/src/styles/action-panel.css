@@ -19,7 +19,7 @@
 
   display: flex;
   flex-direction: column;
-  width: 400px;
+  width: var(--overlay-width);
   max-width: calc(100% - 32px);
 
   /* Never taller than the pane — same reasoning as the switcher's, and the same numbers: 54px down
@@ -28,8 +28,8 @@
   max-height: calc(100% - 54px - 16px);
 
   background: var(--overlay-bg);
-  -webkit-backdrop-filter: var(--panel-blur);
-  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--overlay-blur);
+  backdrop-filter: var(--overlay-blur);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-overlay);
   box-shadow: var(--shadow-overlay);
@@ -40,13 +40,27 @@
   display: none;
 }
 
-/* The pane recedes while the panel is open (frame 2a). Not the banner: a conflict that fired while
- * the panel was open is the one thing here that must not get quieter. */
+/* The pane recedes while EITHER overlay is open. Not the banner: a conflict that fired while the
+ * panel was open is the one thing here that must not get quieter.
+ *
+ * Frame 2a draws this behind ⌘K and frame 1c never shows the switcher in context, so it shipped on
+ * ⌘K alone — and the two then looked like different components, one of which dimmed the note and one
+ * of which did not. The old note here said "if they should match, the switcher is the one to change";
+ * this is that change.
+ *
+ * It also earns the translucency. `--overlay-bg` carries alpha now so the blur has something to do,
+ * and the measured objection to that was ghosting — the note's headings showing through the panel,
+ * a selected row's fill turning the ghost into a doubled highlight. Dimming what is behind is what
+ * makes a glass panel legible instead of busy. */
 .pane[data-actions] .pane__titlebar,
 .pane[data-actions] .pane__content,
 .pane[data-actions] .pane__footer,
-.pane[data-actions] .format-bar {
-  opacity: 0.45;
+.pane[data-actions] .format-bar,
+.pane[data-switcher] .pane__titlebar,
+.pane[data-switcher] .pane__content,
+.pane[data-switcher] .pane__footer,
+.pane[data-switcher] .format-bar {
+  opacity: var(--overlay-dim);
   transition: opacity 120ms ease-out;
 }
 
@@ -58,12 +72,12 @@
   flex: none;
   width: 100%;
   box-sizing: border-box;
-  padding: 12px 15px;
+  padding: var(--overlay-search-padding);
   border: 0;
   border-bottom: 1px solid var(--separator);
   background: transparent;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--overlay-search-size);
   color: var(--text-primary);
   outline: none;
 }
@@ -119,7 +133,7 @@
 
 .actions__label {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--overlay-row-size);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

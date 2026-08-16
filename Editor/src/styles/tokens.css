@@ -24,6 +24,24 @@
    * design's applyVars() does.
    */
   --panel-blur: saturate(1.4) blur(22px);
+
+  /* The overlays get their OWN blur, and it is real.
+   *
+   * `--panel-blur` is forced to `none` in both vibrancy states below, correctly: the pane's material
+   * is an NSVisualEffectView behind the web view, and a CSS blur on top of it would be a second,
+   * wrong one. But the switcher and ⌘K sit over the NOTE, inside the page — which is precisely the
+   * case backdrop-filter does handle. Sharing one token meant they inherited `none` and rendered as
+   * flat opaque rectangles in every configuration, which is the whole of the missing glass. */
+  --overlay-blur: saturate(1.5) blur(20px);
+
+  /* One geometry for both overlays. They are the same object in two modes, and the design drew them
+   * from different frames — 460 vs 400 wide, 15px vs 14px search — which read as two components. */
+  --overlay-width: 460px;
+  --overlay-search-size: 15px;
+  --overlay-search-padding: 13px 16px;
+  --overlay-row-size: 13.5px;
+  /* How far the pane behind an open overlay recedes (frame 2a). Applied to both, not just ⌘K. */
+  --overlay-dim: 0.45;
   --panel-bg: rgba(247, 247, 249, 0.88);
 
   /* The ⌘P switcher and the ⌘K panel sit on top of the pane, so they are opaque where the pane is
@@ -34,7 +52,7 @@
    * a second, offset highlight. Frame 2a shows the note *around* the panel, not through it, so the
    * fix keeps the design's intent and drops the artefact. 100% against 97% is imperceptible as
    * material; the ghost was not. */
-  --overlay-bg: rgb(250, 250, 252);
+  --overlay-bg: rgba(250, 250, 252, 0.72);
 
   /* ---- Text ---------------------------------------------------------------------------------
    * Four steps, in the order the design reaches for them. The counts in the design file are
@@ -157,7 +175,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-appearance="light"]) {
     --panel-bg: rgba(30, 30, 34, 0.85);
-    --overlay-bg: rgb(38, 38, 42);
+    --overlay-bg: rgba(38, 38, 42, 0.72);
 
     --text-primary: #e8e8ea;
     --text-secondary: #d4d4d8;
@@ -197,7 +215,7 @@
  * are needed: the media query above handles "system", these handle a deliberate choice. */
 :root[data-appearance="dark"] {
   --panel-bg: rgba(30, 30, 34, 0.85);
-  --overlay-bg: rgb(38, 38, 42);
+  --overlay-bg: rgba(38, 38, 42, 0.72);
 
   --text-primary: #e8e8ea;
   --text-secondary: #d4d4d8;
@@ -271,6 +289,7 @@
 /* Vibrancy off (Settings.translucentPanes = false), matching the design's own applyVars() fallbacks. */
 :root[data-vibrancy="off"] {
   --panel-blur: none;
+  --overlay-blur: none;
   --panel-bg: #f2f2f4;
   --overlay-bg: rgb(250, 250, 252);
 }
