@@ -23,6 +23,7 @@ import {
   markdown,
   markdownLanguage,
 } from "@codemirror/lang-markdown";
+import { syntaxTree } from "@codemirror/language";
 import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemirror/view";
 
@@ -55,6 +56,8 @@ type OutboundMessage =
   | { type: "copyAsMarkdown"; text: string }
   | { type: "exportNote"; text: string }
   | { type: "toggleHideFromCapture" }
+  | { type: "toggleAutoSizing" }
+  | { type: "duplicateNote"; text: string }
   | { type: "requestDeleted" }
   | { type: "restoreDeleted"; storedName: string }
   | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
@@ -236,6 +239,56 @@ function checkboxInputRule(): Extension {
 }
 
 /**
+ * ⇧⏎ — get out of a fenced code block.
+ *
+ * Inside a code block every Enter is a newline *in the code*, which is correct and is also a trap:
+ * the only way back to prose is to reach the last line, move past the closing fence, and start a
+ * line there — and decision 34 collapsed the fences to the height of a blank line, so the thing you
+ * have to navigate past is nearly invisible. Every editor with live preview grows some way out;
+ * this is that way out.
+ *
+ * Returns false anywhere else, so ⇧⏎ keeps whatever meaning CodeMirror gives it outside a block.
+ */
+function escapeCodeBlock(view: EditorView): boolean {
+  const { state } = view;
+  const head = state.selection.main.head;
+
+  let node = syntaxTree(state).resolveInner(head, -1);
+  while (node.parent && node.name !== "FencedCode" && node.name !== "CodeBlock") {
+    node = node.parent;
+  }
+  if (node.name !== "FencedCode" && node.name !== "CodeBlock") return false;
+
+  const closing = state.doc.lineAt(Math.min(node.to, state.doc.length));
+
+  // Already the last line of the document: there is nowhere to go, so make somewhere.
+  if (closing.number === state.doc.lines) {
+    view.dispatch({
+      changes: { from: state.doc.length, insert: "\n" },
+      selection: { anchor: state.doc.length + 1 },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+    return true;
+  }
+
+  // Land on the line below if it is free, and only add one when it is not — pressing this twice
+  // should not leave a trail of blank lines behind the block.
+  const next = state.doc.line(closing.number + 1);
+  if (next.text.trim() === "") {
+    view.dispatch({ selection: { anchor: next.from }, scrollIntoView: true });
+  } else {
+    view.dispatch({
+      changes: { from: closing.to, insert: "\n" },
+      selection: { anchor: closing.to + 1 },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+  }
+  return true;
+}
+
+/**
  * The shortcuts the Settings window can rebind (design frame 3c).
  *
  * Keyed by the same action names `Settings.shortcutActions` uses on the Swift side — the two lists
@@ -254,6 +307,8 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
   copyAsMarkdown: "Shift-Mod-c",
   exportNote: "Shift-Mod-e",
   hideFromCapture: "Shift-Mod-h",
+  duplicateNote: "Mod-d",
+  autoSizing: "Shift-Mod-/",
 };
 
 const shortcutsCompartment = new Compartment();
@@ -283,6 +338,8 @@ const actionHandlers: Record<string, () => boolean> = {
   copyAsMarkdown: () => (send({ type: "copyAsMarkdown", text: view.state.doc.toString() }), true),
   exportNote: () => (send({ type: "exportNote", text: view.state.doc.toString() }), true),
   hideFromCapture: () => (send({ type: "toggleHideFromCapture" }), true),
+  autoSizing: () => (send({ type: "toggleAutoSizing" }), true),
+  duplicateNote: () => (send({ type: "duplicateNote", text: view.state.doc.toString() }), true),
   recentlyDeleted: () => (switcher.openDeleted(), true),
 };
 
@@ -336,6 +393,7 @@ function baseExtensions(): Extension[] {
     // memory older than markdown.
     Prec.high(
       keymap.of([
+        { key: "Shift-Enter", run: escapeCodeBlock },
         { key: "Enter", run: insertNewlineContinueMarkupCommand({ nonTightLists: false }) },
         { key: "Backspace", run: deleteMarkupBackward },
       ])
@@ -416,12 +474,16 @@ find = mountFind({
 
 /** Swift owns this — it is a window property, not a document one — and mirrors it back here. */
 let hiddenFromCapture = false;
+/** Likewise window state, and it changes without this layer being asked: dragging the pane turns it
+ *  off (decision 40). Only ever set from Swift. */
+let autoSizing = true;
 
 const actions = mountActionPanel({
   root: document.getElementById("actions") as HTMLElement,
   pane: paneEl,
   isPinned: () => paneEl.hasAttribute("data-pinned"),
   isHiddenFromCapture: () => hiddenFromCapture,
+  isAutoSizing: () => autoSizing,
   run: (id) => actionHandlers[id]?.(),
   onVisibilityChange: (open, height) => {
     send({ type: "actionsOpen", open, height });
@@ -535,6 +597,10 @@ const host = {
 
   setHiddenFromCapture(hidden: boolean): void {
     hiddenFromCapture = hidden;
+  },
+
+  setAutoSizing(on: boolean): void {
+    autoSizing = on;
   },
 
   openSwitcher(): void {
