@@ -99,15 +99,24 @@
 
 /* A fenced block's ``` lines, collapsed into the block's own padding.
  *
- * `font-size: 0` rather than hiding the marks as decorations: Pane ships no syntax highlighting and
- * no language picker, so the `python` after the backticks is a word that changes nothing and only
- * has to be read. Kept as a real line at a real height, so the caret can still be put in it and the
- * fence is still exactly three backticks on disk — decision 5's bar is what lands in the file, not
- * what is drawn over it. */
+ * Pane ships no syntax highlighting and no language picker, so the `python` after the backticks is a
+ * word that changes nothing and only has to be read. Kept as a real line at a real height, so the
+ * caret can still be put in it and the fence is still exactly three backticks on disk — decision 5's
+ * bar is what lands in the file, not what is drawn over it.
+ *
+ * The backticks are hidden by DECORATIONS (CodeMark and CodeInfo are in live-preview.ts's
+ * MARKER_NODES), not by anything here. This rule used to also carry `font-size: 0` and a comment
+ * claiming that was the mechanism — it never applied. `.cm-line.pane-line-code` below sets
+ * `font-size` at the same specificity and is declared later, so it won every time; the computed size
+ * on a fence line measured 13.5px, not 0. It was removed rather than made to win: with the marks
+ * already gone the line is empty, and the only thing keeping it at 10px is the height pair below.
+ *
+ * The class is applied only while the caret is elsewhere — see the note in live-preview.ts. On the
+ * caret's line the fence is an ordinary code line, which is what stops it from being a 10px strip
+ * that silently eats the keystroke you meant for the blank line next to it. */
 .cm-line.pane-line-fence {
   height: var(--blank-line-height);
   line-height: var(--blank-line-height);
-  font-size: 0;
 }
 
 .cm-line.pane-line-h1,

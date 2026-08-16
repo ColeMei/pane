@@ -181,7 +181,12 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         if (name === "HorizontalRule") {
           // A line decoration, so the rule spans the pane instead of underlining three characters.
-          decorations.push(ruleLine.range(doc.lineAt(node.from).from));
+          //
+          // Off the caret's line only. Drawn, the rule is 1px tall with `color: transparent` — and
+          // it is still a real line the caret can be arrowed into, so without this exemption it is
+          // a place you can stand, type, and see nothing happen. Every other construct reveals its
+          // source under the caret; this one was the last that did not.
+          if (!isActive) decorations.push(ruleLine.range(doc.lineAt(node.from).from));
           return;
         }
 
@@ -202,9 +207,22 @@ function buildDecorations(view: EditorView): DecorationSet {
           // picker, so `python` is a word the user has to look at that changes nothing. Collapsing
           // both to a thin strip turns them into the block's own top and bottom padding, which is
           // what a code block looks like everywhere it is rendered rather than edited.
+          //
+          // COLLAPSED ONLY OFF THE CARET'S LINE. Collapsed unconditionally, a fence is a 10px strip
+          // that looks exactly like the blank line usually sitting next to it and behaves nothing
+          // like it: one character typed in the opening strip stops the block being a code block,
+          // and one typed in the closing strip unbounds it so it swallows the rest of the note.
+          // Measured, both of them. The strip has to stop being invisible the moment the caret is
+          // in it, which is the same rule every other construct here already follows.
+          //
+          // The 10px reflow that costs is deliberate, and is why the blank-line pass below still
+          // refuses the same treatment: blank lines are crossed constantly with the arrow keys,
+          // whereas a fence is somewhere you arrive rarely and on purpose.
           if (name === "FencedCode") {
-            decorations.push(fenceLine.range(doc.line(first).from));
-            if (last > first) decorations.push(fenceLine.range(doc.line(last).from));
+            if (!active.has(first)) decorations.push(fenceLine.range(doc.line(first).from));
+            if (last > first && !active.has(last)) {
+              decorations.push(fenceLine.range(doc.line(last).from));
+            }
           }
           return;
         }
