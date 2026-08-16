@@ -93,11 +93,12 @@
   color: var(--text-primary);
 }
 
-.actions__row:hover {
-  background: var(--fill-row-hover);
-}
-
-/* Selection is a fill, not the accent — decision 22 reserves accent for interactive state, and every
+/* No `:hover` fill. The pointer moves the selection instead (see `select` in action-panel.ts), so
+ * there is exactly one highlighted row however you are driving the list — hovering one row while
+ * the keyboard selection sat on another used to paint both, and neither looked like the one ⏎ would
+ * run.
+ *
+ * Selection is a fill, not the accent — decision 22 reserves accent for interactive state, and every
  * row in this list is equally interactive. */
 .actions__row[aria-selected="true"] {
   background: var(--fill-hover);

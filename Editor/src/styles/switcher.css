@@ -123,10 +123,8 @@
   cursor: default;
 }
 
-.switcher__row:hover {
-  background: var(--fill-row-hover);
-}
-
+/* No `:hover` fill here either — the pointer moves the selection instead, so exactly one row is
+ * ever lit. See the note on `select` in action-panel.ts. */
 .switcher__row[aria-selected="true"] {
   background: var(--fill-hover);
 }
@@ -176,7 +174,6 @@
   visibility: hidden;
 }
 
-.switcher__row:hover .switcher__actions,
 .switcher__row[aria-selected="true"] .switcher__actions {
   visibility: visible;
 }
@@ -242,6 +239,11 @@
   height: var(--switcher-fade-height);
   background: linear-gradient(var(--fade-from), var(--fade-to));
   pointer-events: none;
+}
+
+/* Only when the list actually scrolls — see the note where `data-overflows` is set. */
+.switcher:not([data-overflows]) .switcher__fade {
+  display: none;
 }
 
 /* ---- Footer hints -------------------------------------------------------------------------------

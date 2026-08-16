@@ -216,13 +216,28 @@ export function mountActionPanel(options: ActionPanelOptions) {
 
   function move(delta: number): void {
     if (visible.length === 0) return;
-    selected = (selected + delta + visible.length) % visible.length;
+    select((selected + delta + visible.length) % visible.length, { scroll: true });
+  }
+
+  /**
+   * There is exactly one selected row, and the pointer moves it.
+   *
+   * Hover used to paint its own fill on top of the keyboard selection, so moving the mouse across
+   * an open panel lit up two rows at once and neither of them was obviously the one ⏎ would run.
+   * Letting the pointer *take* the selection is what the reference does and leaves one answer on
+   * screen — which matters here more than in most lists, because every row does something.
+   */
+  function select(index: number, options: { scroll?: boolean } = {}): void {
+    if (index === selected && !options.scroll) return;
+    selected = index;
     list.querySelectorAll<HTMLElement>(".actions__row").forEach((row) => {
       row.setAttribute("aria-selected", String(Number(row.dataset.index) === selected));
     });
-    list
-      .querySelector<HTMLElement>(`[data-index="${selected}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+    if (options.scroll) {
+      list
+        .querySelector<HTMLElement>(`[data-index="${selected}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    }
   }
 
   function activate(): void {
@@ -277,6 +292,13 @@ export function mountActionPanel(options: ActionPanelOptions) {
     },
     true
   );
+
+  // `mousemove`, not `mouseover`: a re-render under a resting pointer fires mouseover and would
+  // yank the selection to wherever the mouse happens to be sitting.
+  list.addEventListener("mousemove", (event) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>(".actions__row");
+    if (row?.dataset.index) select(Number(row.dataset.index));
+  });
 
   list.addEventListener("mousedown", (event) => {
     const row = (event.target as HTMLElement).closest<HTMLElement>(".actions__row");

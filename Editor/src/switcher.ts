@@ -287,6 +287,11 @@ export function mountSwitcher(options: SwitcherOptions) {
 
     list.innerHTML = html + `<div class="switcher__fade" aria-hidden="true"></div>`;
 
+    // The fade says "there is more below". With a short list there is not, and it was washing out
+    // the last row's preview instead — visible with as few as three notes, and reading as a
+    // rendering fault rather than an affordance.
+    root.toggleAttribute("data-overflows", list.scrollHeight > list.clientHeight + 1);
+
     footer.style.display = "";
     const hints =
       mode === "deleted"
@@ -309,11 +314,17 @@ export function mountSwitcher(options: SwitcherOptions) {
 
   function move(delta: number): void {
     if (rows.length === 0) return;
-    selected = (selected + delta + rows.length) % rows.length;
+    select((selected + delta + rows.length) % rows.length, { scroll: true });
+  }
+
+  /** One selected row, and the pointer moves it — see the note on `select` in action-panel.ts. */
+  function select(index: number, options: { scroll?: boolean } = {}): void {
+    if (index === selected && !options.scroll) return;
+    selected = index;
     list.querySelectorAll<HTMLElement>(".switcher__row").forEach((row) => {
       row.setAttribute("aria-selected", String(Number(row.dataset.index) === selected));
     });
-    scrollSelectedIntoView();
+    if (options.scroll) scrollSelectedIntoView();
   }
 
   function activate(): void {
@@ -374,6 +385,11 @@ export function mountSwitcher(options: SwitcherOptions) {
         close();
         break;
     }
+  });
+
+  list.addEventListener("mousemove", (event) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>(".switcher__row");
+    if (row?.dataset.index) select(Number(row.dataset.index));
   });
 
   list.addEventListener("mousedown", (event) => {
