@@ -53,14 +53,29 @@ final class AutoSizeBadge {
         background.layer?.cornerRadius = 13
         background.layer?.masksToBounds = true
 
+        // A wash over the material, because `.popover` alone is a neutral grey — the same finding
+        // as the pane itself, where transparent rendered nineteen levels darker than the design.
+        // `textBackgroundColor` is white in light and near-black in dark, so "whiter" stays right
+        // when the desktop is not.
+        let tint = NSView()
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.55).cgColor
+        tint.translatesAutoresizingMaskIntoConstraints = false
+
         label = NSTextField(labelWithString: "")
         label.font = .systemFont(ofSize: 12, weight: .medium)
-        label.textColor = .labelColor
+        label.textColor = .secondaryLabelColor
         label.alignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
 
+        background.addSubview(tint)
         background.addSubview(label)
         NSLayoutConstraint.activate([
+            tint.topAnchor.constraint(equalTo: background.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+            tint.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+
             label.centerYAnchor.constraint(equalTo: background.centerYAnchor),
             label.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 14),
             label.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -14),
@@ -94,8 +109,21 @@ final class AutoSizeBadge {
         panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
-            panel.animator().alphaValue = 1
+            // Not fully opaque. This is a caption on somebody else's screen, and it sits over
+            // whatever the pane is floating above.
+            panel.animator().alphaValue = 0.92
         }
+    }
+
+    /// Takes the pill off screen for the duration of a drag.
+    ///
+    /// Separate from `hide` because the drag is not the user losing interest: the pointer is still
+    /// exactly where the pill was, and leaving it there means it hangs at the *old* bottom edge
+    /// while the window moves away from it. It comes back — repositioned — when the mouse comes up.
+    func suppressDuringResize() {
+        guard isShowing else { return }
+        isShowing = false
+        panel.orderOut(nil)
     }
 
     func hide() {

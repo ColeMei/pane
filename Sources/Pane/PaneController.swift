@@ -848,7 +848,17 @@ extension PaneController: NSWindowDelegate {
     ///
     /// An overlay is not a statement of intent: the switcher and ⌘K resize the pane themselves, and
     /// dragging while one is open would otherwise pin the pane at panel height forever.
+    /// The pill goes away for the length of the drag and comes back at the new bottom edge.
+    ///
+    /// Leaving it up would pin it to where the pane's bottom *was*, so it would sit in the middle of
+    /// the window being resized — and no mouse-moved events arrive during a drag to correct it,
+    /// because the pointer is reported as dragging rather than moving.
+    func windowWillStartLiveResize(_ notification: Notification) {
+        autoSizeBadge.suppressDuringResize()
+    }
+
     func windowDidEndLiveResize(_ notification: Notification) {
+        defer { refreshAutoSizeBadge() }
         guard !switcherIsOpen, !actionsIsOpen else { return }
 
         var pane = paneState
