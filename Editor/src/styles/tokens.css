@@ -104,7 +104,13 @@
    * which is the point — 640 px against a 692 pt pane meant the text sat in a 44 px gutter on the
    * left and a 96 px one on the right, and the pane read as mostly empty. */
   --content-measure: 680px;
-  --content-padding: 6px 22px 32px;
+  /* Bottom padding has to clear `--fade-height`, not merely look generous.
+   *
+   * It was 32px against a 44px fade, so with auto-sizing on — where the pane ends exactly where the
+   * note does — the last line of every note sat *inside* the gradient and rendered half washed out.
+   * That reads as the text being cut off rather than as a scroll hint. 52px puts a clear 8px
+   * between the last baseline and the top of the fade. */
+  --content-padding: 6px 22px 52px;
 
   --switcher-width: 460px;
   --switcher-max-height: 430px;
