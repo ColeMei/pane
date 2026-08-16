@@ -115,7 +115,7 @@ function notifyEdited(view: EditorView): void {
   const text = view.state.doc.toString();
   wordCountEl.textContent = formatWordCount(countWords(text));
   send({ type: "edited", text, caret: view.state.selection.main.head });
-  reportContentHeight();
+  scheduleContentHeight();
 }
 
 function formatWordCount(n: number): string {
@@ -128,6 +128,32 @@ function formatWordCount(n: number): string {
  * Rule 2 is implemented on the Swift side — width fixed, height grows downward until 24px from the
  * screen bottom, then the note scrolls. All the web layer contributes is the desired height.
  */
+let lastReportedHeight = -1;
+let heightFrame = 0;
+let settlePass = false;
+
+/**
+ * Asks for a height at most once per frame, and at most once more after that.
+ *
+ * The pane visibly overshot and corrected on every new line. The loop: the web layer reports a
+ * height, Swift resizes the window, the `ResizeObserver` on the pane sees that resize and reports
+ * again — and the second answer differs, because CodeMirror only lays out the lines in view and
+ * *estimates* the rest, so growing the window turns estimates into measurements. Report, resize,
+ * re-estimate, resize.
+ *
+ * So the observer no longer drives this at all (it still reports drag regions, which genuinely do
+ * depend on window size). Content height is asked for when the *content* changes, plus exactly one
+ * settle pass afterwards to pick up CodeMirror's refined layout. Two steps, and it cannot chain.
+ */
+function scheduleContentHeight(): void {
+  if (heightFrame) return;
+  heightFrame = requestAnimationFrame(() => {
+    heightFrame = 0;
+    settlePass = false;
+    reportContentHeight();
+  });
+}
+
 function reportContentHeight(): void {
   // `view.contentHeight` is CodeMirror's laid-out document height. `editorHost.scrollHeight` was the
   // obvious choice and always wrong: the host is `height: 100%` and the editor inside it is themed
@@ -142,7 +168,19 @@ function reportContentHeight(): void {
   );
   const chrome = titleBarEl.offsetHeight + (bar?.offsetHeight ?? 34) + bannerEl.offsetHeight;
 
-  send({ type: "contentHeight", height: Math.ceil(content + chrome) });
+  const height = Math.ceil(content + chrome);
+
+  // An unchanged answer is not worth a resize, and re-sending one is how a two-value oscillation
+  // stays alive.
+  if (height === lastReportedHeight) return;
+  lastReportedHeight = height;
+  send({ type: "contentHeight", height });
+
+  // One re-measure after the window has had a frame to become the size we just asked for. If the
+  // refined layout disagrees, that correction is sent and the chain stops there.
+  if (settlePass) return;
+  settlePass = true;
+  requestAnimationFrame(() => requestAnimationFrame(reportContentHeight));
 }
 
 /**
@@ -441,7 +479,7 @@ function toggleFormatBar(): void {
   formatBar?.refresh();
   // The bar and the footer are different heights, so swapping them changes how much room the note
   // has — and the window has to follow.
-  reportContentHeight();
+  scheduleContentHeight();
   reportDragRegions();
 }
 
@@ -467,7 +505,7 @@ find = mountFind({
   pane: paneEl,
   view,
   onLayoutChange: () => {
-    reportContentHeight();
+    scheduleContentHeight();
     reportDragRegions();
   },
 });
@@ -534,7 +572,7 @@ const host = {
     document.getElementById("pin")!.setAttribute("aria-pressed", String(pinned));
     paneTitleEl.textContent = text.split("\n", 1)[0]?.replace(/^#+\s*/, "") ?? "";
     wordCountEl.textContent = formatWordCount(countWords(text));
-    reportContentHeight();
+    scheduleContentHeight();
   },
 
   /** Puts the caret in the editor without changing anything — what a summon does. */
@@ -633,14 +671,14 @@ const host = {
     bannerEl.setAttribute("data-kind", kind);
     bannerTextEl.textContent = text;
     bannerEl.hidden = false;
-    reportContentHeight();
+    scheduleContentHeight();
   },
 
   hideBanner(): void {
     if (bannerEl.hidden) return;
     bannerEl.hidden = true;
     bannerEl.removeAttribute("data-kind");
-    reportContentHeight();
+    scheduleContentHeight();
   },
 };
 
@@ -671,10 +709,11 @@ bannerEl.addEventListener("click", () => host.hideBanner());
 
 // The draggable strip changes whenever the title bar relays out — the pane resizing, the title
 // fading in past the H1, the format bar swapping the footer out.
-new ResizeObserver(() => {
-  reportDragRegions();
-  reportContentHeight();
-}).observe(paneEl);
+// Drag regions only. This used to report content height too, which is what made the pane overshoot
+// and correct — see the note on `scheduleContentHeight`. The window's own size can never be an
+// input to how tall the content wants to be, because the width is fixed (decision 22's measure) and
+// nothing else about the note depends on the window.
+new ResizeObserver(reportDragRegions).observe(paneEl);
 
 new MutationObserver(reportDragRegions).observe(titleBarEl, {
   attributes: true,
