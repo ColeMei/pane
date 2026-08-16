@@ -68,6 +68,16 @@ public struct Settings: Codable, Equatable, Sendable {
     ///
     /// The last three are also ⌘K rows, so the shortcut printed beside a row and the shortcut in this
     /// table are the same binding rather than two things that have to be kept in step.
+    /// The rebindable in-pane shortcuts (design frame 3c).
+    ///
+    /// **These defaults are habit-compatible with Raycast Notes and that is deliberate** (decision
+    /// 39). Raycast Notes is what Pane was built against and what its user is leaving, so every
+    /// action both apps have carries the same key — checked row by row against Raycast's own ⌘K
+    /// panel. Pane's extra rows sit on chords Raycast leaves free.
+    ///
+    /// So treat this table as frozen. A key here that reads better in isolation still costs a
+    /// switcher their muscle memory, and a shortcut some *other* app has claimed system-wide is what
+    /// the recorder is for (decision 15) — not a reason to move the shipped default.
     public static let shortcutActions: [(key: String, label: String, standard: String)] = [
         ("newNote", "New Note", "Mod-n"),
         ("browseNotes", "Browse Notes", "Mod-p"),
