@@ -316,6 +316,26 @@ final class PaneController: NSObject {
         }
     }
 
+    /// ⌘D. Raycast's key, carried across for the reason decision 39 gives.
+    ///
+    /// The buffer comes from the web layer rather than being re-read from disk, so a duplicate taken
+    /// mid-sentence contains the sentence — the same argument Copy as Markdown makes against the
+    /// 500 ms write debounce. The original is flushed first so both copies exist in full.
+    private func duplicate(text: String) {
+        flush(trigger: .noteSwitched)
+        vault.duplicate(text: text) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let filename):
+                self.currentFilename = nil        // force `open` past its no-op guard
+                self.open(filename)
+            case .failure(let error):
+                self.showBanner(.problem("Could not duplicate the note: \(error.localizedDescription)"))
+                self.checkVaultStillThere()
+            }
+        }
+    }
+
     func togglePin(_ filename: String?) {
         guard let filename = filename ?? currentFilename else { return }
         var pinned = false
@@ -507,9 +527,16 @@ final class PaneController: NSObject {
 
     // MARK: - Geometry
 
-    /// The height the pane should be right now: the note's, unless an overlay needs more room.
+    /// The height the pane should be right now.
+    ///
+    /// With auto-sizing on that is the note's height; with it off it is the height the user dragged
+    /// to, and the note scrolls (decision 40). **An open overlay overrides both**, because the
+    /// switcher and ⌘K are drawn inside this window and a panel clipped by its own pane is not a
+    /// size anyone asked for. Closing the overlay returns to whichever answer the mode gives.
     private var heightWanted: CGFloat {
-        var wanted = lastContentHeight
+        var wanted = paneState.autoSizing
+            ? lastContentHeight
+            : CGFloat(paneState.manualHeight ?? Double(lastContentHeight))
         if switcherIsOpen { wanted = max(wanted, Self.switcherPaneHeight) }
         if actionsIsOpen { wanted = max(wanted, actionsPaneHeight) }
         return wanted
@@ -524,21 +551,15 @@ final class PaneController: NSObject {
         // Never while the user is dragging the resize handle. Auto-sizing and a live drag are two
         // things setting the same frame: the drag resizes the window, the web layer's ResizeObserver
         // reports a new content height, this sets the frame back, the observer fires again. The pane
-        // flickers between the two answers for as long as the mouse is down. The height the drag
-        // lands on is recorded in `windowDidEndLiveResize` and becomes the floor (decision 29), so
-        // nothing is lost by staying out of the way until then.
+        // flickers between the two answers for as long as the mouse is down. The drag's own height
+        // is taken in `windowDidEndLiveResize`, so nothing is lost by staying out of the way.
         guard !panel.inLiveResize else { return }
         guard let screen = panel.screen ?? NSScreen.main else { return }
         let current = panel.rememberedFrame ?? panel.frame
 
-        // A height the user dragged to is a floor, not a suggestion. Without this, rule 2 shrinks the
-        // pane back to the note's own height on the very next keystroke and the resize handle does
-        // nothing you can see.
-        let floored = max(desired, paneState.manualHeight.map { CGFloat($0) } ?? 0)
-
         let growth = PanelGeometry.grown(
             from: current,
-            toContentHeight: floored,
+            toContentHeight: desired,
             visibleFrame: screen.visibleFrame
         )
         guard abs(growth.frame.height - current.height) >= 1 else { return }
@@ -550,6 +571,9 @@ final class PaneController: NSObject {
     func applySettings() {
         editor.isTranslucent = settings.value.translucentPanes
         applyHiddenFromCapture()
+        // Not a setting — pane state — but this runs on `ready`, which is the one moment the web
+        // layer needs telling. Its ⌘K label is otherwise wrong until the row is pressed once.
+        editor.call("setAutoSizing", [paneState.autoSizing])
 
         // The material picks its light or dark variant from the window's appearance, so the two have
         // to be told the same thing — otherwise a dark-mode pane gets a light blur behind dark text.
@@ -720,6 +744,12 @@ extension PaneController: EditorWebViewDelegate {
         case .toggleHideFromCapture:
             setHiddenFromCapture(!settings.value.hideFromScreenCapture)
 
+        case .toggleAutoSizing:
+            toggleAutoSizing()
+
+        case .duplicateNote(let text):
+            duplicate(text: text)
+
         case .requestDeleted:
             vault.deletedRows { [weak self] rows in
                 self?.editor.callJSON("showDeleted", [EditorWebView.encode(rows)])
@@ -785,18 +815,41 @@ extension PaneController: EditorWebViewDelegate {
 
 extension PaneController: NSWindowDelegate {
 
+    /// A drag is what turns auto-sizing off — decision 40, and Raycast Notes' behaviour exactly.
+    ///
+    /// Only a *drag* reaches here: programmatic `setFrame` fires no live-resize notification. So
+    /// this is unambiguously the user stating a height, and the only reading of that which is not a
+    /// lie is "stop resizing my window". Under the old floor rule this method recorded the height
+    /// and then immediately grew back past it on any note taller than the pane.
+    ///
+    /// An overlay is not a statement of intent: the switcher and ⌘K resize the pane themselves, and
+    /// dragging while one is open would otherwise pin the pane at panel height forever.
     func windowDidEndLiveResize(_ notification: Notification) {
+        guard !switcherIsOpen, !actionsIsOpen else { return }
+
         var pane = paneState
-        // Only a *drag* gets here — programmatic `setFrame` does not fire live-resize notifications —
-        // so this is unambiguously the user asking for a height.
+        pane.autoSizing = false
         pane.manualHeight = Double(panel.frame.height)
         paneState = pane
         rememberFrame()
-
-        // Auto-sizing was suppressed for the whole drag; reconcile once now that it is over, so a
-        // pane dragged shorter than its note immediately grows back to the new floor.
-        applyContentHeight(heightWanted)
     }
+
+    /// ⇧⌘/ — frame 2a's thirteenth row, and Raycast's key for it.
+    ///
+    /// Turning it back on drops the dragged height, so the pane immediately fits its note again;
+    /// that snap is the feedback that the mode changed.
+    func toggleAutoSizing() {
+        var pane = paneState
+        pane.autoSizing.toggle()
+        pane.manualHeight = pane.autoSizing ? nil : Double(panel.frame.height)
+        paneState = pane
+
+        editor.call("setAutoSizing", [pane.autoSizing])
+        applyContentHeight(heightWanted)
+        rememberFrame()
+    }
+
+    var isAutoSizing: Bool { paneState.autoSizing }
 
     /// Rule 3, "stay put": the drag is the only thing that moves a pane, so the drag is the only
     /// thing worth recording. Persisting here rather than only at dismiss means the position also

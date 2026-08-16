@@ -138,15 +138,20 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
     /// it *on that screen* — plugging in a monitor must not shuffle the panes on the built-in one.
     public var frames: [String: StoredFrame]
 
-    /// A height the user set by dragging, which auto-sizing may grow past but never shrink below.
+    /// Whether the pane's height still follows its content (rule 2).
     ///
-    /// Rule 2 says height follows content, and read literally that makes the resize handle a lie:
-    /// drag the pane taller and the next keystroke snaps it back. Treating a dragged height as a
-    /// *floor* keeps both halves true — the pane still grows with the note, and "I want more room
-    /// than this note needs" is a thing you can ask for and have honoured.
+    /// **A drag turns this off**, which is the whole mechanism — see decision 40. The previous
+    /// answer treated a dragged height as a *floor* that auto-sizing could grow past but never
+    /// shrink below, and that cannot work: on any note longer than the pane, the content height is
+    /// always above the floor, so the floor never applies and the pane springs straight back to the
+    /// note's height. Dragging a long note's pane smaller did nothing at all.
+    public var autoSizing: Bool
+
+    /// The height to hold while `autoSizing` is off — the one the user dragged to.
     ///
-    /// `nil` until the user drags. The design's own answer, "Disable Auto-sizing" in ⌘K, is a harder
-    /// version of this and lands with that panel.
+    /// `nil` while auto-sizing is on, because then the content decides. Overlays are the exception
+    /// in both modes: the switcher and ⌘K may always force the pane taller, since a panel clipped by
+    /// the window it lives in is not a size anyone chose.
     public var manualHeight: Double?
 
     public init(
@@ -154,12 +159,14 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         noteFilename: String? = nil,
         showsFormatBar: Bool = false,
         frames: [String: StoredFrame] = [:],
+        autoSizing: Bool = true,
         manualHeight: Double? = nil
     ) {
         self.id = id
         self.noteFilename = noteFilename
         self.showsFormatBar = showsFormatBar
         self.frames = frames
+        self.autoSizing = autoSizing
         self.manualHeight = manualHeight
     }
 
@@ -169,7 +176,12 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         noteFilename = try c.decodeIfPresent(String.self, forKey: .noteFilename)
         showsFormatBar = try c.decodeIfPresent(Bool.self, forKey: .showsFormatBar) ?? false
         frames = try c.decodeIfPresent([String: StoredFrame].self, forKey: .frames) ?? [:]
+        autoSizing = try c.decodeIfPresent(Bool.self, forKey: .autoSizing) ?? true
         manualHeight = try c.decodeIfPresent(Double.self, forKey: .manualHeight)
+        // A state.json written before decision 40 carries a `manualHeight` that meant "floor", with
+        // no `autoSizing` beside it. Read as the new pair that is "auto-sizing on, held at the old
+        // floor", which is nonsense — so the height is dropped rather than silently pinning the pane.
+        if autoSizing { manualHeight = nil }
     }
 }
 
