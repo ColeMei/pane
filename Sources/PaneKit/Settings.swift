@@ -4,8 +4,12 @@ import Foundation
 ///
 /// Kept in a separate `settings.json` because the two files have different owners. State is written
 /// constantly by the app and is nobody's business to edit; settings are written rarely and are, per
-/// decision 12, explicitly meant to be edited by hand — v0.1 ships no hotkey recorder, and the
-/// promise that stands in for one is that changing the combo is a one-line edit.
+/// decision 12, explicitly meant to be edited by hand.
+///
+/// That hand-editing is no longer a stand-in for missing UI. The hotkey recorder shipped (decision
+/// 15) and so did the Settings window, and decision 32 promoted this file rather than retiring it:
+/// it is a peer of the window, the only interface that survives a feature having no control yet, the
+/// only one usable over SSH or from dotfiles — and it reloads live.
 public struct Settings: Codable, Equatable, Sendable {
 
     public static let currentSchemaVersion = 1
@@ -61,12 +65,12 @@ public struct Settings: Codable, Equatable, Sendable {
 
     /// Action key, the label the tab shows, and the binding Pane ships with.
     ///
-    /// Deliberately only the actions that exist — decision 31. Frame 3c also lists Open in New Pane
-    /// and Find in Note; both belong to features that are not in v0.1, and a recordable row that
-    /// binds nothing is worse than an absent one. Adding one back is one entry here, which is exactly
-    /// what happened to Action Panel when ⌘K landed.
+    /// Deliberately only the actions that exist — decision 31. Of frame 3c's eight rows the only one
+    /// still absent is Open in New Pane, which belongs to multi-pane (decision 18); a recordable row
+    /// that binds nothing is worse than an absent one. Adding one back is one entry here, which is
+    /// exactly what happened to Action Panel when ⌘K landed, and to Find in Note with decision 38.
     ///
-    /// The last three are also ⌘K rows, so the shortcut printed beside a row and the shortcut in this
+    /// Most of these are also ⌘K rows, so the shortcut printed beside a row and the shortcut in this
     /// table are the same binding rather than two things that have to be kept in step.
     /// The rebindable in-pane shortcuts (design frame 3c).
     ///
@@ -201,7 +205,8 @@ public struct Settings: Codable, Equatable, Sendable {
         summonHotkey = try c.decodeIfPresent(Hotkey.self, forKey: .summonHotkey) ?? d.summonHotkey
         dismissMode = try c.decodeIfPresent(DismissMode.self, forKey: .dismissMode) ?? d.dismissMode
         // Merged over the standards rather than replacing them, so a file that names one shortcut
-        // still gets the other three — the same forgiveness every other key here gets.
+        // still gets all the others — the same forgiveness every other key here gets, and what lets
+        // a settings.json written by an older build stay valid as rows are added.
         shortcuts = Settings.standardShortcuts.merging(
             try c.decodeIfPresent([String: String].self, forKey: .shortcuts) ?? [:]
         ) { _, fromFile in fromFile }

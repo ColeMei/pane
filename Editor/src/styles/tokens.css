@@ -44,14 +44,16 @@
   --overlay-dim: 0.45;
   --panel-bg: rgba(247, 247, 249, 0.88);
 
-  /* The ⌘P switcher and the ⌘K panel sit on top of the pane, so they are opaque where the pane is
-   * not — stacking two translucent surfaces puts the note's own text directly behind a list of rows.
+  /* The ⌘P switcher and the ⌘K panel sit over the note, inside the page — the one case
+   * `backdrop-filter` genuinely handles — so they carry real alpha and blur it (decision 46).
    *
-   * The design says 97%, and the last 3% turned out to be visible rather than subtle: the note's
-   * headings ghost through the panel, and a row's selected fill darkens the ghost enough to read as
-   * a second, offset highlight. Frame 2a shows the note *around* the panel, not through it, so the
-   * fix keeps the design's intent and drops the artefact. 100% against 97% is imperceptible as
-   * material; the ghost was not. */
+   * This went the other way first, and the reasoning is worth keeping because it is what makes the
+   * alpha safe now. At the design's 97% the note's headings ghosted through the panel and a selected
+   * row's fill darkened the ghost into what read as a second, offset highlight, so the value went
+   * fully opaque — at which point the panels were flat rectangles and `--overlay-blur` had nothing
+   * to act on. What actually fixes the ghosting is dimming what is *behind* the panel, which is the
+   * same change that made the two overlays consistent (see action-panel.css). With the note at 45%
+   * there is nothing bright enough left to ghost, and the alpha buys back the glass. */
   --overlay-bg: rgba(250, 250, 252, 0.72);
 
   /* ---- Text ---------------------------------------------------------------------------------
@@ -130,7 +132,13 @@
    * between the last baseline and the top of the fade. */
   --content-padding: 6px 22px 52px;
 
-  --switcher-width: 460px;
+  /* Width lives in `--overlay-width` — the switcher and ⌘K are one component in two modes
+   * (decision 46), so there is deliberately no switcher-specific width token here to drift from it.
+   *
+   * The max-height stays switcher-specific and stays a literal, unlike the action panel's, which was
+   * removed: this is an *unbounded* list of however many notes exist, so capping and scrolling it is
+   * the intended behaviour rather than a bug. Note the number is also spelled in Swift, as
+   * `PaneController.switcherPaneHeight = 54 + 430 + 16`; the two have to move together. */
   --switcher-max-height: 430px;
   --switcher-row-padding: 7px 16px;
   --switcher-fade-height: 28px;
@@ -256,8 +264,9 @@
  * not part of this document. So Swift puts an NSVisualEffectView behind the web view instead, and the
  * page must not paint over it — an 88% fill on top of a real material is just a fogged material.
  *
- * Only the panel surfaces go transparent. The switcher keeps its own 97%, because it sits over the
- * note *inside* the page, which is exactly the case backdrop-filter does handle. */
+ * Only the pane's own surface goes transparent. The two overlays keep their own `--overlay-bg` and
+ * `--overlay-blur`, because they sit over the note *inside* the page, which is exactly the case
+ * backdrop-filter does handle. */
 :root[data-vibrancy="on"] {
   /* A scrim over the material, not nothing.
    *

@@ -182,7 +182,7 @@ export function mountActionPanel(options: ActionPanelOptions) {
     );
   }
 
-  /** Substring, case-insensitive. Seven rows do not need fuzzy matching, and fuzzy on a short
+  /** Substring, case-insensitive. Fourteen rows do not need fuzzy matching, and fuzzy on a short
    *  fixed list mostly produces surprising matches rather than helpful ones. */
   function matches(row: ActionRow, query: string): boolean {
     return row.label.toLowerCase().includes(query.toLowerCase().trim());

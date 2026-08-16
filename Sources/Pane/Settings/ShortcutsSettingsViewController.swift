@@ -7,11 +7,16 @@ import PaneKit
 /// control style. The summon row is the global hotkey (Carbon, decision 9); the rest are bindings
 /// the web layer installs inside a pane.
 ///
-/// Frame 3c lists eight rows and this ships twelve, which is the table doing exactly what the frame
-/// said it was for: every feature that lands adds a row, never a new control style. Seven of the
-/// frame's eight are here; the eighth, Open in New Pane, belongs to multi-pane and is still deferred
-/// (decision 18). The five beyond the frame — Reveal in Finder, Delete Note, Copy as Markdown,
-/// Export…, Hide from Screen Capture — each arrived with its ⌘K row.
+/// Frame 3c lists eight rows and this ships fourteen — the summon hotkey plus every entry in
+/// `Settings.shortcutActions` — which is the table doing exactly what the frame said it was for:
+/// every feature that lands adds a row, never a new control style. Seven of the frame's eight are
+/// here; the eighth, Open in New Pane, belongs to multi-pane and is still deferred (decision 18).
+/// The seven beyond the frame — Duplicate Note, Copy as Markdown, Window Auto-sizing, Reveal in
+/// Finder, Export…, Hide from Screen Capture, Delete Note — each arrived with its ⌘K row.
+///
+/// The count is `Settings.shortcutActions.count + 1`; don't restate it here without changing it
+/// there. `NSTabViewController` gives each tab its own height, so growing this one does not disturb
+/// the others — measured at 540×564 with fourteen rows.
 ///
 /// The rule that governs this list has not moved: a recordable row that binds nothing is a worse lie
 /// than an absent row, so a row appears here only when `Settings.shortcutActions` has an entry doing
