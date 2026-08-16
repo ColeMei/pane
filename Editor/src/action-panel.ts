@@ -151,6 +151,10 @@ export function mountActionPanel(options: ActionPanelOptions) {
     search.value = "";
     selected = 0;
     render("");
+    // Back to the top, explicitly. The panel opens with row 0 selected, so a list left scrolled by
+    // the previous visit shows a different row under the highlight than the one ⏎ will run — which
+    // is exactly what happened while this list was capped shorter than its own content.
+    list.scrollTop = 0;
     search.focus();
     // Measured rather than assumed: the pane has to grow to hold this, and the panel's height
     // depends on how many rows survived the filter.

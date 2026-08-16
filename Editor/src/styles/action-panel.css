@@ -94,7 +94,25 @@
    * capped by the pane's height — without it a flex item refuses to go below its content size and
    * the cap does nothing. */
   min-height: 0;
-  max-height: 420px;
+
+  /* There is deliberately no `max-height` literal here, and there must not be one.
+   *
+   * This list is a *bounded* list — every row is one of a fixed set, and every one of them has to be
+   * reachable. That makes it unlike the switcher's, which is a note list of unknown length and is
+   * rightly capped and scrolled. A literal here caps a list that already knows exactly how tall it
+   * wants to be.
+   *
+   * It was `420px`, sized against the design's thirteen rows. Fourteen rows need ~455 (14 × 30px, four
+   * group paddings, three hairlines), so `desiredHeight()` — which takes `min(scrollHeight, thisCap)`
+   * — asked Swift for 54 + 467 + 16 = 537px and the pane stopped there on a screen with 300px to
+   * spare. Delete Note was below the fold on every open, and reopening without re-summoning left the
+   * list scrolled with New Note, *the selected row*, above it: ⏎ ran an action nobody could see.
+   * Decision 45 says the cap "only bites when the screen has run out"; this one bit unconditionally.
+   *
+   * With no literal, `getComputedStyle().maxHeight` is `none`, `desiredHeight()` falls to
+   * `list.scrollHeight`, and the pane grows to hold every row. `.actions`' own
+   * `max-height: calc(100% - 54px - 16px)` above is the real cap — pane-relative, so it engages only
+   * when the screen genuinely runs out, and then this list scrolls, which is the intended fallback. */
 }
 
 .actions__group {
