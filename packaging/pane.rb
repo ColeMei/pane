@@ -8,8 +8,8 @@
 # The release workflow prints the sha256 in its job summary, so bumping is copy and paste.
 
 cask "pane" do
-  version "0.2.0"
-  sha256 "14a649a5c04598d312bfaedf49f5008ae1aa30b9f88c4e1a01b630995c3e963d"
+  version "0.3.0"
+  sha256 "50219f060f687af972d8056632905fefa8cf2aff61838f3f9ae9196bf25f02e1"
 
   url "https://github.com/ColeMei/pane/releases/download/v#{version}/Pane-#{version}.zip"
   name "Pane"
