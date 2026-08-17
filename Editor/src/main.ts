@@ -31,7 +31,7 @@ import { mountActionPanel } from "./action-panel";
 import { findHighlighting, mountFind } from "./find";
 import { caretBlankLineSlack, livePreview, scrollReporter } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
-import { mountFormatBar, setHeading } from "./format-bar";
+import { MARKDOWN_FORMAT_KEYS, mountFormatBar, setHeading } from "./format-bar";
 import { countWords } from "./word-count";
 
 // ---------------------------------------------------------------------------------------------
@@ -539,11 +539,11 @@ function baseExtensions(): Extension[] {
     shortcutsCompartment.of(paneShortcuts(DEFAULT_SHORTCUTS)),
 
     keymap.of([
-      // The levels the heading dropdown advertises. A shortcut printed in a menu that does nothing
-      // is worse than no shortcut.
-      { key: "Alt-Mod-1", run: (v) => (setHeading(v, 1), true) },
-      { key: "Alt-Mod-2", run: (v) => (setHeading(v, 2), true) },
-      { key: "Alt-Mod-3", run: (v) => (setHeading(v, 3), true) },
+      // Tier 2: the markdown formatting keys, fixed rather than rebindable (see the note on
+      // MARKDOWN_FORMAT_KEYS). This is also where "Bold ⌘B" and "Italic ⌘I" stopped being a lie —
+      // the format bar has printed those two on its buttons since it shipped while nothing bound
+      // them, which is precisely what the comment below this one warns against.
+      ...MARKDOWN_FORMAT_KEYS,
       // Escape dismisses the pane. The switcher handles its own Escape while it is open, so this
       // only ever fires with the caret in the editor — where the reflex is "put this away", not
       // "cancel something".

@@ -44,7 +44,7 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
   { label: "I", title: "Italic ⌘I", className: "format-bar__italic", wrap: "*", active: ["Emphasis"] },
   {
     label: "S",
-    title: "Strikethrough",
+    title: "Strikethrough ⇧⌘S",
     className: "format-bar__strike",
     wrap: "~~",
     active: ["Strikethrough"],
@@ -52,21 +52,21 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
   SEPARATOR,
   {
     label: "</>",
-    title: "Inline code",
+    title: "Inline code ⌘E",
     className: "format-bar__code",
     wrap: "`",
     active: ["InlineCode"],
   },
   {
     label: "",
-    title: "Link",
+    title: "Link ⌘L",
     custom: applyLink,
     active: ["Link"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M5.8 8.2a2.6 2.6 0 0 0 3.7 0l1.9-1.9a2.6 2.6 0 0 0-3.7-3.7l-1 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8.2 5.8a2.6 2.6 0 0 0-3.7 0L2.6 7.7a2.6 2.6 0 0 0 3.7 3.7l1-1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
   },
   {
     label: "",
-    title: "Quote",
+    title: "Quote ⇧⌘B",
     linePrefix: "> ",
     active: ["Blockquote"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M3 2.5v9M6 3.5h6M6 7h6M6 10.5h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
@@ -76,21 +76,21 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
   // looseness — numbered, bulleted, then tasks — rather than the arbitrary pair it was.
   {
     label: "",
-    title: "Numbered list",
+    title: "Numbered list ⇧⌘7",
     linePrefix: "1. ",
     active: ["OrderedList"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M2 2.5h1.5M2.4 6.8h1M2 11h1.5M5.5 3H12M5.5 7H12M5.5 11H12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   },
   {
     label: "",
-    title: "Bulleted list",
+    title: "Bulleted list ⇧⌘8",
     linePrefix: "- ",
     active: ["BulletList"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M2 3h1M2 7h1M2 11h1M5.5 3H12M5.5 7H12M5.5 11H12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   },
   {
     label: "",
-    title: "Task list",
+    title: "Task list ⇧⌘9",
     linePrefix: "- [ ] ",
     active: ["Task"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2.8 3.8l1 1 1.6-1.8M8 3.8h4M8 10h4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`,
@@ -223,6 +223,42 @@ function setHeading(view: EditorView, level: number): void {
 }
 
 export { setHeading };
+
+/**
+ * The markdown formatting keys — and they are deliberately **not** rebindable.
+ *
+ * Pane's shortcuts come in two tiers and this is the second one. Tier 1 is Pane's own furniture —
+ * ⌘K, ⌘P, ⌘N, ⌘, and the rest of the ⌘K rows — which is a matter of taste and machine, so it lives in
+ * `Settings.shortcutActions`, appears in the Shortcuts tab, and has a Restore Defaults button for
+ * when somebody paints themselves into a corner. Tier 2 is *markdown convention*: ⌘B has meant bold
+ * in every editor anyone has used for thirty years. Offering to rebind it invites a user to break
+ * something no one wants broken, and costs a row in the tab to do it.
+ *
+ * The keys match Raycast's Format palette exactly, for decision 39's reason: the person switching
+ * already has them in their fingers. ⌥⌘1/2/3 are here too, so every fixed markdown key has one home
+ * rather than being split between this file and the editor's keymap.
+ *
+ * Each entry stays a plain text edit — decision 5 holds at the keyboard as it does at the format bar.
+ */
+export const MARKDOWN_FORMAT_KEYS: {
+  key: string;
+  /** What the Shortcuts tab prints beside it, since these are shown but not recorded. */
+  label: string;
+  run: (view: EditorView) => boolean;
+}[] = [
+  { key: "Mod-b", label: "Bold", run: (v) => (applyWrap(v, "**"), true) },
+  { key: "Mod-i", label: "Italic", run: (v) => (applyWrap(v, "*"), true) },
+  { key: "Shift-Mod-s", label: "Strikethrough", run: (v) => (applyWrap(v, "~~"), true) },
+  { key: "Mod-e", label: "Inline code", run: (v) => (applyWrap(v, "`"), true) },
+  { key: "Mod-l", label: "Link", run: (v) => (applyLink(v), true) },
+  { key: "Shift-Mod-b", label: "Quote", run: (v) => (applyLinePrefix(v, "> "), true) },
+  { key: "Shift-Mod-7", label: "Numbered list", run: (v) => (applyLinePrefix(v, "1. "), true) },
+  { key: "Shift-Mod-8", label: "Bulleted list", run: (v) => (applyLinePrefix(v, "- "), true) },
+  { key: "Shift-Mod-9", label: "Task list", run: (v) => (applyLinePrefix(v, "- [ ] "), true) },
+  { key: "Alt-Mod-1", label: "Heading 1", run: (v) => (setHeading(v, 1), true) },
+  { key: "Alt-Mod-2", label: "Heading 2", run: (v) => (setHeading(v, 2), true) },
+  { key: "Alt-Mod-3", label: "Heading 3", run: (v) => (setHeading(v, 3), true) },
+];
 
 export interface Rect {
   x: number;
