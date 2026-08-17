@@ -60,6 +60,7 @@ type OutboundMessage =
   | { type: "duplicateNote"; text: string }
   | { type: "requestDeleted" }
   | { type: "restoreDeleted"; storedName: string }
+  | { type: "forgetDeleted"; storedName: string }
   | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
   | { type: "headingMenu"; button: Rect; level: number | null };
 
@@ -635,6 +636,7 @@ const switcher = mountSwitcher({
   onDelete: (filename) => send({ type: "deleteNote", filename }),
   onRequestDeleted: () => send({ type: "requestDeleted" }),
   onRestore: (storedName) => send({ type: "restoreDeleted", storedName }),
+  onForgetDeleted: (storedName) => send({ type: "forgetDeleted", storedName }),
   onVisibilityChange: (open) => {
     send({ type: "switcherOpen", open });
     if (!open) view.focus();
@@ -797,6 +799,8 @@ const host = {
     translucent?: boolean;
     themeCSS?: string;
     shortcuts?: Record<string, string>;
+    /** Storage tab's retention, so Recently Deleted can state it where it matters. */
+    recentlyDeletedDays?: number;
   }): void {
     const root = document.documentElement;
     if (settings.appearance && settings.appearance !== "system") {
@@ -812,6 +816,8 @@ const host = {
     // here is that it goes last in the cascade, after tokens/pane/markdown, so a theme can override
     // any token without !important and without knowing the stylesheet order.
     if (settings.themeCSS !== undefined) themeStyleEl.textContent = settings.themeCSS;
+
+    if (settings.recentlyDeletedDays) switcher.setRetentionDays(settings.recentlyDeletedDays);
 
     if (settings.shortcuts) {
       liveShortcuts = { ...DEFAULT_SHORTCUTS, ...settings.shortcuts };

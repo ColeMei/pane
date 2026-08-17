@@ -38,6 +38,9 @@ enum PaneMessage {
     case duplicateNote(text: String)
     case requestDeleted
     case restoreDeleted(storedName: String)
+    /// Permanent removal from the holding folder, chosen per row. The one destructive action
+    /// in Pane with no undo behind it, which is why it is asked for explicitly.
+    case forgetDeleted(storedName: String)
     /// Where the window may be dragged from, in CSS pixels with a top-left origin. Sent by the web
     /// layer because only it knows where its own buttons ended up.
     case dragRegions(titleBar: CGRect, exclusions: [CGRect])
@@ -95,6 +98,8 @@ enum PaneMessage {
             self = .requestDeleted
         case "restoreDeleted":
             self = .restoreDeleted(storedName: string("storedName"))
+        case "forgetDeleted":
+            self = .forgetDeleted(storedName: string("storedName"))
         case "openSettings":
             self = .openSettings
         case "dragRegions":

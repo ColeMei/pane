@@ -234,6 +234,28 @@ public enum RecentlyDeleted {
         return removed
     }
 
+    /// Removes one note from the holding folder for good, on request rather than on the clock.
+    ///
+    /// The counterpart to `restore`, and the answer to the one thing retention alone cannot do: a
+    /// note deleted by mistake — a password pasted into the wrong pane, a name that should not be on
+    /// this disk — otherwise sits here for the whole retention window with no way to remove it from
+    /// inside Pane. "Wait thirty days or go and find it in Finder" is not an answer for that, and it
+    /// is the one place where keeping a copy is worse than not having one.
+    ///
+    /// Like `purge`, this unlinks rather than trashing: the file is already the user's second copy of
+    /// something they deleted once, and a third in the Finder's Trash would make "permanently delete"
+    /// a lie.
+    public static func forget(_ storedName: String, from store: URL) throws {
+        // Parsed, not just joined: this only ever removes something that looks like one of ours, so a
+        // malformed or hand-crafted name cannot be used to unlink a file elsewhere in the folder.
+        guard parse(storedName: storedName) != nil else { throw Failure.notFound(storedName) }
+        let url = store.appendingPathComponent(storedName)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw Failure.notFound(storedName)
+        }
+        try FileManager.default.removeItem(at: url)
+    }
+
     // MARK: - Moving
 
     private static func move(from source: URL, to destination: URL) throws {

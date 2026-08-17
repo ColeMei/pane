@@ -328,3 +328,27 @@ kbd {
   font-size: 11px;
   color: var(--text-quaternary);
 }
+
+/* Recently Deleted only: the retention, stated where the deleted notes are rather than only on the
+   Storage tab. Quiet — it is a standing fact, not a warning, and it must not compete with the rows. */
+.switcher__notice {
+  padding: 8px 16px 6px;
+  font-size: var(--size-hint);
+  color: var(--text-faint);
+}
+
+/* Permanent removal. The only control in Pane with no undo behind it, so it reads as danger on
+   hover rather than sitting there red and daring you — the row is a restore list first. */
+.switcher__action--danger:hover {
+  color: #d0342c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-appearance="light"]) .switcher__action--danger:hover {
+    color: #ff6961;
+  }
+}
+
+:root[data-appearance="dark"] .switcher__action--danger:hover {
+  color: #ff6961;
+}

@@ -299,6 +299,21 @@ final class VaultService: @unchecked Sendable {
         }
     }
 
+    /// Removes one deleted note for good, on request. See `RecentlyDeleted.forget`.
+    ///
+    /// No index refresh: this note is not in the vault and was never in the index. The switcher's
+    /// deleted list is re-fetched by the caller instead, because it is built from the folder rather
+    /// than from the index.
+    func forgetDeleted(_ storedName: String, completion: @escaping @MainActor (Bool) -> Void) {
+        queue.async {
+            var ok = false
+            if let store = self.deletedStore {
+                ok = (try? RecentlyDeleted.forget(storedName, from: store)) != nil
+            }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(ok) } }
+        }
+    }
+
     /// Runs at launch and whenever the retention setting changes. Cheap — it reads one directory
     /// listing and unlinks whatever has aged out.
     func purgeDeleted(keepingDays days: Int) {

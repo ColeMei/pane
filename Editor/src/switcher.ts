@@ -31,6 +31,8 @@ interface SwitcherOptions {
   /** Recently Deleted (decision 20). `storedName` is the timestamped name in the holding folder. */
   onRestore: (storedName: string) => void;
   onRequestDeleted: () => void;
+  /** Permanent removal from the holding folder, per row. No undo behind this one. */
+  onForgetDeleted: (storedName: string) => void;
   onVisibilityChange: (open: boolean) => void;
 }
 
@@ -45,6 +47,7 @@ interface SwitcherOptions {
 type Mode = "notes" | "deleted";
 
 const PIN_SVG = `<svg width="11" height="11" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="5" r="3.4" fill="currentColor"/><line x1="7" y1="8" x2="7" y2="13.5" stroke="currentColor" stroke-width="1.8"/></svg>`;
+const TRASH_SVG = `<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 4h8l-.7 8.5H3.7zM2 4h10M5.5 4V2.5h3V4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const PIN_OUTLINE_SVG = `<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="7" y1="8" x2="7" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>`;
 
 export function mountSwitcher(options: SwitcherOptions) {
@@ -59,6 +62,8 @@ export function mountSwitcher(options: SwitcherOptions) {
   let mode: Mode = "notes";
   /** Every deleted note, unfiltered. Searching this list is done here — see `applyQuery`. */
   let deleted: NoteSummary[] = [];
+  /** Storage tab's retention, mirrored here so the deleted list can state it. */
+  let retentionDays = 30;
 
   function isOpen(): boolean {
     return pane.hasAttribute("data-switcher");
@@ -238,7 +243,15 @@ export function mountSwitcher(options: SwitcherOptions) {
   }
 
   function renderRows(total: number): void {
-    let html = "";
+    // Say the retention where the deleted notes are. It was only ever on the Storage tab, which is
+    // the one screen you are not looking at while trying to get something back — and "how long have
+    // I got?" is the question this list exists to answer.
+    let html =
+      mode === "deleted"
+        ? `<div class="switcher__notice">Deleted notes are removed for good after ${retentionDays} ${
+            retentionDays === 1 ? "day" : "days"
+          }.</div>`
+        : "";
     let lastBand: string | undefined;
 
     rows.forEach((note, index) => {
@@ -270,11 +283,18 @@ export function mountSwitcher(options: SwitcherOptions) {
             ${note.current ? `<span class="switcher__badge">CURRENT</span>` : ""}
             <span class="switcher__row-spacer"></span>
             ${
-              // Neither action means anything to a note that is already deleted: pinning it would
-              // put it at the top of a list it is not in, and the only other thing to do to it is
-              // erase it for good, which is not a button this app is going to grow.
+              // Pinning still means nothing to a deleted note — it would sort it to the top of a
+              // list it is not in. Erasing it does. The old note here said that was "not a button
+              // this app is going to grow", on the reasoning that retention already answers it.
+              // It does not: retention answers "eventually", and the case that matters is a
+              // password pasted into the wrong pane, where the whole point is *now*. Without this
+              // the only way to remove it was to go and find the holding folder in Finder, which
+              // is a worse thing to ask than a button.
               mode === "deleted"
-                ? ""
+                ? `<span class="switcher__actions">
+              <button class="switcher__action switcher__action--danger" data-forget
+                      title="Delete permanently">${TRASH_SVG}</button>
+            </span>`
                 : `<span class="switcher__actions">
               <button class="switcher__action" data-pin title="Pin">${PIN_OUTLINE_SVG}</button>
               <button class="switcher__action" data-delete title="Delete">✕</button>
@@ -410,7 +430,13 @@ export function mountSwitcher(options: SwitcherOptions) {
 
     event.preventDefault();
     selected = index;
-    if (mode === "deleted") {
+    // The row's own buttons come first, and `data-forget` in particular *must*: in deleted mode a
+    // bare row click restores, so testing that branch first swallows every click on the trash and
+    // silently does the opposite of what the button says. Measured — the note came back into the
+    // vault and opened.
+    if (target.closest("[data-forget]")) {
+      options.onForgetDeleted(note.filename);
+    } else if (mode === "deleted") {
       options.onRestore(note.filename);
       close();
     } else if (target.closest("[data-pin]")) {
@@ -423,5 +449,9 @@ export function mountSwitcher(options: SwitcherOptions) {
     }
   });
 
-  return { open, close, toggle, render, renderDeleted, openDeleted, isOpen };
+  function setRetentionDays(days: number): void {
+    retentionDays = days;
+  }
+
+  return { open, close, toggle, render, renderDeleted, openDeleted, isOpen, setRetentionDays };
 }

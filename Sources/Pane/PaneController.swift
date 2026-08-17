@@ -620,6 +620,10 @@ final class PaneController: NSObject {
                 "textSize": settings.value.textSize,
                 "translucent": settings.value.translucentPanes,
                 "shortcuts": settings.value.shortcuts,
+                // So Recently Deleted can print the retention in the panel. Raycast states its 60
+                // days where the deleted notes are; ours lived only on the Storage tab, which is the
+                // one place you are not looking when you are trying to get something back.
+                "recentlyDeletedDays": settings.value.recentlyDeletedDays,
                 // Decision 19: a theme is a CSS file, so what crosses the bridge is the file's
                 // contents. Read here rather than fetched by the web layer — the page is loaded from
                 // a file URL with read access scoped to the bundle, and widening that scope to reach
@@ -792,6 +796,17 @@ extension PaneController: EditorWebViewDelegate {
                 // Opening it is the point. A restore that puts the note back but leaves you looking
                 // at a different one makes you go and find it again.
                 self.open(restored)
+            }
+
+        case .forgetDeleted(let storedName):
+            vault.forgetDeleted(storedName) { [weak self] ok in
+                guard let self, ok else { return }
+                // The list stays open — purging is a tidying pass, and closing the panel after each
+                // one would make clearing several a chore. Re-fetch rather than removing the row in
+                // the web layer, so what is on screen is the folder rather than our idea of it.
+                self.vault.deletedRows { [weak self] rows in
+                    self?.editor.callJSON("showDeleted", [EditorWebView.encode(rows)])
+                }
             }
 
         case .dragRegions(let titleBar, let exclusions):

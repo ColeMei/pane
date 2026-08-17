@@ -159,6 +159,38 @@ func runRecentlyDeletedTests() {
             Check.equal(names(in: store), ["notes-backup.md"])
         }
 
+        Check.test("forget removes one note and leaves the rest") {
+            let store = tempDirectory("deleted")
+            write("a\n", "20260816-014530--2026-01-01-0900-secret.md", into: store)
+            write("b\n", "20260816-014531--2026-01-02-0900-keep.md", into: store)
+
+            try? RecentlyDeleted.forget("20260816-014530--2026-01-01-0900-secret.md", from: store)
+
+            Check.equal(names(in: store), ["20260816-014531--2026-01-02-0900-keep.md"])
+        }
+
+        Check.test("forget refuses a name it did not put there") {
+            let store = tempDirectory("deleted")
+            write("c\n", "notes-backup.md", into: store)
+
+            var threw = false
+            do { try RecentlyDeleted.forget("notes-backup.md", from: store) } catch { threw = true }
+
+            Check.equal(threw, true, "an unparseable name must not be unlinked")
+            Check.equal(names(in: store), ["notes-backup.md"])
+        }
+
+        Check.test("forget on a missing note throws rather than succeeding quietly") {
+            let store = tempDirectory("deleted")
+
+            var threw = false
+            do {
+                try RecentlyDeleted.forget("20260816-014530--2026-01-01-0900-gone.md", from: store)
+            } catch { threw = true }
+
+            Check.equal(threw, true)
+        }
+
         Check.test("a malformed name is not a deleted note") {
             for bad in [
                 "2026-08-11-1453-standup.md",          // an ordinary note, no prefix
