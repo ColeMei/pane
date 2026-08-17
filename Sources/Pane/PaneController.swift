@@ -271,7 +271,9 @@ final class PaneController: NSObject {
         }
     }
 
-    func open(_ filename: String) {
+    /// `recordingHistory` is false only when ⌘[ / ⌘] are the ones doing the opening — walking the
+    /// history must not itself write history, or Back would just alternate between two notes forever.
+    func open(_ filename: String, recordingHistory: Bool = true) {
         guard filename != currentFilename else {
             editor.focusEditor()
             return
@@ -282,7 +284,8 @@ final class PaneController: NSObject {
             guard let self else { return }
             switch result {
             case .loaded(let text, let hash):
-                self.adopt(filename: filename, text: text, hash: hash)
+                self.adopt(
+                    filename: filename, text: text, hash: hash, recordingHistory: recordingHistory)
 
             case .downloading:
                 // Decision 13: never read an evicted note on the main thread, and never pretend a
@@ -291,7 +294,9 @@ final class PaneController: NSObject {
                 self.vault.download(filename) { [weak self] downloaded in
                     guard let self else { return }
                     if case .loaded(let text, let hash) = downloaded {
-                        self.adopt(filename: filename, text: text, hash: hash)
+                        self.adopt(
+                            filename: filename, text: text, hash: hash,
+                            recordingHistory: recordingHistory)
                     } else {
                         self.showBanner(.problem("Could not download \(filename) from iCloud."))
                     }
@@ -307,7 +312,13 @@ final class PaneController: NSObject {
         }
     }
 
-    private func adopt(filename: String, text: String, hash: String) {
+    private func adopt(
+        filename: String, text: String, hash: String, recordingHistory: Bool = true
+    ) {
+        // Recorded here rather than in `open` so the history can only ever contain notes that really
+        // opened — a filename that turned out to be missing never reaches this line, which is what
+        // keeps Back from walking onto a note that has since been deleted.
+        if recordingHistory { recordVisit(filename) }
         currentFilename = filename
         bufferText = text
         baselineHash = hash
@@ -539,6 +550,47 @@ final class PaneController: NSObject {
                 ]
             )
         }
+    }
+
+    // MARK: - History
+
+    /// Notes visited in this pane, oldest first; `historyIndex` points at the one on screen.
+    ///
+    /// ⌘[ and ⌘] are the reference's keys, verified on the running app — it carries the feature but
+    /// exposes no ⌘K row for it, so Pane does the same and decision 17's panel stays at fourteen.
+    ///
+    /// In memory rather than in `state.json`: this describes one sitting with the app, and a Back
+    /// that reaches across a relaunch into notes you have forgotten visiting is a worse answer than
+    /// one that starts fresh. It is also the reason there is no schema change here.
+    private var history: [String] = []
+    private var historyIndex = -1
+
+    /// Long enough that Back never runs out in a real session, short enough to stay a rounding error
+    /// in a process that runs for weeks.
+    private static let historyLimit = 50
+
+    private func recordVisit(_ filename: String) {
+        // Opening something new from the middle of the history discards what was ahead, exactly as a
+        // browser does: those entries describe a future that has now not happened.
+        if historyIndex >= 0, historyIndex < history.count - 1 {
+            history.removeSubrange((historyIndex + 1)...)
+        }
+        guard history.last != filename else { return }
+        history.append(filename)
+        if history.count > Self.historyLimit { history.removeFirst(history.count - Self.historyLimit) }
+        historyIndex = history.count - 1
+    }
+
+    func goBack() {
+        guard historyIndex > 0 else { return }
+        historyIndex -= 1
+        open(history[historyIndex], recordingHistory: false)
+    }
+
+    func goForward() {
+        guard historyIndex >= 0, historyIndex < history.count - 1 else { return }
+        historyIndex += 1
+        open(history[historyIndex], recordingHistory: false)
     }
 
     func openSwitcher() {
@@ -804,6 +856,9 @@ extension PaneController: EditorWebViewDelegate {
                 // at a different one makes you go and find it again.
                 self.open(restored)
             }
+
+        case .navigate(let back):
+            back ? goBack() : goForward()
 
         case .textSize(let action):
             // Clamped to the same bounds `Settings` enforces on a hand-edited file, so the keyboard

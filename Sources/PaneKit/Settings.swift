@@ -86,6 +86,8 @@ public struct Settings: Codable, Equatable, Sendable {
         ("newNote", "New Note", "Mod-n"),
         ("duplicateNote", "Duplicate Note", "Mod-d"),
         ("browseNotes", "Browse Notes", "Mod-p"),
+        ("navigateBack", "Back", "Mod-["),
+        ("navigateForward", "Forward", "Mod-]"),
         ("actionPanel", "Action Panel", "Mod-k"),
         ("pinPane", "Pin Pane", "Shift-Mod-p"),
         ("findInNote", "Find in Note", "Mod-f"),

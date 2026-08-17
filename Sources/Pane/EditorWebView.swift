@@ -43,6 +43,8 @@ enum PaneMessage {
     case forgetDeleted(storedName: String)
     /// ⌘= / ⌘− / ⌘0. Swift owns `Settings.textSize`, so the web layer asks rather than sets.
     case textSize(action: String)
+    /// ⌘[ / ⌘]. The visit history lives in `PaneController`, so this only asks.
+    case navigate(back: Bool)
     /// Where the window may be dragged from, in CSS pixels with a top-left origin. Sent by the web
     /// layer because only it knows where its own buttons ended up.
     case dragRegions(titleBar: CGRect, exclusions: [CGRect])
@@ -104,6 +106,8 @@ enum PaneMessage {
             self = .forgetDeleted(storedName: string("storedName"))
         case "textSize":
             self = .textSize(action: string("action"))
+        case "navigate":
+            self = .navigate(back: dict["back"] as? Bool ?? true)
         case "openSettings":
             self = .openSettings
         case "dragRegions":

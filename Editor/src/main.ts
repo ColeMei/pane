@@ -62,6 +62,7 @@ type OutboundMessage =
   | { type: "restoreDeleted"; storedName: string }
   | { type: "forgetDeleted"; storedName: string }
   | { type: "textSize"; action: "in" | "out" | "reset" }
+  | { type: "navigate"; back: boolean }
   | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
   | { type: "headingMenu"; button: Rect; level: number | null };
 
@@ -436,6 +437,8 @@ function exitEmptyMarkup(view: EditorView): boolean {
 const DEFAULT_SHORTCUTS: Record<string, string> = {
   newNote: "Mod-n",
   browseNotes: "Mod-p",
+  navigateBack: "Mod-[",
+  navigateForward: "Mod-]",
   pinPane: "Shift-Mod-p",
   formatBar: "Alt-Mod-,",
   actionPanel: "Mod-k",
@@ -463,6 +466,8 @@ const shortcutsCompartment = new Compartment();
 const actionHandlers: Record<string, () => boolean> = {
   newNote: () => (send({ type: "createNote", title: "" }), true),
   browseNotes: () => (toggleSwitcher(), true),
+  navigateBack: () => (send({ type: "navigate", back: true }), true),
+  navigateForward: () => (send({ type: "navigate", back: false }), true),
   pinPane: () => (send({ type: "togglePin", filename: currentFilename }), true),
   formatBar: () => (toggleFormatBar(), true),
   revealInFinder: () => (send({ type: "revealInFinder" }), true),
