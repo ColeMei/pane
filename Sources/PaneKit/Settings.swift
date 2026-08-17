@@ -142,8 +142,11 @@ public struct Settings: Codable, Equatable, Sendable {
     /// which is what lets a theme arrive without any new UI or any new code.
     public var markdownTheme: String
 
-    /// Editor body text size in points. ⌘= / ⌘− adjust it from any pane.
+    /// Editor body text size in points. ⌘= / ⌘− adjust it from any pane, ⌘0 resets it.
     public var textSize: Double
+
+    /// The only legal range, named once so the keyboard and a hand-edited file agree.
+    public static let textSizeRange: ClosedRange<Double> = 10...32
 
     /// Translucent panes. Turning this off swaps the vibrancy material for a flat background —
     /// the design's own props block does exactly this.
@@ -222,7 +225,7 @@ public struct Settings: Codable, Equatable, Sendable {
             try c.decodeIfPresent(Bool.self, forKey: .hideFromScreenCapture) ?? d.hideFromScreenCapture
 
         // Clamp rather than reject: a hand-typed 0 or 9999 should land somewhere sensible.
-        textSize = min(max(textSize, 10), 32)
+        textSize = min(max(textSize, Settings.textSizeRange.lowerBound), Settings.textSizeRange.upperBound)
         // 0 would mean "delete immediately, no undo" — the one value this control must never carry.
         recentlyDeletedDays = min(max(recentlyDeletedDays, 1), 365)
         // The accent lands in CSS, so anything that is not a colour has to be caught here rather

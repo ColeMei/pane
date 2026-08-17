@@ -96,7 +96,7 @@ final class AppearanceSettingsViewController: NSViewController {
         sizeField.widthAnchor.constraint(equalToConstant: 44).isActive = true
 
         let sizeRow = NSStackView(views: [
-            sizeField, stepper, SettingsForm.note("⌘= / ⌘− in any pane"),
+            sizeField, stepper, SettingsForm.note("⌘= / ⌘− / ⌘0 in any pane"),
         ])
         sizeRow.orientation = .horizontal
         sizeRow.spacing = 8

@@ -61,6 +61,7 @@ type OutboundMessage =
   | { type: "requestDeleted" }
   | { type: "restoreDeleted"; storedName: string }
   | { type: "forgetDeleted"; storedName: string }
+  | { type: "textSize"; action: "in" | "out" | "reset" }
   | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
   | { type: "headingMenu"; button: Rect; level: number | null };
 
@@ -545,6 +546,19 @@ function baseExtensions(): Extension[] {
       // the format bar has printed those two on its buttons since it shipped while nothing bound
       // them, which is precisely what the comment below this one warns against.
       ...MARKDOWN_FORMAT_KEYS,
+
+      // Text size, also fixed and also convention — ⌘+ / ⌘- / ⌘0 mean this everywhere. The
+      // Appearance tab has printed "⌘= / ⌘− in any pane" beside the stepper since it shipped while
+      // neither key was bound to anything; ⌘0 comes from the reference, which carries all three.
+      // Swift owns the value because it is a setting, so these only ask.
+      { key: "Mod-=", run: () => (send({ type: "textSize", action: "in" }), true) },
+      // Both spellings, because they are the same physical key. Holding shift makes the browser
+      // report `key` as "+", not "=" with a shift flag — so `Mod-Shift-=` never matches and only
+      // `Mod-+` does. Measured: with just the Shift- form bound, ⌘+ did nothing while ⌘= worked.
+      // ⌘+ is what most people actually press.
+      { key: "Mod-+", run: () => (send({ type: "textSize", action: "in" }), true) },
+      { key: "Mod--", run: () => (send({ type: "textSize", action: "out" }), true) },
+      { key: "Mod-0", run: () => (send({ type: "textSize", action: "reset" }), true) },
       // Escape dismisses the pane. The switcher handles its own Escape while it is open, so this
       // only ever fires with the caret in the editor — where the reflex is "put this away", not
       // "cancel something".

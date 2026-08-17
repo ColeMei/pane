@@ -798,6 +798,18 @@ extension PaneController: EditorWebViewDelegate {
                 self.open(restored)
             }
 
+        case .textSize(let action):
+            // Clamped to the same bounds `Settings` enforces on a hand-edited file, so the keyboard
+            // and the file cannot disagree about what is a legal size. Writing it through
+            // `settings.update` is what persists it and pushes it back down via `applySettings`.
+            settings.update {
+                switch action {
+                case "in": $0.textSize = min($0.textSize + 1, Settings.textSizeRange.upperBound)
+                case "out": $0.textSize = max($0.textSize - 1, Settings.textSizeRange.lowerBound)
+                default: $0.textSize = Settings().textSize
+                }
+            }
+
         case .forgetDeleted(let storedName):
             vault.forgetDeleted(storedName) { [weak self] ok in
                 guard let self, ok else { return }
