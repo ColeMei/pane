@@ -379,6 +379,13 @@ final class PaneController: NSObject {
             self.state.update { $0.notes.removeValue(forKey: filename) }
             self.onPinsChanged?()
 
+            // Deleting was silent, which reads as "nothing happened" for the one action where you
+            // most want to know that it did — and where the next thought is "can I get it back?".
+            // So the message names the place rather than just confirming: ⌃X is one keystroke away
+            // from ⌘X, and the answer to hitting it by accident should be on screen, not in the
+            // documentation. Floating, so it costs no height (see `.pane__toast`).
+            self.editor.call("showToast", ["Note deleted — in Recently Deleted for \(self.settings.value.recentlyDeletedDays) days"])
+
             if filename == self.currentFilename {
                 self.currentFilename = nil
                 self.baselineHash = nil

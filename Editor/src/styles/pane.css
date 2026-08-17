@@ -554,3 +554,43 @@ body {
 .cm-find-current {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
+
+/* ---- Toast -------------------------------------------------------------------------------------
+ * Says a destructive thing happened. Deleting was silent, which reads as "nothing happened" for the
+ * one action where you most want to know it did — and where the next question is "can I get it
+ * back?", so the toast names where it went.
+ *
+ * Out of the layout entirely: the banner is a real row and its height reaches
+ * `reportContentHeight`, so a message that appears and vanishes there would resize the window twice
+ * per delete. This one floats over the content and changes nothing.
+ */
+.pane__toast {
+  position: absolute;
+  top: calc(var(--titlebar-height) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  max-width: calc(100% - 48px);
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--overlay-bg);
+  -webkit-backdrop-filter: var(--overlay-blur);
+  backdrop-filter: var(--overlay-blur);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow-overlay);
+  color: var(--text-primary);
+  font-size: var(--size-footer);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity 160ms ease-out;
+}
+
+.pane__toast[hidden] {
+  display: none;
+}
+
+.pane__toast[data-fading] {
+  opacity: 0;
+}

@@ -94,6 +94,11 @@ const titleBarEl = document.getElementById("titlebar") as HTMLElement;
 const paneTitleEl = document.getElementById("pane-title") as HTMLElement;
 const wordCountEl = document.getElementById("word-count") as HTMLElement;
 const editorHost = document.getElementById("editor-host") as HTMLElement;
+const toastEl = document.getElementById("toast") as HTMLElement;
+/** Auto-dismiss timers for the toast above. */
+let toastTimer = 0;
+let toastFadeTimer = 0;
+
 const bannerEl = document.getElementById("banner") as HTMLElement;
 const bannerTextEl = document.getElementById("banner-text") as HTMLElement;
 
@@ -891,6 +896,22 @@ const host = {
    * The one-line status row: a conflict sibling was written, a note is downloading, or something
    * failed. Never steals the caret and never blocks typing (decision 8).
    */
+  /** A transient confirmation. Out of layout, so it never disturbs the reported height. */
+  showToast(text: string): void {
+    toastEl.textContent = text;
+    toastEl.hidden = false;
+    toastEl.removeAttribute("data-fading");
+    if (toastTimer) clearTimeout(toastTimer);
+    if (toastFadeTimer) clearTimeout(toastFadeTimer);
+    // Long enough to read a short sentence, short enough not to sit over the note you moved on to.
+    toastTimer = window.setTimeout(() => {
+      toastEl.setAttribute("data-fading", "");
+      toastFadeTimer = window.setTimeout(() => {
+        toastEl.hidden = true;
+      }, 200);
+    }, 1900);
+  },
+
   showBanner(kind: string, text: string): void {
     bannerEl.setAttribute("data-kind", kind);
     bannerTextEl.textContent = text;

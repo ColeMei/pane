@@ -42,6 +42,11 @@
         read-only and that typing must not have to be resumed. It is dismissed by being fixed, or by
         clicking it.
       -->
+      <!-- Transient confirmation for something destructive. Absolutely positioned on purpose:
+           the banner below is in the layout and feeds `reportContentHeight`, so a message that
+           comes and goes there would pulse the window (decision 44's hazard). This floats. -->
+      <div class="pane__toast" id="toast" role="status" aria-live="polite" hidden></div>
+
       <div class="pane__banner" id="banner" role="status" hidden>
         <span class="pane__banner-dot" aria-hidden="true"></span>
         <span class="pane__banner-text" id="banner-text"></span>
