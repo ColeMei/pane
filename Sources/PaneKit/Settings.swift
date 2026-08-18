@@ -82,23 +82,29 @@ public struct Settings: Codable, Equatable, Sendable {
     /// So treat this table as frozen. A key here that reads better in isolation still costs a
     /// switcher their muscle memory, and a shortcut some *other* app has claimed system-wide is what
     /// the recorder is for (decision 15) — not a reason to move the shipped default.
-    public static let shortcutActions: [(key: String, label: String, standard: String)] = [
-        ("newNote", "New Note", "Mod-n"),
-        ("duplicateNote", "Duplicate Note", "Mod-d"),
-        ("browseNotes", "Browse Notes", "Mod-p"),
-        ("navigateBack", "Back", "Mod-["),
-        ("navigateForward", "Forward", "Mod-]"),
-        ("actionPanel", "Action Panel", "Mod-k"),
-        ("pinPane", "Pin Pane", "Shift-Mod-p"),
-        ("findInNote", "Find in Note", "Mod-f"),
-        ("copyAsMarkdown", "Copy as Markdown", "Shift-Mod-c"),
-        ("autoSizing", "Window Auto-sizing", "Shift-Mod-/"),
-        ("formatBar", "Show Format Bar", "Alt-Mod-,"),
-        ("revealInFinder", "Reveal in Finder", "Alt-Mod-r"),
-        ("exportNote", "Export…", "Shift-Mod-e"),
-        ("hideFromCapture", "Hide from Screen Capture", "Shift-Mod-h"),
-        ("deleteNote", "Delete Note", "Ctrl-x"),
-    ]
+    /// Every rebindable action, in the order the Shortcuts tab lists them — which is ⌘K's order,
+    /// grouped the way ⌘K groups them. One list of sixteen rows sorted by nothing in particular is
+    /// hard to look anything up in, and the panel had already settled what belongs beside what.
+    public static let shortcutActions:
+        [(key: String, label: String, standard: String, group: String)] = [
+            ("newNote", "New Note", "Mod-n", "Notes"),
+            ("duplicateNote", "Duplicate Note", "Mod-d", "Notes"),
+            ("browseNotes", "Browse Notes", "Mod-p", "Notes"),
+            ("navigateBack", "Back", "Mod-[", "Notes"),
+            ("navigateForward", "Forward", "Mod-]", "Notes"),
+
+            ("findInNote", "Find in Note", "Mod-f", "This note"),
+            ("copyAsMarkdown", "Copy as Markdown", "Shift-Mod-c", "This note"),
+            ("revealInFinder", "Reveal in Finder", "Alt-Mod-r", "This note"),
+            ("exportNote", "Export…", "Shift-Mod-e", "This note"),
+            ("deleteNote", "Delete Note", "Ctrl-x", "This note"),
+
+            ("actionPanel", "Action Panel", "Mod-k", "The pane"),
+            ("pinPane", "Pin Pane", "Shift-Mod-p", "The pane"),
+            ("autoSizing", "Window Auto-sizing", "Shift-Mod-/", "The pane"),
+            ("formatBar", "Show Format Bar", "Alt-Mod-,", "The pane"),
+            ("hideFromCapture", "Hide from Screen Capture", "Shift-Mod-h", "The pane"),
+        ]
 
     public static var standardShortcuts: [String: String] {
         Dictionary(uniqueKeysWithValues: shortcutActions.map { ($0.key, $0.standard) })

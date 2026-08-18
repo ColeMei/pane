@@ -34,7 +34,7 @@ final class GeneralSettingsViewController: NSViewController {
         recorder.onRecord = { [weak self] hotkey in
             self?.settings.update { $0.summonHotkey = hotkey }
         }
-        let recorderRow = NSStackView(views: [recorder, SettingsForm.note("Click to record")])
+        let recorderRow = NSStackView(views: [recorder])
         recorderRow.orientation = .horizontal
         recorderRow.spacing = 8
         form.row("Summon hotkey", recorderRow)
@@ -70,7 +70,7 @@ final class GeneralSettingsViewController: NSViewController {
         )
         dock.state = current.showDockIcon ? .on : .off
         form.row("Dock", dock)
-        form.hint("Off by default — Pane lives in the menu bar. Turn on if you want ⌘Tab switching.")
+        form.hint("Adds Pane to the Dock and to ⌘Tab.")
 
         view = form.makeContentView()
     }

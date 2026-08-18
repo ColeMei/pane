@@ -64,7 +64,7 @@ final class StorageSettingsViewController: NSViewController {
         pathField.widthAnchor.constraint(equalToConstant: 216).isActive = true
         form.row("Notes folder", folderRow)
 
-        form.row("Format", SettingsForm.note("Plain Markdown files (.md) — yours, no database"))
+        form.row("Format", SettingsForm.note("Markdown (.md)"))
 
         form.separator()
 
@@ -114,7 +114,7 @@ final class StorageSettingsViewController: NSViewController {
         offRadio?.state = iCloud ? .off : .on
         iCloudRadio?.state = iCloud ? .on : .off
         syncNote?.stringValue = iCloud
-            ? "Synced by iCloud Drive — Pane ships no sync code of its own."
+            ? "Synced by iCloud Drive."
             : ""
         syncNote?.isHidden = !iCloud
     }

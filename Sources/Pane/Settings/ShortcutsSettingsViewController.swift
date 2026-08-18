@@ -51,7 +51,16 @@ final class ShortcutsSettingsViewController: NSViewController {
         }
         rows.addArrangedSubview(row(label: "Summon / dismiss Pane", control: summonRecorder))
 
+        var group: String?
         for action in Settings.shortcutActions {
+            // A heading whenever the group changes. Sixteen rows in one undifferentiated column is
+            // a list you read rather than scan; these are ⌘K's own groups, so the two places that
+            // list the same actions agree about which belong together.
+            if action.group != group {
+                group = action.group
+                rows.addArrangedSubview(header(action.group))
+            }
+
             let recorder = PaneShortcutRecorderView(binding: settings.value.shortcut(action.key))
             recorder.onRecord = { [weak self] binding in
                 self?.settings.update { $0.shortcuts[action.key] = binding }
@@ -60,15 +69,14 @@ final class ShortcutsSettingsViewController: NSViewController {
             rows.addArrangedSubview(row(label: action.label, control: recorder))
         }
 
-        let caption = NSTextField(labelWithString: "Click any shortcut to re-record it.")
-        caption.font = .systemFont(ofSize: 11)
-        caption.textColor = .secondaryLabelColor
-
+        // No "click a shortcut to re-record it" caption. The rows are obviously buttons and they say
+        // "Click to record" the moment one is focused; a line of prose under every screen is what
+        // this window had too much of.
         let restore = SettingsForm.push(
             "Restore Defaults", target: self, action: #selector(restoreDefaults)
         )
 
-        let footer = NSStackView(views: [caption, NSView(), restore])
+        let footer = NSStackView(views: [NSView(), restore])
         footer.orientation = .horizontal
         footer.distribution = .fill
         footer.spacing = 8
@@ -82,10 +90,8 @@ final class ShortcutsSettingsViewController: NSViewController {
         // long line — the tab went from 540 to 993 points wide. It has to be pinned to the form's
         // width so it wraps instead of stretching the window.
         let markdownNote = NSTextField(
-            wrappingLabelWithString: """
-                Markdown keys follow convention and cannot be rebound: ⌘B bold, ⌘I italic, \
-                ⇧⌘S strikethrough, ⌘E code, ⌘L link, ⇧⌘B quote, ⇧⌘7/8/9 lists, ⌥⌘1/2/3 headings.
-                """
+            wrappingLabelWithString:
+                "Markdown keys are fixed: ⌘B ⌘I ⇧⌘S ⌘E ⌘L ⇧⌘B ⌥⌘C ⇧⌘7/8/9 ⌥⌘1/2/3"
         )
         markdownNote.font = .systemFont(ofSize: 11)
         markdownNote.textColor = .tertiaryLabelColor
@@ -121,6 +127,18 @@ final class ShortcutsSettingsViewController: NSViewController {
             container.widthAnchor.constraint(equalToConstant: 540),
         ])
         view = container
+    }
+
+    /// A group's name, in the type the rest of the window uses for a quiet label.
+    private func header(_ text: String) -> NSView {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .tertiaryLabelColor
+
+        let stack = NSStackView(views: [label])
+        stack.orientation = .horizontal
+        stack.edgeInsets = NSEdgeInsets(top: 14, left: 2, bottom: 4, right: 2)
+        return stack
     }
 
     /// Label left, recorder right, hairline underneath — the frame's row exactly.
@@ -170,6 +188,12 @@ final class ShortcutsSettingsViewController: NSViewController {
 /// unmodified key is a character somebody wanted to type.
 @MainActor
 final class PaneShortcutRecorderView: HotkeyRecorderViewBase {
+
+    /// Narrower than the summon recorder, which has to hold "⌃⌥Space". These hold two or three
+    /// symbols, and at the base class's 132 points a row like Delete Note was a wide empty pill with
+    /// `⌃X` adrift in the middle of it — sixteen of those read as a column of blanks rather than as
+    /// a column of keys.
+    override var intrinsicContentSize: NSSize { NSSize(width: 84, height: 22) }
 
     var onRecord: ((String) -> Void)?
 

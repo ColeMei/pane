@@ -69,8 +69,7 @@ final class AppearanceSettingsViewController: NSViewController {
         // 3b's order, and the order the question actually arrives in.
         let themeNote = NSTextField(
             wrappingLabelWithString:
-                "A theme is a CSS file. Reading and Compact are in the themes folder to start from; "
-                    + "anything you drop there appears here."
+                "CSS files in the themes folder appear here."
         )
         themeNote.font = .systemFont(ofSize: 11)
         themeNote.textColor = .secondaryLabelColor
