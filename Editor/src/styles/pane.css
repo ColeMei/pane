@@ -88,11 +88,13 @@ body {
  * to churn on every focus change.
  */
 .pane__close,
+#open-actions,
 #browse,
 #new-note,
-.pane__footer,
+#format-toggle,
 .format-bar,
-.pane__title {
+.pane__title,
+.pane__words {
   transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 
@@ -103,32 +105,41 @@ body {
 
 /* Buttons fade rather than leave: clicking one would have to focus the pane first anyway, so they
    are noise over somebody else's work — but their boxes stay, so nothing reflows. */
+.pane:not([data-hover]) #open-actions,
 .pane:not([data-hover]) #browse,
-.pane:not([data-hover]) #new-note {
+.pane:not([data-hover]) #new-note,
+.pane:not([data-hover]) #format-toggle {
   opacity: 0;
   pointer-events: none;
 }
 
-.pane:not([data-hover]) .pane__footer,
 .pane:not([data-hover]) .format-bar {
   opacity: 0;
   pointer-events: none;
 }
 
-/* The title dims with the rest. It is the one piece of chrome that is also content, so it fades to
-   a muted ink rather than out entirely — you should still be able to read which note this is from
-   across the desk. */
-.pane:not([data-hover]) .pane__title {
-  color: var(--text-quaternary);
+/* What a pane you are not touching keeps: the title, and the word count. Decision 54.
+ *
+ * The footer used to fade out whole, so an un-hovered pane showed nothing but a grey dot and a pin —
+ * it could have been any note, or an empty one. Those two are the pane's only *content* chrome: they
+ * say which note this is and how much of it there is, which is exactly what you want off a pane
+ * sitting beside the thing you are working on. The reference keeps both and drops every button, and
+ * it is right. What fades is everything you would have to focus the pane to use.
+ *
+ * The footer's box never moves either way — it feeds `reportContentHeight` (decision 41). */
+.pane:not([data-hover]) .pane__title,
+.pane:not([data-hover]) .pane__words {
+  color: var(--text-faint);
 }
 
-/* The pin never fades, unlike the other two buttons.
+/* The pin never fades, unlike the buttons.
  *
- * It is the one control that is also *state*: whether this pane ignores the dismiss hotkey is
- * something you need to read at a glance precisely when you are not looking straight at it. The
- * close dot stays for the same reason it did under frame 1e — closing a pane you are not hovering
- * should still be one click, not two. This is where Pane parts company with the reference, which
- * drops its window controls entirely.
+ * It is not a control that is also state — it is state that can be clicked, and it is in the bar
+ * only while it has something to say (see the note on `[data-pinned]` below). Whether this pane
+ * ignores the dismiss hotkey is something you need to read at a glance precisely when you are not
+ * looking straight at it. The close dot stays for the reason frame 1e gave — closing a pane you are
+ * not hovering should still be one click, not two. This is where Pane parts company with the
+ * reference, which drops its window controls entirely.
  */
 
 /* NO CSS SHADOW ON THE PANE, focused or not.
@@ -141,10 +152,14 @@ body {
  * server *outside* the frame and is the only kind that can be. Same lesson as `backdrop-filter`:
  * anything that has to escape the window is Swift's job, not the page's. */
 
-/* Empty until you scroll past the H1 — at which point the title you scrolled away from comes back,
- * because a pane with no visible heading is a pane you cannot identify.
- * The design specifies the behaviour but never draws the result; centred follows the macOS
- * convention for a title in a title bar. */
+/* Always there, not only once you have scrolled past the H1 (decision 54).
+ *
+ * Decision 22 kept it empty until then, to avoid saying the same thing twice while the H1 was on
+ * screen. In use the cost is the other way round: the title bar is the one place the note's name
+ * can be read without the pane being the thing you are looking at, and gating it on scroll position
+ * meant a pane beside your work was usually anonymous. The reference shows it always, at this size
+ * and this weight, with its own H1 right underneath — and the repetition is not what you notice.
+ * Centred follows the macOS convention for a title in a title bar. */
 .pane__title {
   flex: 1;
   min-width: 0;
@@ -155,22 +170,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: 0;
-  transition: opacity 120ms ease-out;
   pointer-events: none;
-}
-
-.pane__titlebar[data-scrolled] .pane__title {
-  opacity: 1;
-}
-
-.pane__spacer {
-  flex: 1;
-}
-
-/* When the title is showing it takes the flexible space, so the plain spacer stands down. */
-.pane__titlebar[data-scrolled] .pane__spacer {
-  display: none;
 }
 
 .icon-button {
@@ -199,6 +199,14 @@ body {
   line-height: 1;
 }
 
+/* The ⌘ glyph, at the weight the other two icons draw at. Same button as the rest — this is the
+ * discovery path frame 2a spent and never bought anything with (decision 54). */
+.icon-button--cmd {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1;
+}
+
 /* The switcher button is three rules rather than an icon font. */
 .icon-button__lines {
   display: flex;
@@ -221,6 +229,16 @@ body {
  * So the pin must actually FILL, not merely change colour: an outline pin tinted accent is too close
  * to a hovered pin, and then nothing on screen tells you the pane will survive the dismiss hotkey.
  * `r` and `fill` are SVG geometry/paint properties and settable from CSS in this engine. */
+/* Not in the title bar at all unless the pane is pinned (decision 54). An always-present outline
+ * pin was the one icon up here that could not be read off its own drawing: it looked like "keep on
+ * top", it is spelled "ignores the dismiss hotkey, and sorts first in ⌘P", and three of the four
+ * icons in a fixed bar were controls while this one was mostly a light. `display` is safe here —
+ * the title bar's height is a token, so removing a button from it cannot move the pane's own
+ * height, which is what decision 41 forbids. */
+.pane:not([data-pinned]) .icon-button[data-action="pin"] {
+  display: none;
+}
+
 .pane[data-pinned] .icon-button[data-action="pin"] {
   color: var(--accent);
   background: color-mix(in oklab, var(--accent) 14%, transparent);
@@ -362,15 +380,6 @@ body {
 
 .pane__words {
   flex: none;
-}
-
-/* The ⌘K hint (see the note in index.html). Quiet enough to read as an affordance rather than as
-   content — the switcher's own footer hints use the same size and colour, so this is the vocabulary
-   the pane already has for "here is a key you can press". */
-.pane__hint {
-  flex: none;
-  font-size: var(--size-hint);
-  color: var(--text-faint);
 }
 
 .icon-button--sm {

@@ -426,25 +426,6 @@ const taskClickHandler = EditorView.domEventHandlers({
 });
 
 /**
- * Tracks whether the document is scrolled past its first heading, so the pane can put the title into
- * the title bar (decision 22). Reported outward through a callback rather than reaching for the DOM
- * from in here.
- */
-export function scrollReporter(onScroll: (scrolledPastHeading: boolean) => void): Extension {
-  let last = false;
-  return EditorView.domEventHandlers({
-    scroll(_event, view) {
-      const scrolled = view.scrollDOM.scrollTop > 24;
-      if (scrolled !== last) {
-        last = scrolled;
-        onScroll(scrolled);
-      }
-      return false;
-    },
-  });
-}
-
-/**
  * How much taller the caret's line is than the collapsed blank line it would otherwise be.
  *
  * The caret's blank line is exempt from the collapse above, so that typing the first character moves

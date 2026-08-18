@@ -30,7 +30,7 @@ import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemi
 import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
 import { findHighlighting, mountFind } from "./find";
-import { caretBlankLineSlack, livePreview, scrollReporter } from "./live-preview";
+import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
 import { MARKDOWN_FORMAT_KEYS, mountFormatBar, setHeading } from "./format-bar";
 import { countWords } from "./word-count";
@@ -524,10 +524,6 @@ function baseExtensions(): Extension[] {
     checkboxInputRule(),
     editorTheme,
     updateListener,
-    scrollReporter((scrolled) => {
-      // Decision 22: the title bar stays empty until you scroll past the H1.
-      titleBarEl.toggleAttribute("data-scrolled", scrolled);
-    }),
     // Enter and Backspace, above everything else.
     //
     // `nonTightLists: false` is the whole reason this is hand-bound. CodeMirror's default, on Enter
@@ -614,6 +610,7 @@ document.getElementById("pin")!.addEventListener("click", () =>
   send({ type: "togglePin", filename: currentFilename })
 );
 document.getElementById("browse")!.addEventListener("click", () => toggleSwitcher());
+document.getElementById("open-actions")!.addEventListener("click", () => toggleActions());
 
 formatBar = mountFormatBar(
   document.getElementById("format-bar") as HTMLElement,
@@ -996,9 +993,13 @@ new ResizeObserver(() => {
   placeOverlays();
 }).observe(paneEl);
 
-new MutationObserver(reportDragRegions).observe(titleBarEl, {
+/* The pin enters and leaves the title bar with the pane's pinned state (decision 54), which moves
+ * the buttons beside it — and the drag-exclusion rects Swift hit-tests are measured from those
+ * boxes. This is the same hook the title's old scroll-gated reveal needed, pointed at the one
+ * attribute that still changes the bar's layout. */
+new MutationObserver(reportDragRegions).observe(paneEl, {
   attributes: true,
-  attributeFilter: ["data-scrolled"],
+  attributeFilter: ["data-pinned"],
 });
 
 reportDragRegions();

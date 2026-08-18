@@ -19,14 +19,18 @@
       <header class="pane__titlebar" id="titlebar">
         <button class="pane__close" id="close" aria-label="Close pane"></button>
         <div class="pane__title" id="pane-title"></div>
-        <div class="pane__spacer"></div>
 
-        <button class="icon-button" id="pin" data-action="pin" aria-label="Pin pane" aria-pressed="false" title="Pin ⇧⌘P">
+        <!-- The pin is STATE, not a permanent control: it is in the bar only while the pane is
+             pinned, and clicking it there unpins. As a fourth always-present button it was the one
+             icon in the title bar whose meaning nobody could read off it — decision 54. -->
+        <button class="icon-button" id="pin" data-action="pin" aria-label="Unpin pane" aria-pressed="false" title="Unpin ⇧⌘P">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <circle class="pin-head" cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5" />
             <line class="pin-stem" x1="7" y1="8" x2="7" y2="13" stroke="currentColor" stroke-width="1.5" />
           </svg>
         </button>
+
+        <button class="icon-button icon-button--cmd" id="open-actions" data-action="actions" aria-label="Actions" title="Actions ⌘K">⌘</button>
 
         <button class="icon-button" id="browse" data-action="browse" aria-label="Browse notes" title="Notes ⌘P">
           <span class="icon-button__lines" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -59,11 +63,9 @@
 
       <!-- One footer row. The format bar replaces it rather than stacking below it. -->
       <footer class="pane__footer">
-        <!-- Frame 2a drops Raycast's ⌘ toolbar button on the stated grounds that "⌘K is discoverable
-             via the footer hint and menu bar". The button went; neither discovery path was ever
-             built, so the whole action panel had none. This is the hint half. It is text in a row
-             whose height is a fixed token, so it cannot move `reportContentHeight`. -->
-        <span class="pane__hint" aria-hidden="true">⌘K</span>
+        <!-- The ⌘K hint that used to sit here is gone: the title bar carries a ⌘ button now
+             (decision 54), which is the discovery path frame 2a traded away and then a better one
+             than a word in a corner. -->
         <span class="pane__footer-spacer"></span>
         <span class="pane__words" id="word-count">0 words</span>
         <span class="pane__footer-spacer"></span>
