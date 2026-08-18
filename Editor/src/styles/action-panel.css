@@ -13,19 +13,23 @@
 .actions {
   position: absolute;
   left: 50%;
-  top: 54px;
+  /* Overwritten by overlay.ts on every open and every resize; this is the floor it computes from,
+   * and the position before it has run. */
+  top: var(--overlay-top-min);
   transform: translateX(-50%);
   z-index: 11;
 
   display: flex;
   flex-direction: column;
-  width: var(--overlay-width);
-  max-width: calc(100% - 32px);
+  /* A maximum, not a width — see `--overlay-margin-x`. `max-width: calc(100% - 32px)` was the old
+   * concession to a narrow pane and far too small a one: it only bit below 492pt, and left 16pt
+   * margins when it did. */
+  width: min(var(--overlay-width), 100% - 2 * var(--overlay-margin-x));
 
-  /* Never taller than the pane — same reasoning as the switcher's, and the same numbers: 54px down
-   * from the top, 16px of room underneath. Without it a fourteen-row panel on a short pane runs off
-   * the bottom edge and the last rows are simply unreachable. */
-  max-height: calc(100% - 54px - 16px);
+  /* Never taller than the pane — same reasoning as the switcher's, and the same tokens. Without it
+   * a fourteen-row panel on a short pane runs off the bottom edge and the last rows are simply
+   * unreachable. */
+  max-height: calc(100% - var(--overlay-top-min) - var(--overlay-gap-bottom));
 
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--overlay-blur);

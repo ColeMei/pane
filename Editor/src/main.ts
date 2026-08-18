@@ -28,6 +28,7 @@ import { Compartment, EditorState, type Extension, Prec } from "@codemirror/stat
 import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemirror/view";
 
 import { mountActionPanel } from "./action-panel";
+import { placeOverlay } from "./overlay";
 import { findHighlighting, mountFind } from "./find";
 import { caretBlankLineSlack, livePreview, scrollReporter } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
@@ -637,8 +638,28 @@ let hiddenFromCapture = false;
  *  off (decision 40). Only ever set from Swift. */
 let autoSizing = true;
 
+const actionsEl = document.getElementById("actions") as HTMLElement;
+const switcherEl = document.getElementById("switcher") as HTMLElement;
+
+/*
+ * Both overlays are placed by one calculation, whenever anything it depends on moves.
+ *
+ * Three things move it: the panel opening, its own height changing as a filter narrows the list,
+ * and the pane's height changing — which happens *after* the panel opens, because the panel reports
+ * the height it wants and Swift grows the window to it (decision 45). A `ResizeObserver` on all
+ * three is one hook instead of three call sites, and setting `top` changes no size, so it cannot
+ * feed itself.
+ */
+function placeOverlays(): void {
+  placeOverlay(switcherEl, paneEl);
+  placeOverlay(actionsEl, paneEl);
+}
+
+new ResizeObserver(placeOverlays).observe(switcherEl);
+new ResizeObserver(placeOverlays).observe(actionsEl);
+
 const actions = mountActionPanel({
-  root: document.getElementById("actions") as HTMLElement,
+  root: actionsEl,
   pane: paneEl,
   isPinned: () => paneEl.hasAttribute("data-pinned"),
   isHiddenFromCapture: () => hiddenFromCapture,
@@ -651,7 +672,7 @@ const actions = mountActionPanel({
 });
 
 const switcher = mountSwitcher({
-  root: document.getElementById("switcher") as HTMLElement,
+  root: switcherEl,
   pane: paneEl,
   onQuery: (query) => send({ type: "requestNotes", query }),
   onOpen: (filename) => send({ type: "openNote", filename }),
@@ -970,7 +991,10 @@ bannerEl.addEventListener("click", () => host.hideBanner());
 // and correct — see the note on `scheduleContentHeight`. The window's own size can never be an
 // input to how tall the content wants to be, because the width is fixed (decision 22's measure) and
 // nothing else about the note depends on the window.
-new ResizeObserver(reportDragRegions).observe(paneEl);
+new ResizeObserver(() => {
+  reportDragRegions();
+  placeOverlays();
+}).observe(paneEl);
 
 new MutationObserver(reportDragRegions).observe(titleBarEl, {
   attributes: true,

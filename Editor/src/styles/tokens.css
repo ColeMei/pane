@@ -37,6 +37,16 @@
   /* One geometry for both overlays. They are the same object in two modes, and the design drew them
    * from different frames — 460 vs 400 wide, 15px vs 14px search — which read as two components. */
   --overlay-width: 460px;
+  /* The width is a maximum now, not a width. A pane is resizable, and at the 496pt this one is
+   * actually used at, 460 left an 18pt margin either side — the panel read as wedged into the pane
+   * rather than placed in it. The reference, measured in a window of exactly that size, draws its
+   * panel 362 wide with 67pt clear on each side. */
+  --overlay-margin-x: 52px;
+  /* Placement, read by overlay.ts. `--overlay-top-min` is also spelled in Swift, as the 54 in
+   * `PaneController`'s `54 + height + 16`: it is how tall a pane the panel needs, and Swift cannot
+   * read a stylesheet. The two have to move together. */
+  --overlay-top-min: 54px;
+  --overlay-gap-bottom: 16px;
   --overlay-search-size: 15px;
   --overlay-search-padding: 13px 16px;
   --overlay-row-size: 13.5px;

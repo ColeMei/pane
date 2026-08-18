@@ -19,23 +19,24 @@
 .switcher {
   position: absolute;
   left: 50%;
-  top: 54px;
+  /* Set from overlay.ts, like the action panel's — the two are one component and are placed by one
+   * calculation. This literal is the floor and the pre-script position. */
+  top: var(--overlay-top-min);
   transform: translateX(-50%);
   z-index: 10;
 
   display: flex;
   flex-direction: column;
-  width: var(--overlay-width);
-  max-width: calc(100% - 32px);
+  width: min(var(--overlay-width), 100% - 2 * var(--overlay-margin-x));
 
   /* Never taller than the pane it is drawn inside.
    *
    * The list's own `--switcher-max-height` is an absolute cap and says nothing about the window it
    * has to fit in, so on a short pane the panel simply ran off the bottom edge — the last row cut in
    * half by the pane's own rounded corner. The pane grows to make room (decision 40), but it cannot
-   * grow past the screen, and it was never obliged to grow this far in the first place. 54px is the
-   * offset from the top, 16px the breathing room under it. */
-  max-height: calc(100% - 54px - 16px);
+   * grow past the screen, and it was never obliged to grow this far in the first place. The tokens
+   * are the same two the placement uses: the minimum offset from the top, and the room under it. */
+  max-height: calc(100% - var(--overlay-top-min) - var(--overlay-gap-bottom));
 
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--overlay-blur);
