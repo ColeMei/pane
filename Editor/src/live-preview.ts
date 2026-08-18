@@ -345,6 +345,18 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         if (name === "ListMark") {
+          // The literal indentation in front of the marker goes away with it.
+          //
+          // Indent comes from the nesting depth (see `pane-line-li-N`), and the two spaces per level
+          // in the buffer were being *rendered as well* — so a second-level bullet sat a space-width
+          // right of where the stylesheet put it, a third-level one two space-widths, and the error
+          // compounded with depth. Level one was right, which is why this survived the measuring
+          // pass: it is the one level with nothing in front of the marker.
+          const lineStart = doc.lineAt(node.from);
+          if (node.from > lineStart.from) {
+            decorations.push(hide.range(lineStart.from, node.from));
+          }
+
           const text = doc.sliceString(node.from, node.to);
           const ordered = /\d/.test(text);
 
