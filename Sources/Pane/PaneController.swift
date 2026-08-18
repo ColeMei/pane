@@ -385,6 +385,22 @@ final class PaneController: NSObject {
     }
 
     private func delete(_ filename: String) {
+        // Write what is on screen before moving the file — decision 10's immediate-flush list had
+        // dismiss, blur and quit on it and not this, which made ⌃X the one action that could lose
+        // typing. Measured: type a sentence, press ⌃X inside the 500 ms debounce, and the copy that
+        // lands in Recently Deleted is the *previous* text — for a note created moments ago, a
+        // zero-length file. Decision 35 made deleting recoverable and this made it recover the wrong
+        // thing, which is worse than not being recoverable at all.
+        //
+        // Ordering is what makes this safe rather than a race: all vault I/O is one serial queue, so
+        // the write enqueued here runs to completion before the move enqueued below starts. The
+        // retry flag is cleared for the same reason — a write that lands *after* the move would put
+        // the note back in the vault, which is the same bug wearing the opposite mask.
+        if filename == currentFilename {
+            flush(trigger: .noteSwitched)
+            writeRequestedWhileWriting = false
+        }
+
         vault.delete(filename) { [weak self] ok in
             guard let self, ok else { return }
             self.state.update { $0.notes.removeValue(forKey: filename) }
