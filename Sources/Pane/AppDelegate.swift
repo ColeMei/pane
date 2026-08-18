@@ -105,6 +105,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // half-truth: every key in settings.json reloaded live except the one whose stale value is
         // most visible, and a hand-edited vaultPath silently did nothing until the next launch.
         if new.vaultURL.standardizedFileURL != currentVaultURL?.standardizedFileURL {
+            // Write what is on screen before the service points anywhere else — decision 56's rule,
+            // reached from the other direction. Without it, an edit still inside the 500 ms debounce
+            // when the vault path changes is written against the *new* folder under the old note's
+            // name, or not at all. Safe rather than a race for the same reason: vault I/O is one
+            // serial queue, so this write runs with the old location before `setVault` changes it.
+            pane?.flush(trigger: .noteSwitched)
             currentVaultURL = new.vaultURL
             vault?.setVault(new.vaultURL)
             startWatching()
@@ -131,6 +137,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(settings: settings) { [weak self] url in
                 guard let self else { return }
+                // Same as the hand-edited path above, and this is the one people actually use: the
+                // Sync radio and "Notes folder" both land here, and *Move Notes* (decision 30) moves
+                // the file the buffer is pointing at.
+                self.pane.flush(trigger: .noteSwitched)
                 self.vault.setVault(url)
                 self.startWatching()
                 self.pane.openLastUsedNote()
