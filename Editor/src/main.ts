@@ -29,6 +29,7 @@ import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemi
 
 import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
+import { describe, mountTooltips } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
@@ -264,6 +265,57 @@ let find: ReturnType<typeof mountFind> | undefined;
  * An input handler rather than a decoration, because it must change the buffer: decision 5 says what
  * is on disk is what was typed, so a checkbox the user can see has to be a checkbox on disk.
  */
+/**
+ * A new bullet takes the marker the list is already using.
+ *
+ * `-`, `*` and `+` all mean "bullet", and they all render as one here — but CommonMark treats a
+ * change of character as the *end of one list and the start of another*, so typing `* first` then
+ * `- second` produces two lists that happen to sit next to each other. The rendering gives that
+ * away (they are spaced as two blocks, decision 55) and nothing on screen explains why.
+ *
+ * So the marker is normalised to whatever the item above it uses, at the moment the space after it
+ * is typed. It edits the buffer rather than the rendering, which is the only honest place for it:
+ * decision 5 says the file is what you typed, and what you meant to type was another item in the
+ * list you were already in. Only when there is a list directly above at the same indent — the first
+ * bullet of a list is still whatever character you chose.
+ */
+function bulletInputRule(): Extension {
+  return EditorView.inputHandler.of((view, from, to, text) => {
+    if (text !== " ") return false;
+
+    const line = view.state.doc.lineAt(from);
+    const typed = /^(\s*)([-*+])$/.exec(line.text.slice(0, from - line.from));
+    if (!typed) return false;
+
+    const indent = typed[1];
+    const marker = typed[2];
+
+    // The nearest line above that is a bullet at this indent. A blank line does not end a list, so
+    // it is skipped; anything else does.
+    let above = line.number - 1;
+    let previous: string | null = null;
+    while (above >= 1) {
+      const candidate = view.state.doc.line(above);
+      if (candidate.text.trim() === "") {
+        above -= 1;
+        continue;
+      }
+      const match = new RegExp(`^${indent}([-*+])\\s`).exec(candidate.text);
+      previous = match?.[1] ?? null;
+      break;
+    }
+
+    if (!previous || previous === marker) return false;
+
+    view.dispatch({
+      changes: { from: from - 1, to, insert: previous + " " },
+      selection: { anchor: from + 1 },
+      userEvent: "input.type",
+    });
+    return true;
+  });
+}
+
 function checkboxInputRule(): Extension {
   return EditorView.inputHandler.of((view, from, to, text) => {
     if (text !== " ") return false;
@@ -535,6 +587,7 @@ function baseExtensions(): Extension[] {
     livePreview(),
     findHighlighting(),
     checkboxInputRule(),
+    bulletInputRule(),
     editorTheme,
     updateListener,
     // Enter and Backspace, above everything else.
@@ -624,6 +677,21 @@ document.getElementById("pin")!.addEventListener("click", () =>
 );
 document.getElementById("browse")!.addEventListener("click", () => toggleSwitcher());
 document.getElementById("open-actions")!.addEventListener("click", () => toggleActions());
+
+/*
+ * Every button in the pane names itself the same way (decision 58's bubble, generalised).
+ *
+ * The strings carry their shortcut, and the same string becomes the accessible name — so a button
+ * cannot advertise a key in one place and something else in another, which is the defect decisions
+ * 47 and 49 were both instances of.
+ */
+mountTooltips(paneEl);
+describe(document.getElementById("close")!, "Close");
+describe(document.getElementById("pin")!, "Unpin ⇧⌘P");
+describe(document.getElementById("open-actions")!, "Actions ⌘K");
+describe(document.getElementById("browse")!, "Notes ⌘P");
+describe(document.getElementById("new-note")!, "New note ⌘N");
+describe(document.getElementById("format-toggle")!, "Format ⌥⌘,");
 
 formatBar = mountFormatBar(
   document.getElementById("format-bar") as HTMLElement,

@@ -113,11 +113,12 @@ body {
   pointer-events: none;
 }
 
-/* The bubble naming the button under the pointer (see the note in format-bar.ts). Absolute, so it
- * cannot take part in the bar's height — which feeds `reportContentHeight`. */
-.format-bar__tip {
+/* The bubble naming whichever button the pointer is on — see tooltip.ts. One for the whole pane:
+ * title bar, footer and format bar all use it, because two tooltip vocabularies in one window is
+ * exactly what it looked like when only the format bar had one. Absolute, so it can never take part
+ * in the layout whose height the window follows. */
+.pane__tip {
   position: absolute;
-  bottom: calc(100% + 6px);
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -136,7 +137,7 @@ body {
   z-index: 8;
 }
 
-.format-bar__tip kbd {
+.pane__tip kbd {
   display: inline-flex;
   align-items: center;
   height: 17px;
