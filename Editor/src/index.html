@@ -75,6 +75,10 @@
       <!-- ⌘F. The third state of the footer row — see the note at the top of find.ts. -->
       <div class="find" id="find" role="search" aria-label="Find in note"></div>
 
+      <!-- Everything the pane holds that is not the open overlay. Covers the whole pane, takes the
+           click that would otherwise land in the note behind, and closes the overlay with it. -->
+      <div class="pane__scrim" id="overlay-scrim" aria-hidden="true"></div>
+
       <!-- ⌘P. Lives inside the pane; see the note at the top of switcher.css. -->
       <div class="switcher" id="switcher" role="dialog" aria-label="Browse notes">
         <input

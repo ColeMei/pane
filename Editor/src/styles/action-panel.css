@@ -64,6 +64,32 @@
   transition: opacity 120ms ease-out;
 }
 
+/* Everything behind an open overlay stops being clickable — and the click that says so closes it.
+ *
+ * The dim above said "this is not what you are working in" and nothing enforced it: a click landed
+ * in the note, moved the caret there and took focus out of the panel's own input, so the next
+ * keystroke was typed into the document while the panel sat over it looking like it had the
+ * keyboard. Measured on the running app: with ⌘K open, one click low in the pane and one keypress
+ * wrote a character into the note.
+ *
+ * A scrim rather than `pointer-events: none` on the content, because the click has to be *caught*
+ * rather than passed through — catching it is what lets clicking outside dismiss the overlay, which
+ * is what the reference does and the only intuition anyone brings to a panel like this.
+ *
+ * It covers the title bar too. The buttons under there open the very overlays this is dismissing,
+ * and a first click that closes the panel is a better answer than one that swaps it for another. */
+.pane__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: none;
+}
+
+.pane[data-actions] .pane__scrim,
+.pane[data-switcher] .pane__scrim {
+  display: block;
+}
+
 /* ---- Search field ------------------------------------------------------------------------------
  * The top of the panel rather than a bordered input, exactly as the switcher's is.
  */

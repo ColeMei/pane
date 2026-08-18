@@ -686,6 +686,21 @@ function toggleActions(): void {
   actions.toggle();
 }
 
+/*
+ * Clicking outside an open overlay closes it, and never reaches the note.
+ *
+ * `mousedown` rather than `click`, and prevented: by the time a click completes the browser has
+ * already moved focus, and focus leaving the panel's `<input>` is the whole bug — the editor took
+ * the caret back while the panel stayed on screen, so the next keystroke was typed into the
+ * document under it. Closing here also hands focus back to the editor, through the same
+ * `onVisibilityChange` path every other close goes through.
+ */
+document.getElementById("overlay-scrim")!.addEventListener("mousedown", (event) => {
+  event.preventDefault();
+  actions.close();
+  switcher.close();
+});
+
 /**
  * Does this keydown match a CodeMirror-style binding string — "Mod-k", "Shift-Mod-p", "Alt-Mod-,"?
  *
