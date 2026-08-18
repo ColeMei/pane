@@ -123,8 +123,21 @@ const editorTheme = EditorView.theme({
 function notifyEdited(view: EditorView): void {
   const text = view.state.doc.toString();
   wordCountEl.textContent = formatWordCount(countWords(text));
+  showTitle(view.state.doc.line(1).text);
   send({ type: "edited", text, caret: view.state.selection.main.head });
   scheduleContentHeight();
+}
+
+/**
+ * The note's name, which is its first line (decision 2), with any heading marks taken off.
+ *
+ * Follows the first line as it is typed, not only as it is loaded. That was harmless while the
+ * title bar was empty until you scrolled (decision 22) and is not now it is always there: a note
+ * created with ⌘N had no title at all until it was next opened, so the pane spent the whole of the
+ * writing sitting there unnamed.
+ */
+function showTitle(firstLine: string): void {
+  paneTitleEl.textContent = firstLine.replace(/^#+\s*/, "");
 }
 
 function formatWordCount(n: number): string {
@@ -826,7 +839,7 @@ const host = {
 
     paneEl.toggleAttribute("data-pinned", pinned);
     document.getElementById("pin")!.setAttribute("aria-pressed", String(pinned));
-    paneTitleEl.textContent = text.split("\n", 1)[0]?.replace(/^#+\s*/, "") ?? "";
+    showTitle(text.split("\n", 1)[0] ?? "");
     wordCountEl.textContent = formatWordCount(countWords(text));
     scheduleContentHeight();
   },
