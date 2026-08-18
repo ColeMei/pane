@@ -1,0 +1,40 @@
+/*
+ * Reading — a serif note, set roomier.
+ *
+ * For the notes that are prose rather than lists: meeting notes you will re-read, a draft, a letter.
+ * New York is macOS's own serif and ships with the system, so this needs no font file and falls back
+ * through Iowan and Georgia on anything that somehow lacks it.
+ *
+ * A theme is a CSS file in this folder (decision 19) — copy it, rename it, edit it. Anything in the
+ * pane can be restyled from here, but note what this file deliberately does NOT do: it never sets
+ * `--font-ui` or any other token on `:root`. Those carry the chrome as well as the note — the
+ * footer, the switcher, ⌘K — and a theme that reaches them restyles the application rather than the
+ * writing. Everything below is scoped to the editor.
+ */
+
+.cm-editor .cm-content {
+  font-family: "New York", "Iowan Old Style", Georgia, serif;
+}
+
+.cm-editor {
+  /* Serif at the same size reads smaller, and wants a little more air between lines. */
+  font-size: calc(var(--text-size) + 1px);
+  line-height: 1.5;
+}
+
+/* The rhythm the default tunes to 8px, opened up to match the looser leading. */
+.cm-line.pane-line-gap { padding-top: 11px; }
+.cm-line.pane-line-blank { height: 11px; line-height: 11px; }
+
+.cm-line.pane-line-h1,
+.cm-line.pane-line-h2,
+.cm-line.pane-line-h3 {
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+/* Code stays sans — a serif document with monospace code in it is the ordinary book convention. */
+.cm-line.pane-line-code,
+.pane-code {
+  font-size: calc(var(--size-code) - 0.5px);
+}

@@ -127,7 +127,14 @@ class TaskWidget extends WidgetType {
   }
 }
 
-/** A bullet glyph replacing `-`, `*` or `+`. Nested lists step disc → circle, per design frame 1a. */
+/**
+ * A bullet glyph replacing `-`, `*` or `+`.
+ *
+ * Three steps, disc → circle → square. Frame 1a draws the first two and the reference draws all
+ * three; a third level that reuses the second's glyph makes two different depths look like one list
+ * that has lost its indent, which is exactly when the glyph is doing its only job. Deeper than three
+ * repeats the square rather than inventing a fourth shape nobody could name.
+ */
 class BulletWidget extends WidgetType {
   constructor(readonly depth: number) {
     super();
@@ -140,7 +147,7 @@ class BulletWidget extends WidgetType {
   toDOM() {
     const dot = document.createElement("span");
     dot.className = "pane-list-marker";
-    dot.textContent = this.depth > 1 ? "◦" : "•";
+    dot.textContent = ["•", "◦", "▪"][Math.min(this.depth, 3) - 1] ?? "•";
     return dot;
   }
 }

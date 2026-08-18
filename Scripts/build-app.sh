@@ -82,6 +82,14 @@ if [[ -d "$ROOT/Resources" ]]; then
 	cp -R "$ROOT/Resources/." "$CONTENTS/Resources/"
 fi
 
+# The preset markdown themes (decision 19). They ship inside the bundle and are copied out to
+# ~/Library/Application Support/Pane/Themes the first time Pane runs, where they are ordinary files
+# the user owns and can edit or delete.
+if [[ -d "$ROOT/Themes" ]]; then
+	mkdir -p "$CONTENTS/Resources/Themes"
+	cp -R "$ROOT/Themes/." "$CONTENTS/Resources/Themes/"
+fi
+
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" \
 	"$ROOT/Scripts/Info.plist" > "$CONTENTS/Info.plist"
 

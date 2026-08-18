@@ -56,6 +56,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Decision 20's retention, enforced at the only moment it can be: Pane is not running most
         // of the time, so there is no timer that could have fired. Launch is when the clock is read.
         vault.purgeDeleted(keepingDays: settings.value.recentlyDeletedDays)
+
+        installPresetThemes()
+    }
+
+    /// Copies the bundled preset themes into the Themes folder, the first time there is no folder.
+    ///
+    /// Decision 19 says a theme is a CSS file in a folder, and the folder shipped empty — so the
+    /// mechanism existed and had nothing in it to select, which reads as a feature that does not
+    /// work rather than one waiting for you to write CSS. The presets are the worked examples.
+    ///
+    /// **Only when the folder is absent**, never file by file. A preset the user deleted is a
+    /// decision, and an app that puts it back every launch is arguing with them; a preset they
+    /// edited is theirs, and overwriting it would be worse. Absent folder means first run — or a
+    /// user who cleared it out entirely, who gets them back, which is the one case where restoring
+    /// is the friendlier reading.
+    private func installPresetThemes() {
+        let folder = settings.themesFolder
+        guard !FileManager.default.fileExists(atPath: folder.path) else { return }
+        guard let bundled = Bundle.main.resourceURL?.appendingPathComponent("Themes"),
+            let presets = try? FileManager.default.contentsOfDirectory(
+                at: bundled, includingPropertiesForKeys: nil
+            )
+        else { return }
+
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for preset in presets where preset.pathExtension == "css" {
+            try? FileManager.default.copyItem(
+                at: preset,
+                to: folder.appendingPathComponent(preset.lastPathComponent)
+            )
+        }
     }
 
     // MARK: - Settings

@@ -262,9 +262,10 @@
   border-left-color: color-mix(in oklab, var(--accent) 55%, transparent);
 }
 
-/* Nested unordered lists step disc → circle, matching frame 1a. */
-.pane-bullet-1::before { content: "•"; }
-.pane-bullet-2::before { content: "◦"; }
+/* The bullet glyphs themselves are set by `BulletWidget` in live-preview.ts, not here. Two
+ * `.pane-bullet-N::before` rules used to sit at this spot naming the characters; nothing has ever
+ * carried those classes, so they were a second, silent statement of the same thing — and they said
+ * two levels where the widget now draws three. */
 
 /* ---- Task checkboxes ---------------------------------------------------------------------------
  * 15px rounded square. Checked: accent fill, white tick, and the text greys out and strikes through.

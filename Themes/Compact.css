@@ -1,0 +1,31 @@
+/*
+ * Compact — more note in the same pane.
+ *
+ * For lists, checklists and scratch notes, where the point is to see all of it at once rather than
+ * to read it as prose. Tighter than the default on every axis: type, leading, the gap between
+ * blocks, and the step between list levels.
+ *
+ * A theme is a CSS file in this folder (decision 19) — copy it, rename it, edit it. Like the other
+ * preset, this one is scoped to the editor and never touches `:root`, so the chrome around the note
+ * stays exactly as it is: a theme restyles the writing, not the application.
+ */
+
+.cm-editor {
+  font-size: calc(var(--text-size) - 1px);
+  line-height: 1.3;
+}
+
+.cm-line.pane-line-gap { padding-top: 5px; }
+.cm-line.pane-line-blank { height: 6px; line-height: 6px; }
+
+/* Headings step down rather than shout — at this density a 25px h1 is a third of the pane. */
+.cm-line.pane-line-h1 { font-size: 20px; }
+.cm-line.pane-line-h2 { font-size: 17px; }
+.cm-line.pane-line-h3 { font-size: 15px; }
+
+/* 22px a level is right for a roomy note and wide for a dense one; 18 keeps four levels on screen. */
+.cm-line.pane-line-li { text-indent: -14px; }
+.cm-line.pane-line-li-1 { padding-left: 22px; }
+.cm-line.pane-line-li-2 { padding-left: 40px; }
+.cm-line.pane-line-li-3 { padding-left: 58px; }
+.cm-line.pane-line-li-4 { padding-left: 76px; }
