@@ -59,6 +59,13 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
   },
   {
     label: "",
+    title: "Code block ⌥⌘C",
+    custom: applyCodeBlock,
+    active: ["FencedCode"],
+    svg: `<svg width="14" height="14" viewBox="0 0 14 14"><rect x="1.2" y="2.5" width="11.6" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5 5.6L3.4 7 5 8.4M9 5.6L10.6 7 9 8.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  },
+  {
+    label: "",
     title: "Link ⌘L",
     custom: applyLink,
     active: ["Link"],
@@ -198,6 +205,28 @@ function applyLinePrefix(view: EditorView, prefix: string): void {
 }
 
 /**
+ * Wraps the selected lines in a fenced code block, or opens an empty one.
+ *
+ * Whole lines, never part of one: a fence is only a fence at the start of a line, so wrapping a
+ * selection mid-sentence would write three backticks into the middle of a paragraph and render as
+ * literal text. With no selection it opens an empty block and puts the caret inside it, which is
+ * what the button is for most of the time.
+ */
+function applyCodeBlock(view: EditorView): void {
+  const { from, to } = view.state.selection.main;
+  const first = view.state.doc.lineAt(from);
+  const last = view.state.doc.lineAt(to);
+  const body = view.state.doc.sliceString(first.from, last.to);
+
+  view.dispatch({
+    changes: { from: first.from, to: last.to, insert: "```\n" + body + "\n```" },
+    // Inside the block: past the opening fence and its newline.
+    selection: { anchor: first.from + 4 + body.length },
+    scrollIntoView: true,
+  });
+}
+
+/**
  * Sets, changes or clears the heading level of the caret's line.
  *
  * Not `applyLinePrefix("# ")`: that toggles one exact string, so going from H1 to H2 produced
@@ -251,6 +280,7 @@ export const MARKDOWN_FORMAT_KEYS: {
   { key: "Shift-Mod-s", label: "Strikethrough", run: (v) => (applyWrap(v, "~~"), true) },
   { key: "Mod-e", label: "Inline code", run: (v) => (applyWrap(v, "`"), true) },
   { key: "Mod-l", label: "Link", run: (v) => (applyLink(v), true) },
+  { key: "Alt-Mod-c", label: "Code block", run: (v) => (applyCodeBlock(v), true) },
   { key: "Shift-Mod-b", label: "Quote", run: (v) => (applyLinePrefix(v, "> "), true) },
   { key: "Shift-Mod-7", label: "Numbered list", run: (v) => (applyLinePrefix(v, "1. "), true) },
   { key: "Shift-Mod-8", label: "Bulleted list", run: (v) => (applyLinePrefix(v, "- "), true) },
@@ -287,11 +317,59 @@ export function mountFormatBar(
   /** Every button that declares an active state, so `refresh` is a walk rather than a re-query. */
   const stateful: { element: HTMLButtonElement; names: string[] }[] = [];
 
+  /*
+   * The bar names its own buttons, rather than leaving it to the system tooltip.
+   *
+   * Ten icons in a row is exactly where a `title` attribute is not good enough: it waits about a
+   * second, draws in the system's yellow, and appears wherever the pointer happens to be. The
+   * reference puts a small bubble directly above the button, immediately, with the shortcut as key
+   * caps — and that bubble is where anyone learns the shortcut for the thing they were about to
+   * click, which is the whole argument for having one.
+   *
+   * Absolutely positioned and never in the flow: the bar's height feeds `reportContentHeight`, so a
+   * bubble that took part in layout would resize the window on a mouse crossing (decision 41).
+   */
+  const tip = document.createElement("div");
+  tip.className = "format-bar__tip";
+  tip.hidden = true;
+  root.appendChild(tip);
+
+  function tipOn(button: HTMLElement, text: string): void {
+    // "Bold ⌘B" → a name and a key cap. Anything without a shortcut is just a name.
+    const match = /^(.*?)\s+([⌘⇧⌥⌃][^\s]*)$/.exec(text);
+    const name = match?.[1] ?? text;
+    const keys = match?.[2] ?? "";
+
+    const show = () => {
+      tip.innerHTML = keys ? `${escapeHtml(name)}<kbd>${escapeHtml(keys)}</kbd>` : escapeHtml(name);
+      tip.hidden = false;
+      // Centred on the button, then pulled back inside the bar at either end.
+      const bar = root.getBoundingClientRect();
+      const box = button.getBoundingClientRect();
+      const half = tip.offsetWidth / 2;
+      const centre = box.left - bar.left + box.width / 2;
+      tip.style.left = `${Math.min(Math.max(centre, half + 6), bar.width - half - 6)}px`;
+    };
+
+    button.addEventListener("mouseenter", show);
+    button.addEventListener("focus", show);
+    button.addEventListener("mouseleave", () => (tip.hidden = true));
+    button.addEventListener("blur", () => (tip.hidden = true));
+    button.addEventListener("mousedown", () => (tip.hidden = true));
+  }
+
+  function escapeHtml(text: string): string {
+    return text.replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!
+    );
+  }
+
   // The heading control is a dropdown, as the design draws it: H1, H2 and H3 with their shortcuts.
   // A single "H" button could only ever mean H1, which makes the other two levels undiscoverable.
   const heading = document.createElement("button");
   heading.className = "format-bar__heading";
-  heading.title = "Heading";
+  tipOn(heading, "Heading");
   heading.setAttribute("aria-haspopup", "true");
   heading.innerHTML = `H<svg class="format-bar__chevron" width="7" height="5" viewBox="0 0 7 5" aria-hidden="true"><path d="M0.5 1.2 3.5 4 6.5 1.2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   root.appendChild(heading);
@@ -330,8 +408,8 @@ export function mountFormatBar(
 
     const button = document.createElement("button");
     if (item.className) button.className = item.className;
-    button.title = item.title;
     button.setAttribute("aria-label", item.title);
+    tipOn(button, item.title);
     if (item.svg) button.innerHTML = item.svg;
     else button.textContent = item.label;
 
@@ -358,7 +436,7 @@ export function mountFormatBar(
 
   const close = document.createElement("button");
   close.className = "format-bar__close";
-  close.title = "Close ⌥⌘,";
+  tipOn(close, "Close ⌥⌘,");
   close.setAttribute("aria-label", "Close formatting bar");
   // A filled disc rather than a bare glyph — it reads as "dismiss this bar" rather than as one more
   // formatting button that happens to look like an ✕.

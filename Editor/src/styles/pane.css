@@ -113,6 +113,42 @@ body {
   pointer-events: none;
 }
 
+/* The bubble naming the button under the pointer (see the note in format-bar.ts). Absolute, so it
+ * cannot take part in the bar's height — which feeds `reportContentHeight`. */
+.format-bar__tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: var(--radius-button);
+  background: var(--overlay-bg);
+  -webkit-backdrop-filter: var(--overlay-blur);
+  backdrop-filter: var(--overlay-blur);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow-overlay);
+  font-size: var(--size-footer);
+  color: var(--text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.format-bar__tip kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: var(--radius-chip);
+  background: var(--fill-hover);
+  border: 1px solid var(--panel-border);
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
 .pane:not([data-hover]) .format-bar {
   opacity: 0;
   pointer-events: none;
@@ -402,6 +438,8 @@ body {
   align-items: center;
   flex: none;
   gap: 2px;
+  /* The tooltip above is positioned against this. */
+  position: relative;
   height: var(--formatbar-height);
   padding: 0 10px;
   border-top: 1px solid var(--separator);
