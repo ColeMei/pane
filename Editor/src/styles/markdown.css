@@ -109,6 +109,16 @@
   line-height: var(--blank-line-height);
 }
 
+/* The space between two blocks with no blank line between them — decision 55, applied by
+ * live-preview.ts to the line that opens the block.
+ *
+ * Padding rather than margin for the reason spelled out on the headings above: CodeMirror measures
+ * a line's height from its bounding rect, which margins are not part of, so a margin here would be
+ * invisible to every height decision the pane makes (decisions 40 and 44). */
+.cm-line.pane-line-gap {
+  padding-top: var(--block-gap);
+}
+
 /* A fenced block's ``` lines, collapsed into the block's own padding.
  *
  * Pane ships no syntax highlighting and no language picker, so the `python` after the backticks is a
@@ -139,9 +149,14 @@
   /* The design's h1 inherits the content block's 1.55; tightened here because a two-line heading at
    * 1.55 looks unset next to 15px body. */
   line-height: 1.25;
-  /* Bottom margin only. The gap *above* a heading is the blank line the user typed; adding a top
-   * margin to it was half of why every section break was twice the reference's. */
-  margin: 0 0 4px;
+  /* No margin and no padding of its own any more. A heading is spaced like every other block now:
+   * the blank line under it if the user typed one, `--block-gap` if they did not (decision 55), so
+   * both cases land at the same 8px and a heading cannot drift from the rhythm around it.
+   *
+   * The 4px bottom margin this used to carry was also a 4px lie per heading. CodeMirror measures a
+   * line by its `getBoundingClientRect()`, which excludes margins: measured, a 10px top margin on
+   * every line grew the DOM by 410px and left `view.contentHeight` unchanged, so the pane reports a
+   * height short of the note it is drawing. Anything spatial on a `.cm-line` has to be padding. */
 }
 
 .cm-line.pane-line-h1 { font-size: var(--size-h1); }
@@ -152,16 +167,21 @@
  * those in a proportional font gives about 4px a level where the design draws 22-26px.
  *
  * The negative text-indent is a hanging indent: a list item that wraps lines up under its own text
- * rather than back under its bullet. Each level's padding carries that 14px back.
- */
+ * rather than back under its bullet. Each level's padding carries that 16px back.
+ *
+ * The *step* between levels was always right — 22px, and the reference measures 22 too. What was
+ * wrong was where the first level starts: our level-1 marker sat 18px right of the paragraph margin
+ * against the reference's 6.5, so the whole list was pushed across the pane and every level after it
+ * inherited the offset. Measured on the same note at the same width, marker/text: ours 46/60,
+ * 68/82, 90/104; the reference's 31/47, 54/68, 76/91. Twelve points came off each level. */
 .cm-line.pane-line-li {
-  text-indent: -14px;
+  text-indent: -16px;
 }
 
-.cm-line.pane-line-li-1 { padding-left: 38px; }  /* 24 + 14 */
-.cm-line.pane-line-li-2 { padding-left: 60px; }  /* 46 + 14 */
-.cm-line.pane-line-li-3 { padding-left: 82px; }  /* 68 + 14 */
-.cm-line.pane-line-li-4 { padding-left: 104px; } /* 90 + 14 */
+.cm-line.pane-line-li-1 { padding-left: 26px; }  /* 10 + 16 */
+.cm-line.pane-line-li-2 { padding-left: 48px; }  /* 32 + 16 */
+.cm-line.pane-line-li-3 { padding-left: 70px; }  /* 54 + 16 */
+.cm-line.pane-line-li-4 { padding-left: 92px; }  /* 76 + 16 */
 
 .cm-line.pane-line-code {
   font-family: var(--font-mono);

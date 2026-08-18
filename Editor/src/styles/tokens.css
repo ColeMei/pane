@@ -160,14 +160,24 @@
   /* Body size is a setting (Settings.textSize, default 15). Swift overrides this custom property on
    * the root, so everything scaled off it follows. */
   --text-size: 15px;
-  /* 1.55 in the design record, tightened one notch: the design's frames are a rendered document,
-   * where blank lines have collapsed into margins. Here every blank line the user typed is still a
-   * line box, so the same leading reads as noticeably airier than the frames look. */
-  --line-height: 1.5;
+  /* 1.55 in the design record, tightened twice. The design's frames are a rendered document, where
+   * blank lines have collapsed into margins; here every blank line the user typed is still a line
+   * box, so the same leading reads as noticeably airier than the frames look. The second notch came
+   * from measuring the reference on the same note at the same width: 20pt between wrapped lines
+   * against our 22, and the difference is most of why ours read as loose inside a block and tight
+   * between blocks. 1.35 × 15px = 20.25. */
+  --line-height: 1.35;
   /* An empty source line's box. Live preview keeps the blank line the user typed — it is in the
    * buffer and the caret goes in it — but drawing it at a full 22px put about twice the reference's
    * air between every pair of blocks. See the revision note in markdown.css. */
-  --blank-line-height: 10px;
+  --blank-line-height: 8px;
+
+  /* The gap above a block that has no blank line before it — a list item under its sibling, a list
+   * under the sentence introducing it (decision 55). Measured off the reference: 28pt between the
+   * tops of two sibling items against 20pt inside one, so 8pt of separation. With a blank line the
+   * gap is that line instead, which is why this and `--blank-line-height` are the same number: two
+   * blocks land 28pt apart whether or not the user pressed Return twice. */
+  --block-gap: 8px;
 
   --size-h1: 25px;
   --size-title: 13.5px;   /* switcher row title */

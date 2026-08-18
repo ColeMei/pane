@@ -79,6 +79,16 @@ const hide = Decoration.replace({});
 /** A rule spans its whole line, so it is drawn on the line box rather than on the three characters. */
 const ruleLine = Decoration.line({ class: "pane-rule" });
 const blankLine = Decoration.line({ class: "pane-line-blank" });
+
+/**
+ * The space between two blocks the user did not separate with a blank line — decision 55.
+ *
+ * A tight list has no blank lines in it, so every item sat exactly one line-height below the last
+ * and a five-item list read as one paragraph with bullets in it. The reference puts 8pt between
+ * sibling items and between any two blocks; where the user *has* typed a blank line, that line is
+ * already the gap (decision 22) and this stays out of the way.
+ */
+const gapLine = Decoration.line({ class: "pane-line-gap" });
 const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
@@ -161,6 +171,29 @@ function activeLines(view: EditorView): Set<number> {
   return lines;
 }
 
+/**
+ * Markdown's "leaf blocks" — the constructs that hold text rather than other blocks.
+ *
+ * A `ListItem` is not one: the paragraph *inside* it is, which is what makes this usable for
+ * spacing. Every line belongs to exactly one of these, and the line it starts on is the line that
+ * opens a new block.
+ */
+const LEAF_BLOCKS = new Set([
+  "Paragraph",
+  "ATXHeading1",
+  "ATXHeading2",
+  "ATXHeading3",
+  "ATXHeading4",
+  "ATXHeading5",
+  "ATXHeading6",
+  "SetextHeading1",
+  "SetextHeading2",
+  "FencedCode",
+  "CodeBlock",
+  "HorizontalRule",
+  "Table",
+]);
+
 /** Nesting depth of a list item, for choosing the bullet glyph. */
 function listDepth(view: EditorView, pos: number): number {
   let depth = 0;
@@ -182,6 +215,12 @@ function buildDecorations(view: EditorView): DecorationSet {
   /// their empty lines at full height.
   const codeLines = new Set<number>();
 
+  /// Line numbers a block begins on, for the gap above it (decision 55). Collected here rather than
+  /// resolved per line: a list line's innermost node at its own start offset is the ListMark, and no
+  /// amount of walking *up* from there reaches the paragraph inside the item, which is the block that
+  /// actually starts there. The traversal below passes through every one of them anyway.
+  const blockStarts = new Set<number>();
+
   // Only the visible ranges. A 3,000-word note must not be fully decorated to draw one screen —
   // that cost lands on every keystroke, and it is where these editors get slow.
   for (const { from, to } of view.visibleRanges) {
@@ -192,6 +231,11 @@ function buildDecorations(view: EditorView): DecorationSet {
         const name = node.name;
         const lineNumber = doc.lineAt(node.from).number;
         const isActive = active.has(lineNumber);
+
+        // `ListItem` as well as the leaf blocks, because a task item has no `Paragraph` inside it —
+        // its text hangs directly off the item — so `- [ ] one` / `- [x] two` were the one kind of
+        // list that got no separation while every other list did.
+        if (LEAF_BLOCKS.has(name) || name === "ListItem") blockStarts.add(lineNumber);
 
         if (name === "HorizontalRule") {
           // A line decoration, so the rule spans the pane instead of underlining three characters.
@@ -355,6 +399,14 @@ function buildDecorations(view: EditorView): DecorationSet {
       // put a notch in the block's left edge.
       if (line.length === 0 && !codeLines.has(n) && !active.has(n)) {
         decorations.push(blankLine.range(line.from));
+        continue;
+      }
+
+      // The gap above a block the user did not separate with a blank line — decision 55. Only where
+      // there is no blank line to do the job, so nothing the user typed is ever double-counted, and
+      // never at the top of the document, where there is nothing to be separated from.
+      if (n > 1 && doc.line(n - 1).length > 0 && blockStarts.has(n)) {
+        decorations.push(gapLine.range(line.from));
       }
     }
   }
