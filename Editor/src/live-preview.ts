@@ -218,6 +218,17 @@ function buildDecorations(view: EditorView): DecorationSet {
   const active = activeLines(view);
   const tree = syntaxTree(view.state);
 
+  /// The selection itself, for constructs that reveal on the *caret* rather than on the line —
+  /// decision 57. Empty while unfocused, for the same reason `activeLines` is empty then.
+  const selections = view.hasFocus ? view.state.selection.ranges : [];
+  const touches = (from: number, to: number) =>
+    selections.some((range) => range.from <= to && range.to >= from);
+
+  /// Every inline construct met so far and whether the selection is inside it. The tree is walked
+  /// depth-first, so a construct is always entered before its own markers: by the time a mark is
+  /// reached, the answer for the thing it belongs to is already here.
+  const inlineRanges: { from: number; to: number; revealed: boolean }[] = [];
+
   /// Line numbers inside a fenced or indented code block, so the blank-line pass below can leave
   /// their empty lines at full height.
   const codeLines = new Set<number>();
@@ -310,9 +321,16 @@ function buildDecorations(view: EditorView): DecorationSet {
           return;
         }
 
+        // An inline construct goes raw when the selection is *inside it*, not when it is anywhere
+        // on the line (decision 57). Putting the caret at the end of a paragraph used to strip the
+        // styling off every bold word in it and put four asterisks back on screen.
         const inlineClass = INLINE_STYLE[name];
-        if (inlineClass && !isActive) {
-          decorations.push(Decoration.mark({ class: inlineClass }).range(node.from, node.to));
+        if (inlineClass) {
+          const revealed = touches(node.from, node.to);
+          inlineRanges.push({ from: node.from, to: node.to, revealed });
+          if (!revealed) {
+            decorations.push(Decoration.mark({ class: inlineClass }).range(node.from, node.to));
+          }
           return;
         }
 
@@ -356,7 +374,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         if (MARKER_NODES.has(name)) {
-          if (isActive) {
+          // A mark follows whatever it belongs to. Inside an inline construct that is the construct
+          // — the `**` appear with the caret and stay hidden while it is elsewhere on the line. A
+          // block's marks — a heading's hashes, a quote's `>`, a fence and its language — keep the
+          // line rule, because they sit at the start of the line rather than inside the sentence,
+          // and they are how you change what kind of block you are standing in.
+          const owner = inlineRanges.find((r) => r.from <= node.from && r.to >= node.to);
+          if (owner ? owner.revealed : isActive) {
             // Revealed, but muted, so the line reads as text rather than as punctuation.
             decorations.push(syntaxMark.range(node.from, node.to));
           } else if (node.to > node.from) {
