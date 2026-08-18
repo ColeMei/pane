@@ -203,6 +203,20 @@
 .pane-strong { font-weight: 700; color: var(--text-strong); }
 .pane-em { font-style: italic; }
 
+/* `==highlight==` and `<u>underline</u>` — decision 61. The highlight is the accent at a wash
+ * rather than a yellow: this is the one colour the pane already owns, and a felt-tip yellow over a
+ * neutral note is somebody else's design. */
+.pane-mark {
+  background: color-mix(in oklab, var(--accent) 26%, transparent);
+  border-radius: 2px;
+  padding: 1px 0;
+}
+
+.pane-underline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .pane-strike {
   text-decoration: line-through;
   color: var(--text-quaternary);

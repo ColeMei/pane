@@ -53,6 +53,18 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
   },
   SEPARATOR,
   {
+    label: "U",
+    title: "Underline ⌘U",
+    className: "format-bar__underline",
+    custom: (view: EditorView) => applyWrapPair(view, "<u>", "</u>"),
+  },
+  {
+    label: "",
+    title: "Highlight ⇧⌘M",
+    custom: (view: EditorView) => applyWrap(view, "=="),
+    svg: `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 9.4l4.9-4.9a1.4 1.4 0 0 1 2 0l.6.6a1.4 1.4 0 0 1 0 2L5.6 12H3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M2 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  },
+  {
     label: "</>",
     title: "Inline code ⌘E",
     className: "format-bar__code",
@@ -176,6 +188,33 @@ function applyWrap(view: EditorView, marker: string): void {
   view.focus();
 }
 
+/**
+ * Wraps the selection in a pair that is not the same at both ends — `<u>` … `</u>`.
+ *
+ * `applyWrap` above takes one marker and uses it twice, which every markdown construct but this one
+ * allows. Toggling off is the same test in two halves: text already wrapped in the pair loses it.
+ */
+function applyWrapPair(view: EditorView, open: string, close: string): void {
+  const { from, to } = view.state.selection.main;
+  const selected = view.state.doc.sliceString(from, to);
+
+  if (selected.startsWith(open) && selected.endsWith(close) && selected.length > open.length + close.length) {
+    const inner = selected.slice(open.length, selected.length - close.length);
+    view.dispatch({
+      changes: { from, to, insert: inner },
+      selection: { anchor: from, head: from + inner.length },
+    });
+    return;
+  }
+
+  view.dispatch({
+    changes: { from, to, insert: open + selected + close },
+    selection: selected
+      ? { anchor: from + open.length, head: from + open.length + selected.length }
+      : { anchor: from + open.length },
+  });
+}
+
 function applyLinePrefix(view: EditorView, prefix: string): void {
   const { from, to } = view.state.selection.main;
   const doc = view.state.doc;
@@ -282,6 +321,8 @@ export const MARKDOWN_FORMAT_KEYS: {
   { key: "Shift-Mod-s", label: "Strikethrough", run: (v) => (applyWrap(v, "~~"), true) },
   { key: "Mod-e", label: "Inline code", run: (v) => (applyWrap(v, "`"), true) },
   { key: "Mod-l", label: "Link", run: (v) => (applyLink(v), true) },
+  { key: "Mod-u", label: "Underline", run: (v) => (applyWrapPair(v, "<u>", "</u>"), true) },
+  { key: "Shift-Mod-m", label: "Highlight", run: (v) => (applyWrap(v, "=="), true) },
   { key: "Alt-Mod-c", label: "Code block", run: (v) => (applyCodeBlock(v), true) },
   { key: "Shift-Mod-b", label: "Quote", run: (v) => (applyLinePrefix(v, "> "), true) },
   { key: "Shift-Mod-7", label: "Numbered list", run: (v) => (applyLinePrefix(v, "1. "), true) },

@@ -107,5 +107,13 @@ func runMarkdownExportTests() {
             let html = MarkdownExport.html(from: "x", title: "a <b> & c", accent: "#c98a1f")
             Check.expect(html.contains("<title>a &lt;b&gt; &amp; c</title>"))
         }
+
+        Check.test("highlight and underline survive the round trip") {
+            let html = MarkdownExport.html(from: "==lit up== and <u>underlined</u>\n", title: "t", accent: "#c98a1f")
+            Check.expect(html.contains("<mark>lit up</mark>"), "got \(html)")
+            Check.expect(html.contains("<u>underlined</u>"), "got \(html)")
+            Check.expect(!html.contains("&lt;u&gt;"), "the tags were escaped: \(html)")
+        }
+
     }
 }

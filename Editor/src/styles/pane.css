@@ -465,6 +465,13 @@ body {
   font-size: 13.5px;
 }
 
+/* The U reads as underline only if it is underlined — the S beside it has strikethrough for the
+ * same reason. */
+.format-bar__underline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .format-bar button:hover {
   background: var(--fill-hover);
 }

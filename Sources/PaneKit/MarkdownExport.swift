@@ -48,6 +48,8 @@ public enum MarkdownExport {
                font: .88em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
         pre { background: var(--fill); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
         pre code { background: none; padding: 0; }
+        mark { background: color-mix(in oklab, var(--accent) 26%, transparent); border-radius: 2px; }
+        u { text-underline-offset: 2px; }
         blockquote { border-left: 3px solid var(--accent); margin-left: 0; padding-left: 1em;
                      color: var(--muted); }
         hr { border: 0; border-top: 1px solid var(--rule); margin: 2em 0; }
@@ -313,6 +315,17 @@ public enum MarkdownExport {
             return nil
         }
 
+        /// Where a literal closing tag starts, searching forward from `start`.
+        func openingTag(closing tag: String, from start: Int) -> Int? {
+            let needle = Array(tag)
+            var j = start
+            while j + needle.count <= chars.count {
+                if Array(chars[j..<(j + needle.count)]) == needle { return j }
+                j += 1
+            }
+            return nil
+        }
+
         while i < chars.count {
             let c = chars[i]
 
@@ -336,6 +349,28 @@ public enum MarkdownExport {
                let close = closing("~", from: i + 2, width: 2) {
                 out += "<s>\(inline(String(chars[(i + 2)..<close])))</s>"
                 i = close + 2
+                continue
+            }
+
+            // `==highlight==` (decision 61). Not CommonMark, but it is what Obsidian, Bear and
+            // Typora all read, and decision 37's rule is that this renderer supports the live
+            // preview's construct list exactly — no more, and no less.
+            if c == "=", i + 1 < chars.count, chars[i + 1] == "=",
+               i + 2 < chars.count, !chars[i + 2].isWhitespace,
+               let close = closing("=", from: i + 2, width: 2),
+               close > i + 2, !chars[close - 1].isWhitespace {
+                out += "<mark>\(inline(String(chars[(i + 2)..<close])))</mark>"
+                i = close + 2
+                continue
+            }
+
+            // `<u>underline</u>`, the one piece of HTML the editor writes. Passed through rather
+            // than escaped — escaping it would export the tags as visible text, which is the exact
+            // failure decision 37 calls "a file disagreeing with what you saw".
+            if c == "<", chars.count - i >= 3, String(chars[i..<(i + 3)]) == "<u>",
+               let close = openingTag(closing: "</u>", from: i + 3) {
+                out += "<u>\(inline(String(chars[(i + 3)..<close])))</u>"
+                i = close + 4
                 continue
             }
 

@@ -93,6 +93,33 @@ const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
 
+/**
+ * Two constructs the markdown parser has no node for — decision 61.
+ *
+ * `==highlight==` is not CommonMark (Obsidian, Bear and Typora all read it) and `<u>underline</u>`
+ * is markdown's escape hatch rather than markdown, so neither arrives as a tree node and both are
+ * matched on the text instead. That is only safe because the match is anchored to a whole line and
+ * checked against the tree afterwards: a `==` inside code is code, not a highlight.
+ */
+const TEXT_CONSTRUCTS: { pattern: RegExp; open: number; close: number; class: string }[] = [
+  // No space just inside the delimiters, the same rule `**bold**` follows — without it a line like
+  // "a total of == two == equals" was a highlight containing the word "two".
+  { pattern: /==(?!\s)([^=\n]+?)(?<!\s)==/g, open: 2, close: 2, class: "pane-mark" },
+  { pattern: /<u>(.+?)<\/u>/g, open: 3, close: 4, class: "pane-underline" },
+];
+
+/** Is this offset inside code, where a `==` is two equals signs and nothing more? */
+function insideCode(view: EditorView, pos: number): boolean {
+  let node = syntaxTree(view.state).resolveInner(pos, 1);
+  while (node.parent) {
+    if (node.name === "InlineCode" || node.name === "FencedCode" || node.name === "CodeBlock") {
+      return true;
+    }
+    node = node.parent;
+  }
+  return false;
+}
+
 /** A rendered ordered-list number: `1.` as the reader sees it, not as raw syntax. */
 const numberMark = Decoration.mark({ class: "pane-list-number" });
 
@@ -443,6 +470,33 @@ function buildDecorations(view: EditorView): DecorationSet {
       if (line.length === 0 && !codeLines.has(n) && !active.has(n)) {
         decorations.push(blankLine.range(line.from));
         continue;
+      }
+
+      // `==highlight==` and `<u>underline</u>`, which the parser does not know about (decision 61).
+      // Same reveal rule as every other inline construct: markers show when the selection is inside
+      // this one, and stay hidden when it is elsewhere on the line (decision 57).
+      if (!codeLines.has(n)) {
+        for (const construct of TEXT_CONSTRUCTS) {
+          construct.pattern.lastIndex = 0;
+          let match: RegExpExecArray | null;
+          while ((match = construct.pattern.exec(line.text)) !== null) {
+            const from = line.from + match.index;
+            const to = from + match[0].length;
+            if (insideCode(view, from + 1)) continue;
+
+            const inner = { from: from + construct.open, to: to - construct.close };
+            if (touches(from, to)) {
+              decorations.push(syntaxMark.range(from, inner.from));
+              decorations.push(syntaxMark.range(inner.to, to));
+            } else {
+              decorations.push(hide.range(from, inner.from));
+              decorations.push(
+                Decoration.mark({ class: construct.class }).range(inner.from, inner.to)
+              );
+              decorations.push(hide.range(inner.to, to));
+            }
+          }
+        }
       }
 
       // The gap above a block the user did not separate with a blank line — decision 55. Only where
