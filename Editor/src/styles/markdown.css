@@ -30,7 +30,9 @@
 .cm-editor .cm-content {
   padding: var(--content-padding);
   font-family: var(--font-ui);
-  caret-color: var(--accent);
+  /* No `caret-color` here. `drawSelection` draws its own cursor element and hides the native caret
+   * with `caret-color: transparent !important`, so a value here is unreachable — it was set to the
+   * accent and computed transparent for as long as it existed. The caret below is the real one. */
 }
 
 .cm-line {
@@ -38,24 +40,34 @@
 }
 
 /* ---- Caret -----------------------------------------------------------------------------------
- * 2px, accent, 1.1s blink. The one place accent appears constantly, because it is the single most
- * interactive thing on screen.
+ * 2px, accent. The one place accent appears constantly, because it is the single most interactive
+ * thing on screen — and the reference tints its caret for the same reason.
+ *
+ * **Qualified with `.cm-editor`, and that is the whole fix.** These two declarations existed from
+ * the first commit and never once applied: CodeMirror's base theme carries
+ * `.ͼ1 .cm-cursor, .ͼ1 .cm-dropCursor { border-left: 1.2px solid black }`, which is (0,2,0) against
+ * the bare selector's (0,1,0), so the caret rendered 1px black in every build that ever shipped.
+ * Measured in a WKWebView, not reasoned about: computed `border-left-color: rgb(0, 0, 0)`,
+ * `border-left-width: 1px`. Same class of defect as decisions 47 and 49 — written down, never run.
+ * At (0,2,0) this ties the base theme and wins on order, because this stylesheet is in the document
+ * and CodeMirror's is injected ahead of it.
+ *
+ * The blink belongs to CodeMirror. It animates `.cm-cursorLayer` and restarts that animation on
+ * every keystroke, which is what keeps the caret solid while you type; a second `opacity` animation
+ * here on a 1.1s period against its 1.2s one gave two blinks beating against each other, and ours
+ * had no way to restart. Reduced motion is honoured by stopping its animation rather than by
+ * running a different one — same selector shape as its own, so it wins on order.
  */
 
-.cm-cursor,
-.cm-dropCursor {
+.cm-editor .cm-cursor,
+.cm-editor .cm-dropCursor {
   border-left: 2px solid var(--accent);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .cm-focused .cm-cursor {
-    animation: pane-caret var(--caret-blink) infinite;
+@media (prefers-reduced-motion: reduce) {
+  .cm-editor.cm-focused > .cm-scroller > .cm-cursorLayer {
+    animation: none;
   }
-}
-
-@keyframes pane-caret {
-  0%, 45% { opacity: 1; }
-  55%, 100% { opacity: 0; }
 }
 
 .cm-selectionBackground,

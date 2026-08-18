@@ -177,8 +177,6 @@
   --size-group: 11px;     /* recency band headers */
   --size-badge: 10px;     /* CURRENT */
   --size-code: 13.5px;
-
-  --caret-blink: 1.1s;
 }
 
 /*
@@ -328,8 +326,3 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --caret-blink: 0s;
-  }
-}
