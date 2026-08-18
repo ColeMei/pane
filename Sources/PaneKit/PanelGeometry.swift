@@ -14,6 +14,29 @@ public enum PanelGeometry {
     /// Gap the pane keeps from the bottom of the screen before it stops growing and scrolls instead.
     public static let bottomMargin: CGFloat = 24
 
+    /// How tall a pane has to be for an overlay of this height to sit in it properly.
+    ///
+    /// The web layer places the switcher and ⌘K at 15% of the pane's height (`overlay.ts`). On a
+    /// pane that is already tall enough that lands where the reference draws it. On one that is not,
+    /// the pane grows — and growing it to exactly `54 + panel + 16` made the two rules disagree in
+    /// the one case the panel is the whole point: the panel came up jammed against the bottom edge
+    /// with a fifth of the pane empty above it, because 54 is a *floor* for the offset and not a
+    /// design. Growing to `panel / 0.75` gives a pane whose 15%-and-10% margins the panel actually
+    /// fits between, so a grown pane looks like a tall one rather than like a shrink-wrap.
+    ///
+    /// The floor is still there for a short panel, where the proportional answer would be tighter
+    /// than the minimum margins.
+    public static func paneHeight(forOverlay panelHeight: CGFloat) -> CGFloat {
+        let proportional = panelHeight / 0.75
+        let minimum = overlayTopMinimum + panelHeight + overlayBottomMinimum
+        return (proportional > minimum ? proportional : minimum).rounded()
+    }
+
+    /// Mirrors `--overlay-top-min` and `--overlay-gap-bottom` in tokens.css. Swift cannot read the
+    /// stylesheet, so these two have to move together with it.
+    public static let overlayTopMinimum: CGFloat = 54
+    public static let overlayBottomMinimum: CGFloat = 16
+
     /// Fraction of the visible height left above the pane on first launch. Puts the pane in the top
     /// third, at roughly Spotlight's height — the position the muscle memory this product is
     /// competing with already expects.

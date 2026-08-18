@@ -148,6 +148,25 @@ func runPanelGeometryTests() {
             )
         }
 
+        Check.test("a pane grown for an overlay leaves room above and below it") {
+            let panel: CGFloat = 507   // ⌘K at fourteen rows
+            let pane = PanelGeometry.paneHeight(forOverlay: panel)
+            let top = pane * 0.15
+            Check.expect(top >= PanelGeometry.overlayTopMinimum, "top \(top)")
+            Check.expect(
+                pane - top - panel >= PanelGeometry.overlayBottomMinimum,
+                "bottom gap \(pane - top - panel)"
+            )
+        }
+
+        Check.test("a short overlay still gets the minimum margins rather than a smaller pane") {
+            let panel: CGFloat = 100
+            Check.equal(
+                PanelGeometry.paneHeight(forOverlay: panel),
+                PanelGeometry.overlayTopMinimum + panel + PanelGeometry.overlayBottomMinimum
+            )
+        }
+
         Check.test("a pane wider or taller than the new display is shrunk to fit") {
             let small = CGRect(x: 0, y: 0, width: 800, height: 500)
             let huge = CGRect(x: 4000, y: 4000, width: 1600, height: 1200)

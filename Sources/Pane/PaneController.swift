@@ -95,7 +95,10 @@ final class PaneController: NSObject {
     /// Pane height while the switcher is open: it is absolutely positioned 54 px down and can be
     /// 430 px tall, so a pane sized to a three-line note has to grow to hold it. Recorded in the
     /// brief as a gap filled during the build.
-    private static let switcherPaneHeight: CGFloat = 54 + 430 + 16
+    /// The switcher's panel is search + a list capped at `--switcher-max-height` + its footer row.
+    /// Unlike ⌘K's, this one is a constant because the cap is: a list of unknown length scrolls
+    /// rather than growing (decision 45).
+    private static let switcherPaneHeight = PanelGeometry.paneHeight(forOverlay: 54 + 430 + 34)
 
     init(vault: VaultService, state: StateStore, settings: SettingsStore) {
         self.vault = vault
@@ -828,9 +831,10 @@ extension PaneController: EditorWebViewDelegate {
 
         case .actionsOpen(let open, let height):
             actionsIsOpen = open
-            // The panel is positioned 54 px down like the switcher, and wants the same 16 px of pane
-            // below it. Its height is measured rather than assumed because filtering changes it.
-            actionsPaneHeight = open ? 54 + height + 16 : 0
+            // Its height is measured rather than assumed, because filtering changes it. What the
+            // pane grows to is not that plus two literals — see `paneHeight(forOverlay:)`, which
+            // grows to a height the placement rule in overlay.ts is happy with.
+            actionsPaneHeight = open ? PanelGeometry.paneHeight(forOverlay: height) : 0
             applyContentHeight(heightWanted)
 
         case .revealInFinder:
