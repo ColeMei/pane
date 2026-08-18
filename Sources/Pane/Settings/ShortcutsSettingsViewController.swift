@@ -82,22 +82,6 @@ final class ShortcutsSettingsViewController: NSViewController {
         footer.spacing = 8
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        // Tier 2 has to be *stated* somewhere or it is invisible: the markdown keys work, are printed
-        // nowhere else in the app, and are the ones a user reaches for first. Saying they are fixed is
-        // also the honest answer to "why can't I rebind bold?".
-        //
-        // A wrapping label with nothing bounding it takes its intrinsic width, which here is one very
-        // long line — the tab went from 540 to 993 points wide. It has to be pinned to the form's
-        // width so it wraps instead of stretching the window.
-        let markdownNote = NSTextField(
-            wrappingLabelWithString:
-                "Markdown keys are fixed: ⌘B ⌘I ⇧⌘S ⌘E ⌘L ⇧⌘B ⌥⌘C ⇧⌘7/8/9 ⌥⌘1/2/3"
-        )
-        markdownNote.font = .systemFont(ofSize: 11)
-        markdownNote.textColor = .tertiaryLabelColor
-        markdownNote.translatesAutoresizingMaskIntoConstraints = false
-        markdownNote.setContentCompressionResistancePriority(.required, for: .vertical)
-
         // Same reason as `SettingsForm.makeContentView`: anything that ties this to the container's
         // full height hands the tab view's spare space to the stack, which puts it between the
         // shortcut rows. Hug vertically, pin to the top, and let the container be taller.
@@ -106,7 +90,6 @@ final class ShortcutsSettingsViewController: NSViewController {
         let container = NSView()
         container.addSubview(rows)
         container.addSubview(footer)
-        container.addSubview(markdownNote)
 
         NSLayoutConstraint.activate([
             rows.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
@@ -117,12 +100,7 @@ final class ShortcutsSettingsViewController: NSViewController {
             footer.leadingAnchor.constraint(equalTo: rows.leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: rows.trailingAnchor),
 
-            // Width tied to the form, not to the text: this is what makes it wrap.
-            markdownNote.topAnchor.constraint(equalTo: footer.bottomAnchor, constant: 10),
-            markdownNote.leadingAnchor.constraint(equalTo: rows.leadingAnchor),
-            markdownNote.trailingAnchor.constraint(equalTo: rows.trailingAnchor),
-            container.bottomAnchor.constraint(
-                greaterThanOrEqualTo: markdownNote.bottomAnchor, constant: 20),
+            container.bottomAnchor.constraint(greaterThanOrEqualTo: footer.bottomAnchor, constant: 20),
 
             container.widthAnchor.constraint(equalToConstant: 540),
         ])
@@ -188,12 +166,6 @@ final class ShortcutsSettingsViewController: NSViewController {
 /// unmodified key is a character somebody wanted to type.
 @MainActor
 final class PaneShortcutRecorderView: HotkeyRecorderViewBase {
-
-    /// Narrower than the summon recorder, which has to hold "⌃⌥Space". These hold two or three
-    /// symbols, and at the base class's 132 points a row like Delete Note was a wide empty pill with
-    /// `⌃X` adrift in the middle of it — sixteen of those read as a column of blanks rather than as
-    /// a column of keys.
-    override var intrinsicContentSize: NSSize { NSSize(width: 84, height: 22) }
 
     var onRecord: ((String) -> Void)?
 

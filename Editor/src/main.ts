@@ -29,7 +29,7 @@ import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemi
 
 import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
-import { describe, mountTooltips } from "./tooltip";
+import { describe, hideTooltip, mountTooltips } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
@@ -992,6 +992,9 @@ const host = {
    */
   setHover(inside: boolean): void {
     paneEl.toggleAttribute("data-hover", inside);
+    // The pointer can leave a *window* without the page seeing a leave event, and the chrome it was
+    // over is about to fade out from under any tooltip naming it.
+    if (!inside) hideTooltip();
   },
 
   openSwitcher(): void {

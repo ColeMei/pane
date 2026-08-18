@@ -153,8 +153,16 @@ final class PaneController: NSObject {
 
     var isVisible: Bool { panel.isSummoned }
 
+    /// When the last toggle ran, so one press cannot be delivered twice — see the note on the menu
+    /// bar's summon item. Carbon and AppKit can both hand us the same combination while the Settings
+    /// window is frontmost, and two toggles in a row is a summon that immediately dismisses itself.
+    private var lastToggle = Date.distantPast
+
     /// The hotkey. Rule 5: a pinned pane ignores the dismiss half of it.
     func toggle() {
+        guard Date().timeIntervalSince(lastToggle) > 0.25 else { return }
+        lastToggle = Date()
+
         if isVisible {
             guard !isPinned || settings.value.dismissMode == .escapeOnly else {
                 // Pinned and already up: put the caret back rather than doing nothing, so the

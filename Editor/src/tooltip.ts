@@ -14,6 +14,8 @@
 
 let tip: HTMLElement | null = null;
 let pane: HTMLElement | null = null;
+/** Whose name is on screen, so a pointer that never crosses back out can still be noticed. */
+let named: HTMLElement | null = null;
 
 /** Splits "Bold ⌘B" into its name and its key cap. Anything without a shortcut is just a name. */
 function parse(text: string): { name: string; keys: string } {
@@ -34,6 +36,36 @@ export function mountTooltips(paneEl: HTMLElement): void {
   tip.className = "pane__tip";
   tip.hidden = true;
   paneEl.appendChild(tip);
+
+  /*
+   * `mouseleave` is not enough to take a tooltip down, and the bubble that will not go away is far
+   * worse than no bubble at all.
+   *
+   * Three ways it got stuck, all seen: the chrome dims while the pointer is on a button, and
+   * `pointer-events: none` arrives before the leave event does; the format bar opens under the
+   * pointer and replaces the button that was being hovered; and the pointer leaves the *window*
+   * quickly enough that WebKit delivers no leave at all. So the pointer moving anywhere that is not
+   * the named button takes it down, which is a condition rather than an event and cannot be missed.
+   */
+  document.addEventListener(
+    "mousemove",
+    (event) => {
+      if (!named) return;
+      const target = event.target as Node | null;
+      if (!target || !named.contains(target)) hideTooltip();
+    },
+    true
+  );
+
+  document.addEventListener("keydown", hideTooltip, true);
+  paneEl.addEventListener("mouseleave", hideTooltip);
+}
+
+/** Takes the bubble down. Also called from Swift's `setHover(false)` — the pointer can leave the
+ *  pane without the page hearing about it, because the pane is a window and not a page. */
+export function hideTooltip(): void {
+  named = null;
+  if (tip) tip.hidden = true;
 }
 
 /**
@@ -47,6 +79,7 @@ export function describe(button: HTMLElement, text: string): void {
 
   const show = () => {
     if (!tip || !pane) return;
+    named = button;
     const { name, keys } = parse(text);
     tip.innerHTML = keys ? `${escapeHtml(name)}<kbd>${escapeHtml(keys)}</kbd>` : escapeHtml(name);
     tip.hidden = false;
@@ -65,9 +98,7 @@ export function describe(button: HTMLElement, text: string): void {
     tip.style.left = `${Math.min(Math.max(centre, half + 8), paneBox.width - half - 8)}px`;
   };
 
-  const hide = () => {
-    if (tip) tip.hidden = true;
-  };
+  const hide = () => hideTooltip();
 
   button.addEventListener("mouseenter", show);
   button.addEventListener("focus", show);

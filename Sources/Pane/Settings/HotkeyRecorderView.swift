@@ -49,7 +49,10 @@ class HotkeyRecorderViewBase: NSView {
 
     // MARK: - Layout and drawing
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 132, height: 24) }
+    /// One width for every recorder in the window, summon included. It was 132 here and 84 on the
+    /// pane rows, which made the top row visibly longer than the sixteen under it — the column read
+    /// as ragged rather than as a table. 104 is what "⌃⌥Space" needs; everything else has room.
+    override var intrinsicContentSize: NSSize { NSSize(width: 104, height: 22) }
 
     override var acceptsFirstResponder: Bool { true }
 

@@ -147,6 +147,19 @@ public struct Hotkey: Codable, Equatable, Sendable, CustomStringConvertible {
 
     public var description: String { displayString }
 
+    /// The character `NSMenuItem.keyEquivalent` wants, when this combination has one.
+    ///
+    /// Only so the menu bar can draw the shortcut in AppKit's own column. Every attempt to place it
+    /// by hand — three spaces, then a right-aligned tab stop — lands short, because the column is
+    /// inset from the menu's edge by an amount the item's own text never reaches, and widening the
+    /// item widens the menu and moves the column with it. Nil for keys AppKit cannot spell (the
+    /// function keys, mostly), which fall back to a plain label.
+    public var menuKeyEquivalent: String? {
+        if keyCode == KeyCode.space { return " " }
+        guard let name = KeyCode.displayName(for: keyCode), name.count == 1 else { return nil }
+        return name.lowercased()
+    }
+
     // MARK: - Codable
 
     /// Encoded as its string form so state and settings files stay hand-editable. An unparseable

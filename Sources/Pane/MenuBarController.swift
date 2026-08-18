@@ -43,12 +43,28 @@ final class MenuBarController: NSObject {
         self.hotkey = hotkey
         menu.removeAllItems()
 
-        // The summon item carries the hotkey as a label rather than as a key equivalent: it is a
-        // global hotkey handled by Carbon, and giving the menu item the same combination would
-        // register it twice, in two systems, with different ideas about who won.
+        // The summon item's shortcut goes in AppKit's key column like every other item's.
+        //
+        // It used to be part of the title — first three spaces and the glyphs, then a right-aligned
+        // tab stop — and both landed short of the column ⌘N, ⌘P and ⌘K sit in, because that column
+        // is inset from the menu's right edge by an amount an item's own text never reaches; making
+        // the item wider widens the menu and takes the column with it. So it is a real key
+        // equivalent, and `toggle` ignores a second call within a quarter second: the combination is
+        // registered globally with Carbon (decision 9), and while Pane is frontmost — which is only
+        // ever the Settings window — both would fire for one press.
         let show = NSMenuItem(title: "Show Pane", action: #selector(showPane), keyEquivalent: "")
         show.target = self
-        show.attributedTitle = Self.title("Show Pane", shortcut: hotkey.displayString)
+        if let key = hotkey.menuKeyEquivalent {
+            show.keyEquivalent = key
+            var mask: NSEvent.ModifierFlags = []
+            if hotkey.modifiers.contains(.command) { mask.insert(.command) }
+            if hotkey.modifiers.contains(.shift) { mask.insert(.shift) }
+            if hotkey.modifiers.contains(.option) { mask.insert(.option) }
+            if hotkey.modifiers.contains(.control) { mask.insert(.control) }
+            show.keyEquivalentModifierMask = mask
+        } else {
+            show.attributedTitle = Self.title("Show Pane", shortcut: hotkey.displayString)
+        }
         menu.addItem(show)
 
         menu.addItem(action("New Note", key: "n", selector: #selector(newNote)))
@@ -89,12 +105,27 @@ final class MenuBarController: NSObject {
     }
 
     /// Right-aligned shortcut text in a menu item, for a combination that is not a key equivalent.
+    /// "Show Pane" with its hotkey in the column AppKit puts every other item's key equivalent in.
+    ///
+    /// The shortcut used to be three spaces and the glyphs, so it landed wherever the title happened
+    /// to end while ⌘N, ⌘P and ⌘K below it were right-aligned by AppKit — one item out of step in a
+    /// six-item menu. A right-aligned tab stop puts it in the same column without making it a real
+    /// key equivalent, which is what this must not become: the combination is a Carbon global hotkey
+    /// (decision 9), and registering it twice in two systems is two owners for one keypress.
     private static func title(_ text: String, shortcut: String) -> NSAttributedString {
-        let result = NSMutableAttributedString(string: text)
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [NSTextTab(textAlignment: .right, location: 240)]
+
+        let result = NSMutableAttributedString(
+            string: text, attributes: [.paragraphStyle: style]
+        )
         result.append(
             NSAttributedString(
-                string: "   \(shortcut)",
-                attributes: [.foregroundColor: NSColor.tertiaryLabelColor]
+                string: "\t\(shortcut)",
+                attributes: [
+                    .foregroundColor: NSColor.tertiaryLabelColor,
+                    .paragraphStyle: style,
+                ]
             )
         )
         return result
