@@ -59,6 +59,25 @@ export function mountTooltips(paneEl: HTMLElement): void {
 
   document.addEventListener("keydown", hideTooltip, true);
   paneEl.addEventListener("mouseleave", hideTooltip);
+  // The pointer leaving the document — which in a WKWebView means leaving the window — arrives as a
+  // mouseout with nothing to enter, and as a window blur when it lands in another app.
+  document.addEventListener("mouseout", (event) => {
+    if (!(event as MouseEvent).relatedTarget) hideTooltip();
+  });
+  window.addEventListener("blur", hideTooltip);
+
+  /*
+   * And a watchdog, because none of the above is guaranteed to arrive.
+   *
+   * The pane is a window with a transparent AppKit view over its title bar (the drag regions), so a
+   * pointer moving off a title-bar button into the strip beside it stops producing events in the
+   * page entirely — the web layer's last word on the subject is "still hovering", and the bubble
+   * stayed up until something else happened to move. `:hover` is the engine's own answer rather than
+   * our record of it, and the engine is told by AppKit even when no event reaches the page.
+   */
+  window.setInterval(() => {
+    if (named && !named.matches(":hover")) hideTooltip();
+  }, 250);
 }
 
 /** Takes the bubble down. Also called from Swift's `setHover(false)` — the pointer can leave the

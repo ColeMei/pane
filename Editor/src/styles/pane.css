@@ -137,6 +137,13 @@ body {
   z-index: 8;
 }
 
+/* `display: flex` above beats the user agent's `[hidden] { display: none }`, so without this the
+ * bubble could be told to hide and simply would not — every fix for the tooltip that would not go
+ * away was correct and had no effect. Attribute selector, so the two cannot drift apart. */
+.pane__tip[hidden] {
+  display: none;
+}
+
 .pane__tip kbd {
   display: inline-flex;
   align-items: center;
