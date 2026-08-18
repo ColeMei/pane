@@ -135,9 +135,23 @@ class BulletWidget extends WidgetType {
   }
 }
 
-/** Line numbers touched by any selection range — where raw source shows. */
+/**
+ * Line numbers touched by any selection range — where raw source shows.
+ *
+ * **Nothing is active while the editor is not focused.** The caret's line reveals its source because
+ * that is where you are working; a pane you have clicked away from is not where you are working, and
+ * a note left showing `**A research plan**` on one line reads as a rendering bug rather than as a
+ * caret. It is also what anyone comparing Pane to the reference sees first, since the reference
+ * never shows raw markup at all.
+ *
+ * This costs nothing on the way back: focus returns, the line goes raw again, and the caret is still
+ * where it was (decision 11). The heights match too — the caret's blank-line exemption below keys
+ * off the same set, so a blurred pane reports exactly the height `caretBlankLineSlack` was already
+ * subtracting, and the window does not move on blur.
+ */
 function activeLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
+  if (!view.hasFocus) return lines;
   const doc = view.state.doc;
   for (const range of view.state.selection.ranges) {
     const first = doc.lineAt(range.from).number;
@@ -367,6 +381,9 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.selectionSet ||
         update.viewportChanged ||
+        // Focus is in the list because losing it renders the whole document — see `activeLines`.
+        // Without this the raw line simply stayed raw, because nothing else about the state changed.
+        update.focusChanged ||
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
         this.decorations = buildDecorations(update.view);
