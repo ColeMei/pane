@@ -51,8 +51,9 @@ Or download the `.zip` from the [latest release](https://github.com/ColeMei/pane
 - **<kbd>⌃⌥Space</kbd>** summons and dismisses the panel — without activating the app or changing
   the menu bar. It floats above other apps, follows you between Spaces, and works over fullscreen
   apps.
-- **Live markdown**, Typora-style: headings, bold/italic/strike, inline code and code blocks, nested
-  lists, task checkboxes, links, rules, blockquotes. Raw syntax shows on the caret's line only.
+- **Live markdown**, Typora-style: headings, bold/italic/strike, underline, highlight, inline code
+  and code blocks, nested lists, task checkboxes, links, rules, blockquotes. Raw syntax shows only
+  where the caret is, so the rest of the note stays rendered while you type.
 - **<kbd>⌘P</kbd>** switcher — recency-ordered with bands, fuzzy title match, full-text search. No
   results? <kbd>⏎</kbd> makes a note titled with what you typed.
 - **<kbd>⌘K</kbd>** action panel for everything else, so the title bar stays at three icons — find in
@@ -89,7 +90,8 @@ watches and re-reads live — so editing it by hand, over SSH, or from a dotfile
 effect immediately.
 
 A **markdown theme is just a CSS file**: drop one in
-`~/Library/Application Support/Pane/Themes` and it appears in the Appearance tab.
+`~/Library/Application Support/Pane/Themes` and it appears in the Appearance tab. Two ship with the
+app — Reading, a roomier serif, and Compact — to copy and edit rather than to start from nothing.
 
 ## Privacy
 
