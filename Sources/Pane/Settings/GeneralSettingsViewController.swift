@@ -70,7 +70,6 @@ final class GeneralSettingsViewController: NSViewController {
         )
         dock.state = current.showDockIcon ? .on : .off
         form.row("Dock", dock)
-        form.hint("Adds Pane to the Dock and to ⌘Tab.")
 
         view = form.makeContentView()
     }

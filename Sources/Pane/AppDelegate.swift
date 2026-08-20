@@ -118,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if hotkey?.registered != new.summonHotkey { installHotkey() }
+        applyMenuShortcuts()
         applyDockIcon()
         applyLaunchAtLogin()
         applyMenuBarIconVisibility()
@@ -135,7 +136,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// whole release — and it retires here rather than lingering as a second way to do the same job.
     private func openSettingsWindow() {
         if settingsWindow == nil {
-            settingsWindow = SettingsWindowController(settings: settings) { [weak self] url in
+            settingsWindow = SettingsWindowController(
+                settings: settings,
+                // Before *Move Notes* moves anything, so what is on screen is written while the
+                // buffer still points at a file that exists (decision 73).
+                onWillMoveNotes: { [weak self] in self?.pane.flush(trigger: .noteSwitched) }
+            ) { [weak self] url in
                 guard let self else { return }
                 // Same as the hand-edited path above, and this is the one people actually use: the
                 // Sync radio and "Notes folder" both land here, and *Move Notes* (decision 30) moves
@@ -169,6 +175,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Decision 10's third immediate flush. Everything else is recoverable; unsaved text is not.
         pane?.flush(trigger: .quitting)
+        // And wait for it. Decision 10 lists quit as an immediate flush, but "immediate" only meant
+        // "enqueued immediately" — see `VaultService.drain`. A draft note exists nowhere but in the
+        // buffer until that write lands, which is what makes the difference load-bearing.
+        vault?.drain()
         state.save()
         watcher?.stop()
     }
@@ -410,8 +420,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let fileItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(withTitle: "New Note", action: #selector(newNote), keyEquivalent: "n").target = self
-        fileMenu.addItem(withTitle: "Browse Notes…", action: #selector(browseNotes), keyEquivalent: "p").target = self
+        newNoteItem = fileMenu.addItem(withTitle: "New Note", action: #selector(newNote), keyEquivalent: "")
+        newNoteItem?.target = self
+        browseNotesItem = fileMenu.addItem(withTitle: "Browse Notes…", action: #selector(browseNotes), keyEquivalent: "")
+        browseNotesItem?.target = self
+        applyMenuShortcuts()
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close Pane", action: #selector(closePane), keyEquivalent: "w").target = self
         fileItem.submenu = fileMenu
@@ -431,6 +444,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(editItem)
 
         NSApp.mainMenu = main
+    }
+
+    /// The two File-menu items whose keys are rebindable. See `applyMenuShortcuts`.
+    private var newNoteItem: NSMenuItem?
+    private var browseNotesItem: NSMenuItem?
+
+    /// Points the File menu at whatever New Note and Browse Notes are actually bound to.
+    ///
+    /// These were `keyEquivalent: "n"` and `"p"`, spelled here and nowhere near
+    /// `Settings.shortcutActions` — so they were the two rebindable actions that could not be
+    /// rebound. Recording a new key in the Shortcuts tab moved the editor's binding and left the
+    /// menu holding ⌘N, which means the old key kept working and the recorder could not free it.
+    /// Exactly the class of defect decisions 47 and 49 are about: a key printed in one place and
+    /// meaning something else in another.
+    private func applyMenuShortcuts() {
+        let map: [(NSMenuItem?, String)] = [
+            (newNoteItem, "newNote"),
+            (browseNotesItem, "browseNotes"),
+        ]
+        for (item, action) in map {
+            guard let item else { continue }
+            guard let combo = Settings.menuKeyEquivalent(for: settings.value.shortcut(action)) else {
+                // A binding this cannot express — the item keeps its title and loses its key rather
+                // than advertising one it does not have.
+                item.keyEquivalent = ""
+                item.keyEquivalentModifierMask = []
+                continue
+            }
+            item.keyEquivalent = combo.key
+            var mask: NSEvent.ModifierFlags = []
+            if combo.modifiers.contains(.command) { mask.insert(.command) }
+            if combo.modifiers.contains(.shift) { mask.insert(.shift) }
+            if combo.modifiers.contains(.option) { mask.insert(.option) }
+            if combo.modifiers.contains(.control) { mask.insert(.control) }
+            item.keyEquivalentModifierMask = mask
+        }
     }
 
     @objc private func newNote() {

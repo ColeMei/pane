@@ -20,6 +20,10 @@ final class StorageSettingsViewController: NSViewController {
     /// Called when the vault location changed, so the app can re-point the watcher and the index.
     var onVaultChanged: ((URL) -> Void)?
 
+    /// Called immediately before *Move Notes* touches a file, so the buffer can be written while it
+    /// still knows where it lives. See `adopt`.
+    var onWillMoveNotes: (() -> Void)?
+
     private var pathField: NSTextField!
     private var offRadio: NSButton!
     private var iCloudRadio: NSButton!
@@ -194,7 +198,19 @@ final class StorageSettingsViewController: NSViewController {
             try FileManager.default.createDirectory(
                 at: destination, withIntermediateDirectories: true
             )
-            if movingNotes { try moveNotes(from: settings.value.vaultURL, to: destination) }
+            if movingNotes {
+                // Decision 56, reached from the one direction its amendment missed.
+                //
+                // The flush that protects this path is the one `settings.update` below triggers —
+                // and it runs *after* the files have already moved, so it writes to the old vault
+                // under a name that is no longer there, `VaultIO.write` reads that as "missing" and
+                // recreates it, and you are left with a resurrected copy in the old folder holding
+                // your newest text while the moved copy is stale. Flushing first is the whole fix:
+                // the write lands in the old vault on the file that is still in it, and the move
+                // then carries it across with everything else.
+                onWillMoveNotes?()
+                try moveNotes(from: settings.value.vaultURL, to: destination)
+            }
         } catch {
             let alert = NSAlert()
             alert.messageText = "Pane could not use that folder."

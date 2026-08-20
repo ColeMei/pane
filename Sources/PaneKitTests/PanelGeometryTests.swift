@@ -177,3 +177,60 @@ func runPanelGeometryTests() {
         }
     }
 }
+
+func runPaneWidthTests() {
+    Check.suite("Width has both ends; height has one") {
+
+        // Decision 22's own argument, enforced: past the content's measure a wider pane is gutters.
+        Check.test("a drag wider than the measure is capped") {
+            Check.equal(PanelGeometry.constrainWidth(1600), PanelGeometry.maximumWidth)
+        }
+
+        Check.test("a drag narrower than the floor is lifted") {
+            Check.equal(PanelGeometry.constrainWidth(80), PanelGeometry.minimumWidth)
+        }
+
+        Check.test("anything in between is left alone") {
+            Check.equal(PanelGeometry.constrainWidth(500), 500)
+        }
+
+        // A frame remembered before the cap existed, or dragged wide on a bigger display, must not
+        // come back wider than the pane is now allowed to be.
+        Check.test("a remembered frame is narrowed on the way back") {
+            let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            let remembered = CGRect(x: 100, y: 200, width: 1600, height: 400)
+            let restored = PanelGeometry.restore(
+                remembered: remembered,
+                titleBarHeight: 40,
+                screens: [screen],
+                activeVisibleFrame: screen,
+                defaultWidth: 692,
+                defaultHeight: 400
+            )
+            Check.equal(restored.width, PanelGeometry.maximumWidth)
+            // And nothing else about it moves — "stay put" is still a rule.
+            Check.equal(restored.minX, 100)
+            Check.equal(restored.height, 400)
+        }
+
+        Check.test("a remembered frame inside the range is untouched") {
+            let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            let remembered = CGRect(x: 100, y: 200, width: 500, height: 400)
+            Check.equal(
+                PanelGeometry.restore(
+                    remembered: remembered, titleBarHeight: 40, screens: [screen],
+                    activeVisibleFrame: screen, defaultWidth: 692, defaultHeight: 400
+                ),
+                remembered
+            )
+        }
+
+        // Height keeps its floor and gains no ceiling.
+        Check.test("height is not capped") {
+            let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            let tall = PanelGeometry.clamped(
+                CGRect(x: 0, y: 0, width: 500, height: 5000), into: screen)
+            Check.equal(tall.height, screen.height - PanelGeometry.bottomMargin)
+        }
+    }
+}

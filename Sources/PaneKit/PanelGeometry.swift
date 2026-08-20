@@ -45,6 +45,29 @@ public enum PanelGeometry {
     /// Smallest pane worth showing: title bar, one line, footer.
     public static let minimumHeight: CGFloat = 120
 
+    /// Widest the pane may be dragged, and the reason is decision 22's own.
+    ///
+    /// The content has a measure — `--content-measure`, 680px — because long lines are hard to
+    /// read, so past that point a wider pane buys **gutters, not longer lines**. It was unbounded,
+    /// which meant the pane could be dragged to fill a display and show the same column of text
+    /// with several hundred points of empty material either side of it.
+    ///
+    /// 680 plus the content padding, so the widest useful pane is exactly the one where the measure
+    /// touches both edges. The reference caps its width too, and leaves height alone — height is the
+    /// axis that actually carries more note.
+    public static let maximumWidth: CGFloat = 724
+
+    /// Narrowest the pane may be. Below this the title bar's buttons and the footer's centred word
+    /// count start overlapping each other.
+    public static let minimumWidth: CGFloat = 320
+
+    /// Width into its allowed range. **Height deliberately has no equivalent**: a taller pane is
+    /// simply more note, which is the thing the pane is for, so it keeps a floor and no ceiling —
+    /// auto-sizing already stops `bottomMargin` short of the screen edge, and a drag may go past it.
+    public static func constrainWidth(_ width: CGFloat) -> CGFloat {
+        min(max(width, minimumWidth), maximumWidth)
+    }
+
     /// How much of the title bar has to remain on a screen for the pane to count as reachable.
     /// Enough to grab and drag, and to hit the close dot.
     public static let minimumReachableWidth: CGFloat = 120
@@ -126,7 +149,7 @@ public enum PanelGeometry {
     /// left the desk, the external monitor changed resolution. The pane keeps its size where it can
     /// and only shrinks if it no longer fits, because size is something the user chose.
     public static func clamped(_ frame: CGRect, into visibleFrame: CGRect) -> CGRect {
-        let w = min(frame.width, visibleFrame.width)
+        let w = min(constrainWidth(frame.width), visibleFrame.width)
         let h = min(max(frame.height, minimumHeight), visibleFrame.height - bottomMargin)
 
         // Horizontal: pull inside, favouring the left edge when the pane is wider than the screen.
@@ -164,7 +187,11 @@ public enum PanelGeometry {
             )
         }
         if isReachable(remembered, titleBarHeight: titleBarHeight, onAnyOf: screens) {
-            return remembered
+            // Width still gets clamped: a frame remembered before the cap existed, or from a wider
+            // display, would otherwise come back wider than the pane is now allowed to be.
+            let width = constrainWidth(remembered.width)
+            guard width != remembered.width else { return remembered }
+            return CGRect(x: remembered.minX, y: remembered.minY, width: width, height: remembered.height)
         }
         return clamped(remembered, into: activeVisibleFrame)
     }

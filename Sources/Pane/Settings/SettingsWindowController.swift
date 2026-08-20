@@ -20,12 +20,17 @@ final class SettingsWindowController: NSWindowController {
     private let appearance: AppearanceSettingsViewController
     private let shortcuts: ShortcutsSettingsViewController
 
-    init(settings: SettingsStore, onVaultChanged: @escaping (URL) -> Void) {
+    init(
+        settings: SettingsStore,
+        onWillMoveNotes: @escaping () -> Void,
+        onVaultChanged: @escaping (URL) -> Void
+    ) {
         self.settings = settings
         general = GeneralSettingsViewController(settings: settings)
         storage = StorageSettingsViewController(settings: settings)
         appearance = AppearanceSettingsViewController(settings: settings)
         shortcuts = ShortcutsSettingsViewController(settings: settings)
+        storage.onWillMoveNotes = onWillMoveNotes
         storage.onVaultChanged = onVaultChanged
 
         let tabs = NSTabViewController()

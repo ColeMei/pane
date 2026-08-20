@@ -90,10 +90,11 @@ public struct Settings: Codable, Equatable, Sendable {
             ("newNote", "New Note", "Mod-n", "Notes"),
             ("duplicateNote", "Duplicate Note", "Mod-d", "Notes"),
             ("browseNotes", "Browse Notes", "Mod-p", "Notes"),
-            ("navigateBack", "Back", "Mod-[", "Notes"),
-            ("navigateForward", "Forward", "Mod-]", "Notes"),
+            ("navigateBack", "Previous Note", "Mod-[", "Notes"),
+            ("navigateForward", "Next Note", "Mod-]", "Notes"),
 
             ("findInNote", "Find in Note", "Mod-f", "This note"),
+            ("findReplace", "Find and Replace", "Alt-Mod-f", "This note"),
             ("copyAsMarkdown", "Copy as Markdown", "Shift-Mod-c", "This note"),
             ("revealInFinder", "Reveal in Finder", "Alt-Mod-r", "This note"),
             ("exportNote", "Export…", "Shift-Mod-e", "This note"),
@@ -114,6 +115,37 @@ public struct Settings: Codable, Equatable, Sendable {
     public func shortcut(_ action: String) -> String {
         shortcuts[action] ?? Settings.standardShortcuts[action] ?? ""
     }
+
+    /// A CodeMirror binding string as an `NSMenuItem` key equivalent.
+    ///
+    /// The File menu carries New Note and Browse Notes so that ⌘N and ⌘P still work while the
+    /// Settings window is frontmost, and it used to spell their keys as literals — which made them
+    /// the two rebindable actions that could not actually be rebound: the Shortcuts tab moved the
+    /// editor's binding and the menu went on holding the old key. Reading the same table both
+    /// places is what stops that.
+    ///
+    /// Returns nil for a binding this cannot express, which a menu item then simply does not carry.
+    public static func menuKeyEquivalent(
+        for binding: String
+    ) -> (key: String, modifiers: Set<Modifier>)? {
+        var parts = binding.split(separator: "-").map(String.init)
+        guard let key = parts.popLast(), key.count == 1 else { return nil }
+
+        var modifiers: Set<Modifier> = []
+        for part in parts {
+            switch part.lowercased() {
+            case "ctrl", "control": modifiers.insert(.control)
+            case "alt", "option": modifiers.insert(.option)
+            case "shift": modifiers.insert(.shift)
+            case "mod", "cmd", "meta": modifiers.insert(.command)
+            default: return nil
+            }
+        }
+        return (key.lowercased(), modifiers)
+    }
+
+    /// Named here rather than as `NSEvent.ModifierFlags` so `Settings` stays free of AppKit.
+    public enum Modifier: Sendable { case command, shift, option, control }
 
     // MARK: Launch
 

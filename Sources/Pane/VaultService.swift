@@ -158,47 +158,45 @@ final class VaultService: @unchecked Sendable {
         }
     }
 
-    // MARK: - Creating and deleting
-
-    /// Creates an empty note whose filename is frozen from `title` (decision 2).
-    func create(title: String, completion: @escaping @MainActor (Result<String, any Error>) -> Void) {
-        queue.async {
-            let result: Result<String, any Error>
-            do {
-                let existing = Set(
-                    (try? VaultIO.listNotes(in: self.vaultURL))?.map(\.lastPathComponent) ?? []
-                )
-                let filename = NoteFilename.unique(title: title, date: Date(), existing: existing)
-                // A new note's body is its title line, so the file is never zero-length — an empty
-                // file is indistinguishable from a truncated one, and the vault should never contain
-                // something that looks like damage.
-                let text = title.isEmpty ? "" : title + "\n"
-                try VaultIO.write(
-                    text: text,
-                    to: self.vaultURL.appendingPathComponent(filename),
-                    expectedHash: nil
-                )
-                self.index.update(filename: filename, text: text, modified: Date())
-                result = .success(filename)
-            } catch {
-                result = .failure(error)
-            }
-            DispatchQueue.main.async { MainActor.assumeIsolated { completion(result) } }
-        }
+    /// Waits for everything already enqueued to finish. For quit, and only for quit.
+    ///
+    /// `flush` enqueues a write and returns, which is right everywhere except at the moment the
+    /// process is about to stop existing: `applicationWillTerminate` calls `flush(trigger:
+    /// .quitting)` and then returns, and whether the write ever ran was down to how long macOS
+    /// happened to take to tear the process down. That was a bounded risk while every note already
+    /// had a file — you could lose the last half-second of typing. A draft has no file at all
+    /// (see `PaneController.isDraft`), so the same race loses the whole note.
+    ///
+    /// Bounded rather than a bare `queue.sync`: `materialize` polls iCloud for up to two minutes on
+    /// this queue, and a quit that hangs for two minutes is a worse bug than the one being fixed.
+    /// Two seconds is far more than a local write needs and short enough not to read as a hang.
+    func drain(timeout: TimeInterval = 2) {
+        let finished = DispatchSemaphore(value: 0)
+        queue.async { finished.signal() }
+        _ = finished.wait(timeout: .now() + timeout)
     }
 
-    /// Copies `text` into a brand-new note and returns its filename.
+    // MARK: - Creating and deleting
+
+    /// Writes `text` into a brand-new note and hands back the name it landed under, plus the hash
+    /// of the bytes now on disk.
     ///
-    /// The copy gets its own frozen name derived from the same title, which `NoteFilename.unique`
-    /// then disambiguates — so duplicating "Standup" twice gives `…-standup-2.md` and `…-standup-3.md`
-    /// rather than anything trying to be clever about "copy of". Decision 2 freezes a name at
-    /// creation; a duplicate is a creation.
-    func duplicate(
+    /// The one place a note is created, for all three callers — ⌘N's first write, Duplicate Note,
+    /// and the switcher's "no results, press ⏎". Decision 2 freezes the filename at creation and
+    /// derives it from the note's own first line, so creation and naming are the same act and there
+    /// is no version of this that takes a title separately from the text it names.
+    ///
+    /// There used to be a second entry point, `create(title:)`, which wrote `""` whenever the title
+    /// was empty — which is what ⌘N always passed. So every note made with ⌘N was named from an
+    /// empty first line (`untitled`, for life) and started as a zero-length file, under a comment
+    /// claiming the vault should never hold one. Both are gone with the overload: nothing calls this
+    /// without text any more.
+    func create(
         text: String,
-        completion: @escaping @MainActor (Result<String, any Error>) -> Void
+        completion: @escaping @MainActor (Result<(filename: String, hash: String), any Error>) -> Void
     ) {
         queue.async {
-            let result: Result<String, any Error>
+            let result: Result<(filename: String, hash: String), any Error>
             do {
                 let existing = Set(
                     (try? VaultIO.listNotes(in: self.vaultURL))?.map(\.lastPathComponent) ?? []
@@ -208,13 +206,21 @@ final class VaultService: @unchecked Sendable {
                     date: Date(),
                     existing: existing
                 )
-                try VaultIO.write(
+                let outcome = try VaultIO.write(
                     text: text,
                     to: self.vaultURL.appendingPathComponent(filename),
                     expectedHash: nil
                 )
                 self.index.update(filename: filename, text: text, modified: Date())
-                result = .success(filename)
+                switch outcome {
+                case .written(let hash):
+                    result = .success((filename: filename, hash: hash))
+                case .conflicted:
+                    // `expectedHash` is nil, so `VaultIO.write` cannot take this branch. Spelled out
+                    // rather than force-unwrapped so that a future change to the write path fails
+                    // here instead of silently losing the hash.
+                    result = .failure(VaultError.coordination("a new note reported a conflict"))
+                }
             } catch {
                 result = .failure(error)
             }

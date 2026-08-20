@@ -14,8 +14,9 @@ import PaneKit
 @MainActor
 final class PanePanel: NSPanel {
 
-    /// Fixed width, per rule 2. Resizing is allowed but the content has its own measure, so a wider
-    /// pane buys gutters rather than longer lines.
+    /// Rule 2's width. Resizing is allowed between `PanelGeometry.minimumWidth` and
+    /// `maximumWidth` — the content has its own measure, so past that a wider pane buys gutters
+    /// rather than longer lines, and it used to be draggable to the full width of a display.
     static let defaultWidth: CGFloat = 692
     static let defaultHeight: CGFloat = 400
 
@@ -76,12 +77,17 @@ final class PanePanel: NSPanel {
         // count from colliding.
         minSize = NSSize(width: Self.minimumWidth, height: PanelGeometry.minimumHeight)
 
+        // Width is capped and height is not, which is the reference's split and the right one: past
+        // the content's measure a wider pane is gutters (see `PanelGeometry.maximumWidth`), while a
+        // taller one is simply more note. `greatestFiniteMagnitude` is `maxSize`'s own default.
+        maxSize = NSSize(width: PanelGeometry.maximumWidth, height: .greatestFiniteMagnitude)
+
         applyCollectionBehaviour(pinned: false)
     }
 
-    /// Narrowest the pane may be dragged. Below this the title bar's three buttons and the footer's
-    /// centred word count start overlapping each other.
-    static let minimumWidth: CGFloat = 320
+    /// Lives in `PanelGeometry` so the clamp and the window agree; kept here as the name the rest
+    /// of the shell already uses.
+    static var minimumWidth: CGFloat { PanelGeometry.minimumWidth }
 
     // MARK: - Spaces
 

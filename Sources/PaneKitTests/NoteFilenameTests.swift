@@ -10,6 +10,49 @@ private func at(_ iso: String) -> Date {
 }
 
 func runNoteFilenameTests() {
+    Check.suite("Naming a note from its own text") {
+
+        // Creation and naming are one act (decision 2), and the name comes from the note's first
+        // line — so these two calls composed are what every new note in the vault is named by.
+        // They used to be reachable with an empty title, which is what ⌘N always passed: the slug
+        // fell back to `untitled` and froze there for the life of the file.
+        func name(of text: String) -> String {
+            NoteFilename.unique(
+                title: MarkdownDocument.title(of: text),
+                date: at("2026-08-11T14:53:00Z"),
+                existing: [],
+                timeZone: utc
+            )
+        }
+
+        Check.test("takes the first line") {
+            Check.equal(name(of: "Standup notes\nwhat I said\n"), "2026-08-11-1453-standup-notes.md")
+        }
+
+        Check.test("reads through a heading") {
+            Check.equal(name(of: "# Standup notes\n"), "2026-08-11-1453-standup-notes.md")
+        }
+
+        Check.test("reads through inline markup") {
+            Check.equal(name(of: "**Standup** notes\n"), "2026-08-11-1453-standup-notes.md")
+        }
+
+        Check.test("reads through a list marker") {
+            Check.equal(name(of: "- Standup notes\n"), "2026-08-11-1453-standup-notes.md")
+        }
+
+        Check.test("skips blank lines to the first real one") {
+            Check.equal(name(of: "\n\n  \nStandup notes\n"), "2026-08-11-1453-standup-notes.md")
+        }
+
+        // The case that produced a whole vault of `untitled`. It is still the honest answer for a
+        // note whose first line really is unnameable — a lone emoji, say — but it is no longer what
+        // every ⌘N lands on, because a draft is not written until there is text to name it after.
+        Check.test("falls back only when the text names nothing") {
+            Check.equal(name(of: "🙂\n"), "2026-08-11-1453-untitled.md")
+        }
+    }
+
     Check.suite("Frozen filenames") {
 
         Check.test("matches the shape the brief specifies") {

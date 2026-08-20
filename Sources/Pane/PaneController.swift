@@ -82,6 +82,23 @@ final class PaneController: NSObject {
     private var isWriting = false
     private var writeRequestedWhileWriting = false
 
+    /// A note that has been asked for but not yet written — no file, no name, no state entry.
+    ///
+    /// ⌘N used to create the file immediately, and decision 2 freezes a filename at creation from
+    /// whatever the first line says at that moment. On a note that does not exist yet the first line
+    /// says nothing, so **every note anyone ever made with ⌘N was called `untitled` for life** — the
+    /// "first few words" half of the scheme had never once run — and a note started and then
+    /// abandoned left a permanent zero-length file behind it.
+    ///
+    /// Decision 2 is untouched by this: the name is still frozen at creation and still never
+    /// changes. Creation simply moves from the keystroke that asks for a note to the first write of
+    /// one, which is the first moment there is anything to name it after. It also means a note you
+    /// asked for and did not write in leaves nothing at all, which is what it should have done.
+    private var isDraft = false
+
+    /// One create in flight at a time, for `flush`'s reason: two would make two files.
+    private var isMaterialising = false
+
     // MARK: Layout
 
     private var lastContentHeight: CGFloat = PanePanel.defaultHeight
@@ -92,13 +109,15 @@ final class PaneController: NSObject {
     private var actionsIsOpen = false
     private var actionsPaneHeight: CGFloat = 0
 
-    /// Pane height while the switcher is open: it is absolutely positioned 54 px down and can be
-    /// 430 px tall, so a pane sized to a three-line note has to grow to hold it. Recorded in the
-    /// brief as a gap filled during the build.
-    /// The switcher's panel is search + a list capped at `--switcher-max-height` + its footer row.
-    /// Unlike ⌘K's, this one is a constant because the cap is: a list of unknown length scrolls
-    /// rather than growing (decision 45).
-    private static let switcherPaneHeight = PanelGeometry.paneHeight(forOverlay: 54 + 430 + 34)
+    /// Pane height while the switcher is open, measured by the panel rather than assumed here.
+    ///
+    /// This was a constant — `paneHeight(forOverlay: 54 + 430 + 34)` — and it was wrong twice over.
+    /// It fed in the 54px top offset that `paneHeight(forOverlay:)` adds for itself, and it assumed
+    /// a full 430px list whatever the vault held: ⌘P grew the pane to 691pt on a six-note vault and
+    /// left a 370pt panel floating in the middle of it. ⌘K has reported its own height since
+    /// decision 45; this is the switcher finally doing the same, which is also the last thing the
+    /// two overlays did differently.
+    private var switcherPaneHeight: CGFloat = 0
 
     init(vault: VaultService, state: StateStore, settings: SettingsStore) {
         self.vault = vault
@@ -211,6 +230,10 @@ final class PaneController: NSObject {
         applyContentHeight(heightWanted)
 
         editor.call("setFocused", [true])
+        // A summon is a new sitting with the note, and undo belongs to the sitting — see
+        // `resetHistory`. Without it ⌘Z reaches back across the dismissal and can empty a note that
+        // was written in one burst.
+        editor.call("resetHistory")
         editor.focusEditor()
 
         // Re-assert key status once the current event has finished.
@@ -226,7 +249,9 @@ final class PaneController: NSObject {
             self.editor.focusEditor()
         }
 
-        if currentFilename == nil {
+        // `isDraft` as well as the filename: a draft has no filename by design, and opening the
+        // last-used note over the top of one would throw away whatever had been typed into it.
+        if currentFilename == nil, !isDraft {
             openLastUsedNote()
         }
 
@@ -317,6 +342,17 @@ final class PaneController: NSObject {
                 self.state.update { $0.notes.removeValue(forKey: filename) }
                 self.checkVaultStillThere()
 
+                // And then open something, because a pane bound to *no* note silently throws away
+                // everything typed into it: `flush` returns at its first guard when there is no
+                // filename, so the buffer fills up, the word count rises, and not one byte is ever
+                // written. Reachable any time the last-used note is gone — deleted in the Finder
+                // while Pane was closed, or the vault re-pointed at a folder that does not have it.
+                //
+                // This terminates: the line above drops the missing note from `notes`, so the next
+                // pass picks a different one, and an empty vault ends at a draft rather than
+                // another lookup.
+                if self.currentFilename == nil, !self.isDraft { self.openLastUsedNote() }
+
             case .failed(let message):
                 self.showBanner(.problem("Could not open \(filename): \(message)"))
             }
@@ -330,6 +366,9 @@ final class PaneController: NSObject {
         // opened — a filename that turned out to be missing never reaches this line, which is what
         // keeps Back from walking onto a note that has since been deleted.
         if recordingHistory { recordVisit(filename) }
+        // Opening a real note ends any draft. The draft's own text, if it had any, was written by
+        // the `flush(trigger: .noteSwitched)` every caller of `open` runs first.
+        isDraft = false
         currentFilename = filename
         bufferText = text
         baselineHash = hash
@@ -347,19 +386,102 @@ final class PaneController: NSObject {
         if isVisible { editor.focusEditor() }
     }
 
+    /// ⌘N, and the switcher's "no results — ⏎ makes one titled with what you typed".
+    ///
+    /// With a title the note is real immediately: the user has already said what it is called, so
+    /// there is nothing to wait for. Without one — which is every ⌘N — the pane takes a draft and
+    /// the file appears at the first write. See `isDraft`.
     func createNote(title: String) {
         flush(trigger: .noteSwitched)
-        vault.create(title: title) { [weak self] result in
+        guard title.isEmpty else {
+            createNote(text: title + "\n")
+            return
+        }
+        beginDraft()
+    }
+
+    /// An empty pane pointing at nothing, ready to be typed into.
+    private func beginDraft() {
+        currentFilename = nil
+        bufferText = ""
+        baselineHash = nil
+        isDraft = true
+
+        var pane = paneState
+        pane.noteFilename = nil
+        paneState = pane
+
+        // Empty filename rather than a made-up one: the web layer reads it as "no note", so ⌃X and
+        // the pin decline rather than acting on a file that does not exist.
+        editor.call("loadNote", ["", "", 0, false])
+        hideBanner()
+        if isVisible { editor.focusEditor() }
+    }
+
+    /// Creates a note that already has its text — a duplicate, or a switcher query.
+    private func createNote(text: String) {
+        vault.create(text: text) { [weak self] result in
             guard let self else { return }
             switch result {
-            case .success(let filename):
+            case .success(let created):
                 self.currentFilename = nil        // force `open` past its no-op guard
-                self.open(filename)
+                self.open(created.filename)
             case .failure(let error):
                 self.showBanner(.problem("Could not create a note: \(error.localizedDescription)"))
                 self.checkVaultStillThere()
             }
         }
+    }
+
+    /// Turns a draft into a real note, naming it from what has been typed.
+    ///
+    /// An empty draft is deliberately not written: a note you asked for and did not write in should
+    /// leave nothing behind rather than a zero-length file whose name is frozen forever. Whitespace
+    /// counts as empty for the same reason — a stray Return is not a note.
+    private func materialiseDraft() {
+        let text = bufferText
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !isMaterialising else { return }
+        isMaterialising = true
+
+        vault.create(text: text) { [weak self] result in
+            guard let self else { return }
+            self.isMaterialising = false
+            switch result {
+            case .success(let created):
+                // A note may have been opened while the create was in flight, which makes this
+                // draft somebody else's problem — it is already on disk and no longer on screen.
+                guard self.isDraft else { return }
+                self.isDraft = false
+                self.adoptDraft(filename: created.filename, hash: created.hash)
+            case .failure(let error):
+                self.showBanner(.problem("Could not create a note: \(error.localizedDescription)"))
+                self.checkVaultStillThere()
+            }
+        }
+    }
+
+    /// Points the pane at the file a draft just became, **without reloading it**.
+    ///
+    /// Deliberately not `adopt`: the buffer is already on screen and the user is typing in it, so
+    /// sending `loadNote` would replace the document under their hands and move the caret. All that
+    /// changes here is which file the buffer belongs to.
+    private func adoptDraft(filename: String, hash: String) {
+        recordVisit(filename)
+        currentFilename = filename
+        baselineHash = hash
+
+        state.update { $0.recordOpen(filename, at: Date()) }
+        var pane = paneState
+        pane.noteFilename = filename
+        paneState = pane
+
+        editor.call("setNoteFilename", [filename])
+        onPinsChanged?()
+        refreshSwitcherIfOpen()
+
+        // Typing carried on while the create was in flight, so what is on disk is already behind.
+        if bufferHash != baselineHash { scheduleWrite() }
     }
 
     /// ⌘D. Raycast's key, carried across for the reason decision 39 gives.
@@ -369,12 +491,19 @@ final class PaneController: NSObject {
     /// 500 ms write debounce. The original is flushed first so both copies exist in full.
     private func duplicate(text: String) {
         flush(trigger: .noteSwitched)
-        vault.duplicate(text: text) { [weak self] result in
+        vault.create(text: text) { [weak self] result in
             guard let self else { return }
             switch result {
-            case .success(let filename):
+            case .success(let created):
                 self.currentFilename = nil        // force `open` past its no-op guard
-                self.open(filename)
+                self.open(created.filename)
+                // Decision 50's rule, which had only ever been applied to ⌃X: an action with a
+                // consequence that says nothing reads as "nothing happened". ⌘D is the worst case
+                // for it — the copy opens looking exactly like the note you were just in, so
+                // without this the only evidence anything happened is a filename you cannot see.
+                //
+                // One word, because that is the whole of what needs saying (decision 76).
+                self.editor.call("showToast", ["Duplicated"])
             case .failure(let error):
                 self.showBanner(.problem("Could not duplicate the note: \(error.localizedDescription)"))
                 self.checkVaultStillThere()
@@ -422,7 +551,7 @@ final class PaneController: NSObject {
             // So the message names the place rather than just confirming: ⌃X is one keystroke away
             // from ⌘X, and the answer to hitting it by accident should be on screen, not in the
             // documentation. Floating, so it costs no height (see `.pane__toast`).
-            self.editor.call("showToast", ["Note deleted — in Recently Deleted for \(self.settings.value.recentlyDeletedDays) days"])
+            self.editor.call("showToast", ["Moved to Recently Deleted"])
 
             if filename == self.currentFilename {
                 self.currentFilename = nil
@@ -453,6 +582,14 @@ final class PaneController: NSObject {
     func flush(trigger: WritePolicy.Trigger) {
         writeTimer?.cancel()
         writeTimer = nil
+
+        // A draft has no file to write to yet, so the write *is* the creation (see `isDraft`).
+        // Every trigger reaches here — typing stopped, dismiss, blur, quit, note switch — which is
+        // what makes "the file appears at the first write" true rather than aspirational.
+        if isDraft {
+            materialiseDraft()
+            return
+        }
 
         guard let filename = currentFilename else { return }
         guard bufferHash != baselineHash else { return }
@@ -489,6 +626,14 @@ final class PaneController: NSObject {
                     var pane = self.paneState
                     pane.noteFilename = sibling
                     self.paneState = pane
+
+                    // And tell the web layer, which otherwise goes on holding the *original*
+                    // filename — `loadNote` is the only thing that sets it and this path
+                    // deliberately does not reload (the buffer is already correct and reloading
+                    // would move the caret). The two layers then disagree about which file is open,
+                    // and every message that names a file is wrong: ⌃X would delete the original,
+                    // the one now holding the other machine's version, and ⇧⌘P would pin it.
+                    self.editor.call("setNoteFilename", [sibling])
                     self.showBanner(.conflict(sibling: sibling))
                 }
 
@@ -652,7 +797,7 @@ final class PaneController: NSObject {
         var wanted = paneState.autoSizing
             ? lastContentHeight
             : CGFloat(paneState.manualHeight ?? Double(lastContentHeight))
-        if switcherIsOpen { wanted = max(wanted, Self.switcherPaneHeight) }
+        if switcherIsOpen { wanted = max(wanted, switcherPaneHeight) }
         if actionsIsOpen { wanted = max(wanted, actionsPaneHeight) }
         return wanted
     }
@@ -706,10 +851,6 @@ final class PaneController: NSObject {
                 "textSize": settings.value.textSize,
                 "translucent": settings.value.translucentPanes,
                 "shortcuts": settings.value.shortcuts,
-                // So Recently Deleted can print the retention in the panel. Raycast states its 60
-                // days where the deleted notes are; ours lived only on the Storage tab, which is the
-                // one place you are not looking when you are trying to get something back.
-                "recentlyDeletedDays": settings.value.recentlyDeletedDays,
                 // Decision 19: a theme is a CSS file, so what crosses the bridge is the file's
                 // contents. Read here rather than fetched by the web layer — the page is loaded from
                 // a file URL with read access scoped to the bundle, and widening that scope to reach
@@ -739,6 +880,14 @@ final class PaneController: NSObject {
         // `settings.update` comes back through `applySettings`, but not synchronously, and the ⌘K
         // row's label is read the moment the panel next opens.
         applyHiddenFromCapture()
+
+        // The one setting in Pane whose effect is invisible *by definition* — it changes what other
+        // processes can see, so pressing ⇧⌘H changed nothing at all on screen and the only way to
+        // find out whether it had worked was to take a screenshot. Same toast as ⌃X's, decision 50.
+        editor.call(
+            "showToast",
+            [hidden ? "Hidden from screen capture" : "Visible in screen capture"]
+        )
     }
 
     // MARK: - Export
@@ -792,7 +941,7 @@ extension PaneController: EditorWebViewDelegate {
         case .ready:
             editor.markReady()
             applySettings()
-            if currentFilename == nil { openLastUsedNote() }
+            if currentFilename == nil, !isDraft { openLastUsedNote() }
 
         case .edited(let text, let caret):
             bufferText = text
@@ -833,8 +982,16 @@ extension PaneController: EditorWebViewDelegate {
             lastContentHeight = height
             applyContentHeight(heightWanted)
 
-        case .switcherOpen(let open):
+        case .switcherOpen(let open, let height):
             switcherIsOpen = open
+            // Zero on open, because the rows are a round trip away and there is nothing to measure
+            // yet; the first render sends the real one. Holding the previous value until then keeps
+            // a re-opened switcher from collapsing the pane for a frame.
+            if !open {
+                switcherPaneHeight = 0
+            } else if height > 0 {
+                switcherPaneHeight = PanelGeometry.paneHeight(forOverlay: height)
+            }
             applyContentHeight(heightWanted)
 
         case .actionsOpen(let open, let height):

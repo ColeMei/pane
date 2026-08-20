@@ -19,7 +19,10 @@ enum PaneMessage {
     case deleteNote(filename: String)
     case close
     case contentHeight(CGFloat)
-    case switcherOpen(Bool)
+    /// ⌘P opened or closed. Carries the height the list wants — measured once per opening, not
+    /// per keystroke; see `reportHeight` in switcher.ts. It used to carry only the flag, and Swift
+    /// made the height up from a constant.
+    case switcherOpen(open: Bool, height: CGFloat)
     /// ⌘K opened or closed. Carries the panel's measured height, because how tall it is depends on
     /// how many rows survived the filter — and the pane has to grow to hold it.
     case actionsOpen(open: Bool, height: CGFloat)
@@ -80,7 +83,10 @@ enum PaneMessage {
         case "contentHeight":
             self = .contentHeight(CGFloat(number("height")))
         case "switcherOpen":
-            self = .switcherOpen(dict["open"] as? Bool ?? false)
+            self = .switcherOpen(
+                open: dict["open"] as? Bool ?? false,
+                height: CGFloat(number("height"))
+            )
         case "actionsOpen":
             self = .actionsOpen(
                 open: dict["open"] as? Bool ?? false,
