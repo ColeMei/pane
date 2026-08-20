@@ -103,8 +103,12 @@
   --shadow-overlay: 0 20px 50px rgba(0, 0, 0, 0.3);
   --shadow-pane-unfocused: 0 10px 30px rgba(0, 0, 0, 0.16);
 
-  /* Fades the note out above the footer instead of letting it collide (decision 22). Matches the
-   * panel background so it reads as the surface, not as a grey band. */
+  /* The switcher's own bottom fade, and only that — the pane's is a mask now (see `.pane__content`).
+   * "Matches the panel background so it reads as the surface, not as a grey band" is what this used
+   * to claim while doing the opposite: it was tuned against the translucency-off `--panel-bg`, and
+   * when the vibrancy scrim redefined that token to 70% these were not redefined with it. The
+   * switcher panel is opaque enough that the mismatch does not read there the way it did on the
+   * pane, but it is the same mismatch and the same fix would work. */
   --fade-to: rgba(243, 243, 245, 0.95);
   --fade-from: rgba(247, 247, 249, 0);
 

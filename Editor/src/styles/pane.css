@@ -204,9 +204,29 @@ body {
  * meant a pane beside your work was usually anonymous. The reference shows it always, at this size
  * and this weight, with its own H1 right underneath — and the repetition is not what you notice.
  * Centred follows the macOS convention for a title in a title bar. */
+/* The dot and the button cluster. Both flex from a zero basis, so the leftover space is split
+ * evenly and the title sits on the window's centre — but neither shrinks below its own content, so
+ * on a narrow pane the buttons hold their size and the title gives way instead of the other way
+ * round. That is the difference between a title that truncates and one that disappears. */
+.pane__titlebar-side {
+  display: flex;
+  align-items: center;
+  gap: var(--titlebar-gap);
+  flex: 1 1 0;
+  min-width: min-content;
+}
+
+.pane__titlebar-side--right {
+  justify-content: flex-end;
+}
+
 .pane__title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  /* Never more than half the bar, so a long first line ellipsises rather than running the width of
+   * the pane — and once a line overflows its box, `text-align: center` stops having any visible
+   * effect, which is the other half of why it used to read as left-aligned. */
+  max-width: 55%;
   text-align: center;
   font-size: var(--size-footer);
   font-weight: 500;
@@ -368,11 +388,31 @@ body {
 
 /* ---- Content ---------------------------------------------------------------------------------- */
 
+/* The note fades out above the footer rather than colliding with it — by going *transparent*,
+ * not by having a gradient painted over it.
+ *
+ * It was a painted gradient (`.pane__fade`) ending at `--fade-to`, an opaque light grey chosen to
+ * match `--panel-bg`. That match held only for translucency-off, which is the value it was tuned
+ * against; when the vibrancy scrim landed, `--panel-bg` was redefined to 70% under
+ * `[data-vibrancy="on"]` and `--fade-to` was not. So the default configuration painted a
+ * 95%-opaque band over a 70% surface and the bottom of every pane read as a lighter rectangle —
+ * visible in any screenshot, and the token's own comment claimed the opposite.
+ *
+ * A mask cannot have that bug, in any combination of appearance and translucency: there is no
+ * colour to get wrong. The text simply stops being drawn and the pane's own surface — whatever it
+ * composites to over whatever is behind the window — carries on unchanged.
+ */
 .pane__content {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--fade-height)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade-height)), transparent 100%);
 }
 
 .pane__scroll {
@@ -389,15 +429,6 @@ body {
   -webkit-user-select: text;
   user-select: text;
   cursor: auto;
-}
-
-/* Content fades out above the footer rather than colliding with it. */
-.pane__fade {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: var(--fade-height);
-  background: linear-gradient(var(--fade-from), var(--fade-to));
-  pointer-events: none;
 }
 
 /* ---- Footer -----------------------------------------------------------------------------------
@@ -532,18 +563,71 @@ body {
   display: none;
 }
 
+/* Two rows, not one — and this is the one place decision 22's "one footer row, never two" gives
+ * way, because Replace has nowhere else it can go (decision 72). The search row is always the
+ * footer's height; the replace row appears under it only when the disclosure is open, so the
+ * closed bar is exactly what it always was. `.find` measures itself into `reportContentHeight`
+ * (decision 66), so the pane grows by the second row rather than clipping it. */
 .find {
   display: none;
-  align-items: center;
+  flex-direction: column;
   flex: none;
-  gap: 8px;
-  height: var(--formatbar-height);
-  padding: 0 10px;
   border-top: 1px solid var(--separator);
 }
 
 .pane[data-find] .find {
   display: flex;
+}
+
+.find__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--formatbar-height);
+  padding: 0 10px;
+}
+
+/* Hidden until the disclosure is opened. `display` is safe here, unlike anywhere in decision 41's
+ * hover chrome: this row is *meant* to change the pane's height, and it only changes it when
+ * somebody asks it to. */
+.find:not([data-replace]) .find__row--replace {
+  display: none;
+}
+
+.find__row--replace {
+  border-top: 1px solid var(--separator);
+}
+
+/* The disclosure triangle, which is the whole affordance for Replace — the same place the
+ * reference puts it. Rotates rather than swapping glyphs, so the two states are one control. */
+.find__disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button-sm);
+  background: none;
+  color: var(--text-tertiary);
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.find__disclosure:hover {
+  background: var(--fill-hover);
+}
+
+.find[data-replace] .find__disclosure {
+  transform: rotate(90deg);
+}
+
+/* The replace row's controls line up under the search row's, so the two read as one form: the
+ * input starts where the search input starts, and the buttons sit where the steppers sit. */
+.find__replace-lead {
+  flex: none;
+  width: 18px;
 }
 
 .find__icon {

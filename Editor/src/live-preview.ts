@@ -93,6 +93,9 @@ const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
 
+/** The text of a ticked task item. */
+const doneTaskText = Decoration.mark({ class: "pane-task-done-text" });
+
 /**
  * Two constructs the markdown parser has no node for — decision 61.
  *
@@ -193,6 +196,30 @@ class BulletWidget extends WidgetType {
  * off the same set, so a blurred pane reports exactly the height `caretBlankLineSlack` was already
  * subtracting, and the window does not move on blur.
  */
+/**
+ * Lines holding a **caret** — an empty selection — and nothing else.
+ *
+ * `activeLines` is every line a selection *touches*, which is right for revealing markers and wrong
+ * for anything that changes a line's height. Select the whole note and every blank line, fence and
+ * rule in it un-collapses at once: measured on a four-block note, ⌘A grew the document by 24px and
+ * pushed every paragraph down, which reads as the text jumping when you select it.
+ *
+ * Decision 44 is written in terms of "the caret's line" and that is exactly what it should have
+ * keyed off. A range selection is not a place you are standing, it is a thing you have marked, and
+ * `caretBlankLineSlack` already refuses to report slack for one — so with `activeLines` driving the
+ * collapse, the document grew and the height Swift was told did not.
+ *
+ * **The rule: height-changing reveals follow the caret; the rest follow the active line.**
+ */
+function caretLines(view: EditorView): Set<number> {
+  const lines = new Set<number>();
+  if (!view.hasFocus) return lines;
+  for (const range of view.state.selection.ranges) {
+    if (range.empty) lines.add(view.state.doc.lineAt(range.head).number);
+  }
+  return lines;
+}
+
 function activeLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
   if (!view.hasFocus) return lines;
@@ -243,6 +270,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = [];
   const doc = view.state.doc;
   const active = activeLines(view);
+  const caret = caretLines(view);
   const tree = syntaxTree(view.state);
 
   /// The selection itself, for constructs that reveal on the *caret* rather than on the line —
@@ -265,6 +293,24 @@ function buildDecorations(view: EditorView): DecorationSet {
   /// amount of walking *up* from there reaches the paragraph inside the item, which is the block that
   /// actually starts there. The traversal below passes through every one of them anyway.
   const blockStarts = new Set<number>();
+
+  /*
+   * The space between a marker and the text goes with the marker.
+   *
+   * `ListMark` covers `-` or `1.` and `QuoteMark` covers `>`, neither of which includes the space
+   * after it — so that space was rendered, about 3px of it, and pushed the first line's text right
+   * while the block's own continuation line stayed put. Every list was three pixels out of line
+   * with itself, a task list seven because it has two such spaces, and a blockquote three.
+   *
+   * The slot the marker sits in *is* the gap. A literal space on top of it is the same "two sources
+   * for one indent" that the leading indentation already had to lose.
+   */
+  const hideSpaceAfter = (at: number) => {
+    const line = doc.lineAt(at);
+    let end = at;
+    while (end < line.to && doc.sliceString(end, end + 1) === " ") end++;
+    if (end > at) decorations.push(hide.range(at, end));
+  };
 
   // Only the visible ranges. A 3,000-word note must not be fully decorated to draw one screen —
   // that cost lands on every keystroke, and it is where these editors get slow.
@@ -289,7 +335,9 @@ function buildDecorations(view: EditorView): DecorationSet {
           // it is still a real line the caret can be arrowed into, so without this exemption it is
           // a place you can stand, type, and see nothing happen. Every other construct reveals its
           // source under the caret; this one was the last that did not.
-          if (!isActive) decorations.push(ruleLine.range(doc.lineAt(node.from).from));
+          if (!caret.has(lineNumber)) {
+            decorations.push(ruleLine.range(doc.lineAt(node.from).from));
+          }
           return;
         }
 
@@ -322,8 +370,8 @@ function buildDecorations(view: EditorView): DecorationSet {
           // refuses the same treatment: blank lines are crossed constantly with the arrow keys,
           // whereas a fence is somewhere you arrive rarely and on purpose.
           if (name === "FencedCode") {
-            if (!active.has(first)) decorations.push(fenceLine.range(doc.line(first).from));
-            if (last > first && !active.has(last)) {
+            if (!caret.has(first)) decorations.push(fenceLine.range(doc.line(first).from));
+            if (last > first && !caret.has(last)) {
               decorations.push(fenceLine.range(doc.line(last).from));
             }
           }
@@ -340,11 +388,27 @@ function buildDecorations(view: EditorView): DecorationSet {
           // a third-level line ends up carrying li-1, li-2 and li-3 at once, and which indent wins is
           // then decided by stylesheet order rather than by nesting. A soft-wrapped item is still one
           // .cm-line, so nothing is lost by decorating just the first.
+          const itemFirst = doc.lineAt(node.from);
           decorations.push(
-            Decoration.line({ class: `pane-line-li pane-line-li-${depth}` }).range(
-              doc.lineAt(node.from).from
-            )
+            Decoration.line({ class: `pane-line-li-${depth}` }).range(itemFirst.from)
           );
+
+          // A ⇧⏎ inside an item makes a second line that belongs to it, and it used to get no
+          // indent at all — so "- one / two" drew `two` hard against the pane's left edge while
+          // `one` sat 26px in. It takes the item's padding without the hanging indent, which is
+          // what puts it under the text rather than under the marker.
+          const itemLast = doc.lineAt(Math.min(node.to, doc.length));
+          for (let n = itemFirst.number + 1; n <= itemLast.number; n++) {
+            const line = doc.line(n);
+            if (line.length === 0) continue;
+            decorations.push(
+              Decoration.line({ class: `pane-line-li-${depth}` }).range(line.from)
+            );
+            // And any literal indent an older note carries goes with it, for the same reason the
+            // marker line's does: two answers to one indent is one too many.
+            const spaces = /^ +/.exec(line.text)?.[0].length ?? 0;
+            if (spaces > 0) decorations.push(hide.range(line.from, line.from + spaces));
+          }
           return;
         }
 
@@ -368,6 +432,21 @@ function buildDecorations(view: EditorView): DecorationSet {
           decorations.push(
             Decoration.replace({ widget: new TaskWidget(done, node.from) }).range(node.from, node.to)
           );
+          // And the single space after `]`, which would otherwise push the text 4px past where
+          // every other list's text starts. The checkbox's own 16px slot is the gap.
+          if (doc.sliceString(node.to, node.to + 1) === " ") {
+            decorations.push(hide.range(node.to, node.to + 1));
+          }
+          // A ticked item's text greys out and strikes through. `markdown.css` has described that
+          // as the behaviour since the checkbox shipped and nothing has ever applied the class, so
+          // a done task looked exactly like an undone one apart from the box — the fifth rule in
+          // this codebase found to be stating a mechanism that never ran.
+          if (done) {
+            const line = doc.lineAt(node.from);
+            if (node.to < line.to) {
+              decorations.push(doneTaskText.range(node.to, line.to));
+            }
+          }
           return;
         }
 
@@ -387,10 +466,12 @@ function buildDecorations(view: EditorView): DecorationSet {
           const text = doc.sliceString(node.from, node.to);
           const ordered = /\d/.test(text);
 
+
           // A task item already has a checkbox standing in for its marker. Drawing a bullet as well
           // gives every to-do two markers, which is not what frame 1b shows.
           if (!isActive && /^\s*\[[ xX]\]/.test(doc.sliceString(node.to, Math.min(node.to + 6, doc.length)))) {
             decorations.push(hide.range(node.from, node.to));
+            hideSpaceAfter(node.to);
             return;
           }
 
@@ -401,6 +482,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             // meant to see and is tinted with the accent, whereas `.pane-syntax` is the muted grey
             // that marks characters only showing because the caret is on the line.
             decorations.push(numberMark.range(node.from, node.to));
+            hideSpaceAfter(node.to);
           } else {
             decorations.push(
               Decoration.replace({ widget: new BulletWidget(listDepth(view, node.from)) }).range(
@@ -408,6 +490,7 @@ function buildDecorations(view: EditorView): DecorationSet {
                 node.to
               )
             );
+            hideSpaceAfter(node.to);
           }
           return;
         }
@@ -424,6 +507,9 @@ function buildDecorations(view: EditorView): DecorationSet {
             decorations.push(syntaxMark.range(node.from, node.to));
           } else if (node.to > node.from) {
             decorations.push(hide.range(node.from, node.to));
+            // A quote's `>` takes its space with it, exactly as a list marker does — otherwise a
+            // quoted line starts 3px right of its own continuation.
+            if (name === "QuoteMark") hideSpaceAfter(node.to);
           }
         }
       },
@@ -467,7 +553,11 @@ function buildDecorations(view: EditorView): DecorationSet {
       const line = doc.line(n);
       // Inside a fenced block a blank line is content with a background, and collapsing it would
       // put a notch in the block's left edge.
-      if (line.length === 0 && !codeLines.has(n) && !active.has(n)) {
+      //
+      // An empty *document* is exempt as well, and not for rhythm: its one line carries the
+      // placeholder, and an 8px box would leave "Start writing…" spilling out of the line it is
+      // drawn in. An unfocused empty pane is exactly when that shows, because nothing is active.
+      if (doc.length > 0 && line.length === 0 && !codeLines.has(n) && !caret.has(n)) {
         decorations.push(blankLine.range(line.from));
         continue;
       }

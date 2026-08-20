@@ -70,9 +70,72 @@
   }
 }
 
-.cm-selectionBackground,
-.cm-editor ::selection {
-  background: color-mix(in oklab, var(--accent) 22%, transparent);
+/* The empty note's prompt.
+ *
+ * Qualified with `.cm-editor` for the reason the caret above is: CodeMirror's base theme carries
+ * `.ͼ1 .cm-placeholder { color: #888 }` at (0,2,0), which a bare `.cm-placeholder` loses to. At
+ * (0,2,0) this ties and wins on order. `#888` is not one of this app's greys — it reads darker than
+ * the word count beside it and heavier than a prompt should.
+ */
+.cm-editor .cm-placeholder {
+  color: var(--text-faint);
+}
+
+/* ---- Selection --------------------------------------------------------------------------------
+ * Amber, like the caret above and for the same reason — and, like the caret, this **never rendered**
+ * until it was qualified. `.cm-selectionBackground` on its own is (0,1,0) and CodeMirror's base
+ * theme carries two rules that beat it outright:
+ *
+ *     &light .cm-selectionBackground                                            → (0,2,0)  #d9d9d9
+ *     &light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground → (0,4,0)  #d7d4f0
+ *
+ * `&` is the generated theme class on `.cm-editor`, so the focused one is four classes deep and no
+ * amount of source order reaches it. Every selection this app has ever drawn was CodeMirror's
+ * lavender `#d7d4f0` — which is what a select-all looks like in a screenshot, and the third time
+ * this exact defect has cost something in this file (see the caret, and decision 42's `font-size`).
+ *
+ * So both states are matched at the specificity they need, and win on order from there. The
+ * unfocused one matters as much as the focused: a pane you have clicked away from keeps its
+ * selection on screen.
+ */
+/* The selection is the **native** one, and the caret is still CodeMirror's drawn one.
+ *
+ * `drawSelection()` gives us both a 2px caret we can colour (decision 53) and a selection drawn as
+ * one rectangle per line — which runs the full width of the pane past the end of the text, puts a
+ * block in the left margin, and covers the gaps between blocks. Side by side with the reference,
+ * which highlights only the text runs, ours reads as a wash over the whole note.
+ *
+ * `drawSelection` is five extensions, and the two we want pull in opposite directions: `cursorLayer`
+ * (keep) and `selectionLayer` + `hideNativeSelection` (do not). They are not separately exported, so
+ * rather than lose the caret this hides what `selectionLayer` draws and puts the browser's own
+ * selection back — which hugs text runs by construction, in every language and every wrap.
+ *
+ * `!important` and (0,2,0) are both needed: `hideNativeSelection` is `Prec.highest` and sets
+ * `background-color: transparent !important` on `.ͼ1 .cm-line ::selection`. This ties its
+ * specificity and wins on order, because style-mod injects CodeMirror's sheet as the *first* child
+ * of `<head>` and ours is parsed after it.
+ */
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: transparent;
+}
+
+.cm-editor .cm-line ::selection,
+.cm-editor .cm-line::selection,
+.cm-editor .cm-content ::selection {
+  background: color-mix(in oklab, var(--accent) 30%, transparent) !important;
+}
+
+/* A collapsed blank line takes no highlight.
+ *
+ * A blank line between two blocks is drawn as an 8px strip (decision 55), and selecting across one
+ * painted that strip too — which butts against the line below and reads as that block's highlight
+ * being taller than its neighbours. It is not content: the height is a rendering choice, so the
+ * selection should not draw it either. The line is still in the buffer and still selected; only the
+ * strip stops being painted. */
+.cm-editor .cm-line.pane-line-blank::selection,
+.cm-editor .cm-line.pane-line-blank ::selection {
+  background: transparent !important;
 }
 
 /* ---- Block layout -----------------------------------------------------------------------------
@@ -174,8 +237,23 @@
  * against the reference's 6.5, so the whole list was pushed across the pane and every level after it
  * inherited the offset. Measured on the same note at the same width, marker/text: ours 46/60,
  * 68/82, 90/104; the reference's 31/47, 54/68, 76/91. Twelve points came off each level. */
-.cm-line.pane-line-li {
-  text-indent: -16px;
+/* The hanging indent lives on the *marker*, not on the line.
+ *
+ * It was `text-indent: -16px` on the line, which pulls the first line's content left and assumes
+ * the marker is exactly 16px wide. It is not: a bullet glyph is about 10, a checkbox 20 with its
+ * space, and only `1.` happened to land near 16 — which is why the numbered list looked aligned and
+ * the other three did not. The text after a bullet started at 20 while its own continuation line
+ * started at 26, so a ⇧⏎ inside a bullet sat further right than the line it continues.
+ *
+ * A fixed 16px box with a -16px margin puts every marker at 10 and every following character at 26,
+ * for bullets, numbers and checkboxes alike — and a continuation line needs no rule of its own,
+ * because 26 is simply where its padding already puts it. Decision 55's measured marker/text of
+ * 32/48 (absolute, with the content padding) is unchanged. */
+.pane-list-marker,
+.pane-list-number {
+  display: inline-block;
+  width: 16px;
+  margin-left: -16px;
 }
 
 .cm-line.pane-line-li-1 { padding-left: 26px; }  /* 10 + 16 */
@@ -293,20 +371,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
+  /* 13px inside a 16px slot leaves 3px of air before the text. At 15 it sat 1px away and read as
+   * touching the word — aligned, and too close to look aligned. */
+  --checkbox-size: 13px;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
   flex: none;
-  /* The design sets a 9px gap; the single literal space after "]" supplies roughly 4px of it. */
-  margin-right: 5px;
+  /* The same 16px slot every other marker gets: 15px of box and 1px of gap, pulled left so the
+   * text after it starts at 26 like a bullet's and a number's. The literal spaces around it are
+   * hidden by live preview — two sources for one gap is one too many, which is the rule the
+   * leading indentation already follows. */
+  margin-left: -16px;
+  margin-right: 3px;
   border-radius: 4px;
-  transform: translateY(2px);
+  /* Centred in the line box, computed rather than tuned.
+   *
+   * It was `translateY(2px)`, a constant picked when the box was 15px — so shrinking it to 13 left
+   * the box 1.5px high against text and bullets that both centre at 10. A constant was always going
+   * to drift anyway: text size is a setting (10–32px), and a checkbox nailed 2px from the top of a
+   * 20px line sits nowhere in particular in a 43px one. */
+  transform: translateY(
+    calc((var(--text-size) * var(--line-height) - var(--checkbox-size)) / 2)
+  );
   font-size: 10px;
   line-height: 1;
   cursor: pointer;
   vertical-align: top;
-  /* List lines carry `text-indent: -14px` for their hanging indent, and text-indent inherits into
-   * this inline-flex box — which dragged the tick 14px left, out of its own amber square. */
-  text-indent: 0;
 }
 
 .pane-task--done {
