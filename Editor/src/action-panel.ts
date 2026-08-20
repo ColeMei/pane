@@ -18,11 +18,18 @@
  * same rule the Shortcuts tab follows (decision 31).
  */
 
+import { desiredOverlayHeight } from "./overlay";
+
 export interface ActionRow {
   id: string;
   label: string;
   /** SVG path data, 14×14 viewBox, straight from the design's own `actionGroups`. */
   d: string;
+  /**
+   * What to print when the action has no rebindable binding of its own — Settings…, whose ⌘, is the
+   * app menu's, and Recently Deleted, which the design deliberately leaves unbound. Every other row
+   * prints the binding actually in force; see `keysFor`.
+   */
   keys: string[];
   /** Delete is last, red, and separated — the design is explicit about all three. */
   danger?: boolean;
@@ -38,6 +45,8 @@ interface ActionPanelOptions {
   /** Same, for auto-sizing — which a drag can turn off without anyone pressing this row. */
   isAutoSizing: () => boolean;
   run: (id: string) => void;
+  /** The key caps to print for a row, from the bindings in force. Null keeps the row's own. */
+  keysFor: (id: string) => string[] | null;
   onVisibilityChange: (open: boolean, height: number) => void;
 }
 
@@ -104,7 +113,11 @@ const GROUPS: ActionRow[][] = [
     {
       id: "recentlyDeleted",
       label: "Recently Deleted",
-      d: "M3 4h8l-.7 8.5H3.7zM2 4h10M5.5 4V2.5h3V4",
+      // A clock, not the trash. This row and Delete Note carried byte-identical path data, and they
+      // sit four rows apart in a panel where both are on screen together — the same defect Duplicate
+      // Note and Copy as Markdown had, and the smoke test's own rule that two rows never share an
+      // icon. Deleting is the bin; this is where things wait, so it is the one that changes.
+      d: "M7 2.2a4.8 4.8 0 1 1-4.8 4.8M7 4.4V7.2l1.9 1.1M2.2 2.2v2.8h2.8",
       // The one row the design gives no shortcut, and it is right: this is a place you go looking
       // for, not a thing you fire off. Decision 31 keeps it out of the Shortcuts table for the
       // same reason — an unbound row there would be a blank waiting to be filled in.
@@ -132,21 +145,9 @@ export function mountActionPanel(options: ActionPanelOptions) {
     return pane.hasAttribute("data-actions");
   }
 
-  /**
-   * The height the panel wants, which is not the height it currently has.
-   *
-   * `offsetHeight` is capped by the pane (see `max-height` in action-panel.css), so reporting it
-   * would tell Swift the panel already fits and the pane would never grow — on a short note ⌘K came
-   * up two and a half rows tall with everything else scrolled out of reach. The pane still has to
-   * grow to hold the panel (decision 40); the CSS cap exists for when it *cannot*, because the
-   * screen ran out, and then a clipped panel is the lesser of the two evils.
-   *
-   * So: what the panel is now, minus what the list is showing, plus what the list would show.
-   */
+  /** See `desiredOverlayHeight` — shared with the switcher, which used to be a constant in Swift. */
   function desiredHeight(): number {
-    const listCap = Number.parseFloat(getComputedStyle(list).maxHeight);
-    const listWanted = Math.min(list.scrollHeight, Number.isFinite(listCap) ? listCap : Infinity);
-    return root.offsetHeight - list.clientHeight + listWanted;
+    return desiredOverlayHeight(root, list);
   }
 
   function open(): void {
@@ -225,7 +226,9 @@ export function mountActionPanel(options: ActionPanelOptions) {
             </svg>
             <span class="actions__label">${escapeHtml(labelFor(row))}</span>
             <span class="actions__keys">
-              ${row.keys.map((k) => `<kbd>${escapeHtml(k)}</kbd>`).join("")}
+              ${(options.keysFor(row.id) ?? row.keys)
+                .map((k) => `<kbd>${escapeHtml(k)}</kbd>`)
+                .join("")}
             </span>
           </div>`;
       }

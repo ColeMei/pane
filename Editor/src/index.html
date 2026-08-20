@@ -17,8 +17,19 @@
         three buttons. Decision 22 fixes this list; anything new goes in ⌘K instead (decision 17).
       -->
       <header class="pane__titlebar" id="titlebar">
-        <button class="pane__close" id="close" aria-label="Close pane"></button>
+        <!-- Three boxes: the dot, the title, the buttons. The two outer ones flex equally from a
+             zero basis, so whatever space the title does not use is split evenly and the title
+             lands on the *window's* centre rather than on the centre of the gap between a 12px dot
+             and a 116px button cluster. When the pane gets narrow the buttons stop giving ground
+             and the title simply takes what is left — which is the whole point: reserving the
+             cluster's width on both sides left 20px of title at the minimum width. -->
+        <div class="pane__titlebar-side">
+          <button class="pane__close" id="close" aria-label="Close pane"></button>
+        </div>
+
         <div class="pane__title" id="pane-title"></div>
+
+        <div class="pane__titlebar-side pane__titlebar-side--right">
 
         <!-- The pin is STATE, not a permanent control: it is in the bar only while the pane is
              pinned, and clicking it there unpins. As a fourth always-present button it was the one
@@ -36,7 +47,8 @@
           <span class="icon-button__lines" aria-hidden="true"><i></i><i></i><i></i></span>
         </button>
 
-        <button class="icon-button icon-button--plus" id="new-note" data-action="new" aria-label="New note" title="New note ⌘N">+</button>
+          <button class="icon-button icon-button--plus" id="new-note" data-action="new" aria-label="New note" title="New note ⌘N">+</button>
+        </div>
       </header>
 
       <!--
@@ -58,7 +70,6 @@
 
       <div class="pane__content">
         <div class="pane__scroll" id="editor-host"></div>
-        <div class="pane__fade" aria-hidden="true"></div>
       </div>
 
       <!-- One footer row. The format bar replaces it rather than stacking below it. -->

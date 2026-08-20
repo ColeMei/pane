@@ -50,3 +50,23 @@ export function placeOverlay(panel: HTMLElement, pane: HTMLElement): void {
   if (height === 0) return;
   panel.style.top = `${overlayTop(pane.clientHeight, height)}px`;
 }
+
+/**
+ * The height an overlay *wants*, which is not the height it currently has.
+ *
+ * `offsetHeight` is capped by the pane (see the `max-height` rules in the two stylesheets), so
+ * reporting it would tell Swift the panel already fits and the pane would never grow — on a short
+ * note ⌘K came up two and a half rows tall with everything else scrolled out of reach. The pane
+ * still has to grow to hold the panel (decision 45); the CSS cap exists for when it *cannot*,
+ * because the screen ran out, and a clipped panel is then the lesser of two evils.
+ *
+ * So: what the panel is now, minus what its list is showing, plus what that list would show.
+ *
+ * Lives here because the switcher and ⌘K are one component in two modes (decision 46) and this is
+ * the last thing they did differently — ⌘K measured itself and ⌘P was a constant in Swift.
+ */
+export function desiredOverlayHeight(panel: HTMLElement, list: HTMLElement): number {
+  const cap = Number.parseFloat(getComputedStyle(list).maxHeight);
+  const wanted = Math.min(list.scrollHeight, Number.isFinite(cap) ? cap : Infinity);
+  return panel.offsetHeight - list.clientHeight + wanted;
+}

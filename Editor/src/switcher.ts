@@ -6,6 +6,8 @@
  * recency bands, the relative-time format) live in Swift where they are unit-tested.
  */
 
+import { desiredOverlayHeight } from "./overlay";
+
 export interface NoteSummary {
   filename: string;
   title: string;
@@ -33,7 +35,8 @@ interface SwitcherOptions {
   onRequestDeleted: () => void;
   /** Permanent removal from the holding folder, per row. No undo behind this one. */
   onForgetDeleted: (storedName: string) => void;
-  onVisibilityChange: (open: boolean) => void;
+  /** Carries the height the panel wants, so the pane can grow to hold it (decision 45). */
+  onVisibilityChange: (open: boolean, height: number) => void;
 }
 
 /**
@@ -62,8 +65,8 @@ export function mountSwitcher(options: SwitcherOptions) {
   let mode: Mode = "notes";
   /** Every deleted note, unfiltered. Searching this list is done here — see `applyQuery`. */
   let deleted: NoteSummary[] = [];
-  /** Storage tab's retention, mirrored here so the deleted list can state it. */
-  let retentionDays = 30;
+  /** Whether this opening has told Swift how tall it wants the pane — see `reportHeight`. */
+  let heightReported = false;
 
   function isOpen(): boolean {
     return pane.hasAttribute("data-switcher");
@@ -75,7 +78,28 @@ export function mountSwitcher(options: SwitcherOptions) {
     query = "";
     selected = 0;
     search.focus();
-    options.onVisibilityChange(true);
+    heightReported = false;
+    // Deliberately no height yet: the rows are a round trip away, so there is nothing to measure
+    // until the first render. `reportHeight` does it then.
+    options.onVisibilityChange(true, 0);
+  }
+
+  /**
+   * Tells Swift how tall a pane this list wants — **once per opening**, at the first render.
+   *
+   * Swift used to work this out from a constant: `54 + 430 + 34` handed to
+   * `paneHeight(forOverlay:)`, which adds the 54 again. So ⌘P grew the pane to 691pt whatever was
+   * in it, and a six-note vault got a 370pt panel floating in the middle of it.
+   *
+   * Once, rather than on every keystroke the way ⌘K does it: ⌘K has fourteen rows and settles,
+   * while this list can go from 200 notes to three as you type, and a window that resizes on every
+   * keystroke of a search is a window that will not sit still. The panel keeps its own max-height,
+   * so a list that outgrows the pane scrolls (decision 45).
+   */
+  function reportHeight(): void {
+    if (!isOpen() || heightReported) return;
+    heightReported = true;
+    options.onVisibilityChange(true, desiredOverlayHeight(root, list));
   }
 
   function open(): void {
@@ -101,7 +125,7 @@ export function mountSwitcher(options: SwitcherOptions) {
   function close(): void {
     if (!isOpen()) return;
     pane.removeAttribute("data-switcher");
-    options.onVisibilityChange(false);
+    options.onVisibilityChange(false, 0);
   }
 
   /// What both entry points actually want. Pressing ⌘P or the switcher button a second time means
@@ -207,26 +231,20 @@ export function mountSwitcher(options: SwitcherOptions) {
     list.innerHTML = `
       <div class="switcher__empty">
         <div class="switcher__empty-title">Nothing deleted</div>
-        <div class="switcher__empty-body">
-          Deleted notes wait here before they go for good. How long is up to you, on the
-          Storage tab.
-        </div>
       </div>`;
     footer.innerHTML = "";
     footer.style.display = "none";
+    reportHeight();
   }
 
   function renderEmptyVault(): void {
     list.innerHTML = `
       <div class="switcher__empty">
         <div class="switcher__empty-title">No notes yet</div>
-        <div class="switcher__empty-body">
-          Press <kbd>⌘N</kbd> to start one. It’s a file in
-          <span style="font-family:var(--font-mono)">~/Documents/Pane</span> the moment you type.
-        </div>
       </div>`;
     footer.innerHTML = "";
     footer.style.display = "none";
+    reportHeight();
   }
 
   /** A dead end becomes capture: ⏎ creates a note whose first line is the query. */
@@ -240,18 +258,14 @@ export function mountSwitcher(options: SwitcherOptions) {
       </div>`;
     footer.innerHTML = "";
     footer.style.display = "none";
+    reportHeight();
   }
 
   function renderRows(total: number): void {
     // Say the retention where the deleted notes are. It was only ever on the Storage tab, which is
     // the one screen you are not looking at while trying to get something back — and "how long have
     // I got?" is the question this list exists to answer.
-    let html =
-      mode === "deleted"
-        ? `<div class="switcher__notice">Deleted notes are removed for good after ${retentionDays} ${
-            retentionDays === 1 ? "day" : "days"
-          }.</div>`
-        : "";
+    let html = "";
     let lastBand: string | undefined;
 
     rows.forEach((note, index) => {
@@ -293,11 +307,14 @@ export function mountSwitcher(options: SwitcherOptions) {
               mode === "deleted"
                 ? `<span class="switcher__actions">
               <button class="switcher__action switcher__action--danger" data-forget
-                      title="Delete permanently">${TRASH_SVG}</button>
+                      aria-label="Delete permanently"
+                      data-tip="Delete permanently">${TRASH_SVG}</button>
             </span>`
                 : `<span class="switcher__actions">
-              <button class="switcher__action" data-pin title="Pin">${PIN_OUTLINE_SVG}</button>
-              <button class="switcher__action" data-delete title="Delete">✕</button>
+              <button class="switcher__action" data-pin
+                      aria-label="Pin" data-tip="Pin ⌘⏎">${PIN_OUTLINE_SVG}</button>
+              <button class="switcher__action" data-delete
+                      aria-label="Delete" data-tip="Delete ⌃X">✕</button>
             </span>`
             }
           </div>
@@ -324,6 +341,7 @@ export function mountSwitcher(options: SwitcherOptions) {
     footer.innerHTML = hints;
 
     scrollSelectedIntoView();
+    reportHeight();
   }
 
   function scrollSelectedIntoView(): void {
@@ -449,9 +467,6 @@ export function mountSwitcher(options: SwitcherOptions) {
     }
   });
 
-  function setRetentionDays(days: number): void {
-    retentionDays = days;
-  }
 
-  return { open, close, toggle, render, renderDeleted, openDeleted, isOpen, setRetentionDays };
+  return { open, close, toggle, render, renderDeleted, openDeleted, isOpen };
 }

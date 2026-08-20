@@ -24,8 +24,21 @@ import {
   markdownLanguage,
 } from "@codemirror/lang-markdown";
 import { syntaxTree } from "@codemirror/language";
-import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
-import { EditorView, drawSelection, keymap, rectangularSelection } from "@codemirror/view";
+import {
+  Compartment,
+  EditorSelection,
+  EditorState,
+  type Extension,
+  Prec,
+  Transaction,
+} from "@codemirror/state";
+import {
+  EditorView,
+  drawSelection,
+  keymap,
+  placeholder,
+  rectangularSelection,
+} from "@codemirror/view";
 
 import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
@@ -34,6 +47,7 @@ import { findHighlighting, mountFind } from "./find";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { mountSwitcher, type NoteSummary } from "./switcher";
 import { MARKDOWN_FORMAT_KEYS, mountFormatBar, setHeading } from "./format-bar";
+import { noteTitle } from "./note-title";
 import { countWords } from "./word-count";
 
 // ---------------------------------------------------------------------------------------------
@@ -51,7 +65,7 @@ type OutboundMessage =
   | { type: "deleteNote"; filename: string }
   | { type: "close" }
   | { type: "contentHeight"; height: number }
-  | { type: "switcherOpen"; open: boolean }
+  | { type: "switcherOpen"; open: boolean; height: number }
   | { type: "actionsOpen"; open: boolean; height: number }
   | { type: "revealInFinder" }
   | { type: "openSettings" }
@@ -124,21 +138,30 @@ const editorTheme = EditorView.theme({
 function notifyEdited(view: EditorView): void {
   const text = view.state.doc.toString();
   wordCountEl.textContent = formatWordCount(countWords(text));
-  showTitle(view.state.doc.line(1).text);
+  showTitle(view.state.doc.iterLines());
   send({ type: "edited", text, caret: view.state.selection.main.head });
   scheduleContentHeight();
 }
 
 /**
- * The note's name, which is its first line (decision 2), with any heading marks taken off.
+ * The note's name, which is its first non-blank line (decision 2), read as prose.
  *
  * Follows the first line as it is typed, not only as it is loaded. That was harmless while the
  * title bar was empty until you scrolled (decision 22) and is not now it is always there: a note
  * created with ⌘N had no title at all until it was next opened, so the pane spent the whole of the
  * writing sitting there unnamed.
+ *
+ * The extraction is `noteTitle`, a port of the Swift the ⌘P switcher already uses. What used to be
+ * here stripped `#` and nothing else, off line 1 and no further — so a note beginning
+ * `**A research plan**` put the asterisks in the title bar while the switcher showed the words, and
+ * a note whose first line was blank was nameless in the bar and named in the list. Two answers to
+ * "what is this note called" is one too many.
  */
-function showTitle(firstLine: string): void {
-  paneTitleEl.textContent = firstLine.replace(/^#+\s*/, "");
+function showTitle(lines: Iterable<string>): void {
+  // "Untitled" rather than nothing, which is what an empty note showed until ⌘N stopped writing a
+  // file the moment it was pressed. A pane with no title and no text reads as broken; the reference
+  // names it, and the switcher already calls a nameless note Untitled, so this is the two agreeing.
+  paneTitleEl.textContent = noteTitle(lines) || "Untitled";
 }
 
 function formatWordCount(n: number): string {
@@ -188,10 +211,16 @@ function reportContentHeight(): void {
 
   // The format bar replaces the footer rather than stacking on it, so only one of them is ever laid
   // out. Measuring whichever is visible avoids assuming which.
-  const bar = paneEl.querySelector<HTMLElement>(
-    paneEl.hasAttribute("data-format-bar") ? ".format-bar" : ".pane__footer"
-  );
-  const chrome = titleBarEl.offsetHeight + (bar?.offsetHeight ?? 34) + bannerEl.offsetHeight;
+  // Whichever of the three is actually laid out, found by measuring rather than by re-deriving the
+  // rule from attributes. The old version asked `data-format-bar` and otherwise took the footer —
+  // which is wrong in the third state: with ⌘F open, `.pane[data-find]` hides *both* the footer and
+  // the format bar, so it measured a `display: none` element, got 0, and dropped the whole row out
+  // of the height. The pane shrank by the find bar's height when find opened and grew back when it
+  // closed. A fourth state could not make this wrong again.
+  const bar = [".find", ".format-bar", ".pane__footer"]
+    .map((selector) => paneEl.querySelector<HTMLElement>(selector))
+    .find((element) => (element?.offsetHeight ?? 0) > 0);
+  const chrome = titleBarEl.offsetHeight + (bar?.offsetHeight ?? 0) + bannerEl.offsetHeight;
 
   const height = Math.ceil(content + chrome);
 
@@ -409,8 +438,151 @@ function inside(state: EditorState, pos: number, nodeName: string): boolean {
   return node.name === nodeName;
 }
 
+/**
+ * The blocks ⌘A steps through, innermost first.
+ *
+ * `ListItem` is in the set *and* preferred over the `Paragraph` inside it: a bullet's paragraph is
+ * its text without the marker, while a task item has no paragraph at all and would otherwise select
+ * a different thing from every other list. One rule for both.
+ */
+const SELECTABLE_BLOCKS = new Set([
+  "Paragraph",
+  "ATXHeading1",
+  "ATXHeading2",
+  "ATXHeading3",
+  "ATXHeading4",
+  "ATXHeading5",
+  "ATXHeading6",
+  "SetextHeading1",
+  "SetextHeading2",
+  "FencedCode",
+  "CodeBlock",
+  "HorizontalRule",
+  "Table",
+  "ListItem",
+  "Blockquote",
+]);
+
+/**
+ * ⌘A selects the block you are in; press it again for the whole note.
+ *
+ * Typora, Obsidian and every editor with a block model do this, and it is the difference between
+ * "replace this paragraph" being one keystroke and being a drag. The second press is not a special
+ * case in here — when the selection already *is* the block, this declines and CodeMirror's own
+ * `selectAll` takes the key, which also means ⌘A on a one-paragraph note does the obvious thing on
+ * the first press.
+ */
+function selectBlockThenAll(view: EditorView): boolean {
+  const state = view.state;
+  const range = state.selection.main;
+  if (range.from === 0 && range.to === state.doc.length) return false;
+
+  let node = syntaxTree(state).resolveInner(range.head, -1);
+  while (node.parent && !SELECTABLE_BLOCKS.has(node.name)) node = node.parent;
+  if (!SELECTABLE_BLOCKS.has(node.name)) return false;
+
+  // A list item's own range, not the paragraph inside it — see SELECTABLE_BLOCKS.
+  if (node.parent?.name === "ListItem") node = node.parent;
+
+  if (range.from === node.from && range.to === node.to) return false;
+
+  view.dispatch({ selection: EditorSelection.range(node.from, node.to) });
+  return true;
+}
+
+/**
+ * One Backspace undoes one Return.
+ *
+ * ⏎ in prose writes `\n\n` (decision 63), and Backspace deleted one of them — so getting rid of a
+ * paragraph you had just started left you on a *soft-broken* line inside the paragraph above,
+ * which looks like the editor deciding every paragraph needs a spare line in it. The two keys have
+ * to be each other's inverse or Return stops being safe to press.
+ *
+ * Only the shape Return leaves behind: the caret at the start of an empty line whose predecessor is
+ * also empty. `para\n\n|text` is a different thing — the caret is on a line with text on it — and
+ * still deletes one newline, which is the ordinary join.
+ */
+function joinBackToParagraph(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const line = state.doc.lineAt(range.head);
+  if (range.head !== line.from || line.length !== 0 || line.number < 2) return false;
+
+  const previous = state.doc.line(line.number - 1);
+  if (previous.length !== 0) return false;
+
+  view.dispatch({
+    changes: { from: previous.from - 1, to: range.head },
+    selection: { anchor: previous.from - 1 },
+    userEvent: "delete.backward",
+  });
+  return true;
+}
+
 /** Built once. It is the ⏎ binding as well, so the two keys cannot drift apart. */
 const continueMarkup = insertNewlineContinueMarkupCommand({ nonTightLists: false });
+
+/**
+ * Blocks where ⏎ must stay a single newline.
+ *
+ * A list or a quote is handled by `continueMarkup` before this runs; they are named here anyway so
+ * that a change in that command cannot silently hand prose's rule to a list. Code is the one that
+ * genuinely needs it: `continueMarkup` declines inside a fence — there is no list context — so
+ * without this, ⏎ in a code block would start inserting blank lines into the code.
+ */
+const NOT_PROSE = new Set([
+  "ListItem",
+  "Blockquote",
+  "FencedCode",
+  "CodeBlock",
+  "Table",
+  "HTMLBlock",
+]);
+
+/**
+ * ⏎ starts a new paragraph. ⇧⏎ stays in the one you are in.
+ *
+ * These two did the same thing until now, and the thing they did was the *wrong* one: ⏎ inserted a
+ * single newline, which in CommonMark is a soft break **inside the same paragraph**. So pressing
+ * Return in prose never started a paragraph — it added a line to the one you were already in, and
+ * you had to press it twice to get a block break.
+ *
+ * Which means decision 55's rhythm has been correct and unreachable since the day it landed. It
+ * renders 20pt between lines inside a block and 28pt between two blocks, measured against the
+ * reference; the keyboard could only ever produce the first of those. Nothing about the spacing
+ * changes here. ⏎ now writes the blank line that the 28pt has always been waiting for.
+ *
+ * `\n\n` rather than a hard break (`  \n`) because a paragraph break is what is meant, and it is
+ * what every markdown tool that will ever open the file reads it as. ⇧⏎ keeps the single newline,
+ * which is CodeMirror's own default and is the soft break — "new line, same paragraph".
+ *
+ * One newline rather than two when there is nothing but whitespace before the caret on its line:
+ * the line being left behind is already blank, so a second would stack empty lines up every time
+ * Return was held down.
+ */
+function newParagraph(view: EditorView): boolean {
+  const { state } = view;
+  const head = state.selection.main.head;
+
+  let node = syntaxTree(state).resolveInner(head, -1);
+  while (node.parent) {
+    if (NOT_PROSE.has(node.name)) return false;
+    node = node.parent;
+  }
+
+  const line = state.doc.lineAt(head);
+  const before = line.text.slice(0, head - line.from);
+  const insert = before.trim() === "" ? "\n" : "\n\n";
+
+  view.dispatch({
+    ...state.replaceSelection(insert),
+    scrollIntoView: true,
+    userEvent: "input",
+  });
+  return true;
+}
 
 /**
  * Tries each command in turn, stopping at the first that handles the key.
@@ -511,6 +683,7 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
   revealInFinder: "Alt-Mod-r",
   deleteNote: "Ctrl-x",
   findInNote: "Mod-f",
+  findReplace: "Alt-Mod-f",
   copyAsMarkdown: "Shift-Mod-c",
   exportNote: "Shift-Mod-e",
   hideFromCapture: "Shift-Mod-h",
@@ -519,6 +692,38 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
 };
 
 const shortcutsCompartment = new Compartment();
+
+/**
+ * The undo history, in a compartment so it can be **thrown away when the note changes**.
+ *
+ * Undo belongs to the note, not to the pane. Without this the one history spans every note you
+ * have opened, so ⌘Z after switching walks backwards into the note before — which is not undo, it
+ * is ⌘[ wearing undo's key, and it writes the previous note's text into the current note's file.
+ */
+const historyCompartment = new Compartment();
+
+/**
+ * A CodeMirror binding string as key caps — "Shift-Mod-p" becomes ⇧ ⌘ P.
+ *
+ * Apple's display order (⌃⌥⇧⌘, then the key), matching what the Shortcuts tab prints in Swift, so
+ * the same action reads the same in both places.
+ */
+export function keyCaps(binding: string): string[] {
+  if (!binding) return [];
+  const parts = binding.split("-");
+  const key = parts.pop() ?? "";
+  const held = parts.map((p) => p.toLowerCase());
+
+  const caps: string[] = [];
+  if (held.includes("ctrl") || held.includes("control")) caps.push("⌃");
+  if (held.includes("alt") || held.includes("option")) caps.push("⌥");
+  if (held.includes("shift")) caps.push("⇧");
+  if (held.includes("mod") || held.includes("cmd") || held.includes("meta")) caps.push("⌘");
+
+  caps.push(key.length === 1 ? key.toUpperCase() : key);
+  return caps;
+}
+
 
 /**
  * What every ⌘K row does, keyed by the same id the panel's rows carry.
@@ -541,6 +746,11 @@ const actionHandlers: Record<string, () => boolean> = {
   deleteNote: () =>
     currentFilename ? (send({ type: "deleteNote", filename: currentFilename }), true) : false,
   findInNote: () => (find?.open(), true),
+  // ⌥⌘F is the macOS convention for find-and-replace and one Raycast leaves free, so decision 39's
+  // habit-compatibility rule is untouched. No ⌘K row: the disclosure on the find bar is where
+  // anyone would look for it, and decision 17's panel stays at fourteen — the same call decision 51
+  // made for Back and Forward.
+  findReplace: () => (find?.openWithReplace(), true),
   // The buffer goes with the message rather than Swift using its own copy. Swift's copy is up to
   // 500 ms stale by design (decision 10's debounce), and a copy that silently omits the last
   // sentence you typed is the kind of bug nobody reports because they blame the paste.
@@ -569,7 +779,7 @@ function paneShortcuts(bindings: Record<string, string>): Extension {
 
 function baseExtensions(): Extension[] {
   return [
-    history(),
+    historyCompartment.of(history()),
     drawSelection(),
     rectangularSelection(),
     EditorView.lineWrapping,
@@ -586,6 +796,10 @@ function baseExtensions(): Extension[] {
 
     livePreview(),
     findHighlighting(),
+    // An empty note said nothing at all — a caret in a blank rectangle. The reference prompts, and
+    // it matters more here than it does there: ⌘N now leaves nothing on disk until the first write,
+    // so an empty pane is genuinely a blank page rather than a file that already exists.
+    placeholder("Start writing…"),
     checkboxInputRule(),
     bulletInputRule(),
     editorTheme,
@@ -603,8 +817,12 @@ function baseExtensions(): Extension[] {
         // to CodeMirror's plain newline. Every one of those is "a newline that does not carry the
         // markup forward"; the chain is which flavour of that applies where.
         { key: "Shift-Enter", run: chain(escapeCodeBlock, exitEmptyMarkup) },
-        { key: "Enter", run: chain(exitEmptyBlockquote, continueMarkup) },
-        { key: "Backspace", run: deleteMarkupBackward },
+        // In order: leave an empty quote, continue a list or quote, else start a new paragraph.
+        // `continueMarkup` declines in prose (it needs a list or quote context), which is what
+        // leaves the last link reachable at all.
+        { key: "Enter", run: chain(exitEmptyBlockquote, continueMarkup, newParagraph) },
+        { key: "Backspace", run: chain(joinBackToParagraph, deleteMarkupBackward) },
+        { key: "Mod-a", run: selectBlockThenAll },
       ])
     ),
 
@@ -644,6 +862,20 @@ function baseExtensions(): Extension[] {
       ...historyKeymap,
     ]),
   ];
+}
+
+/**
+ * Throws the undo stack away.
+ *
+ * **Out of the configuration, then back in** — and that is not ceremony. `history()` returns a
+ * module-level `StateField`, so reconfiguring the compartment with a *fresh* `history()` hands back
+ * the same field with the same stack still in it. Removing the field is what discards its state;
+ * re-adding it calls `create` and starts empty. Reconfiguring in place looks like it works and does
+ * nothing, which is this codebase's oldest genre of bug (decision 71).
+ */
+function clearHistory(): void {
+  view.dispatch({ effects: historyCompartment.reconfigure([]) });
+  view.dispatch({ effects: historyCompartment.reconfigure(history()) });
 }
 
 const view = new EditorView({
@@ -743,6 +975,11 @@ const actions = mountActionPanel({
   isHiddenFromCapture: () => hiddenFromCapture,
   isAutoSizing: () => autoSizing,
   run: (id) => actionHandlers[id]?.(),
+  // The keys a row prints come from the bindings in force, not from a literal beside the label.
+  // They were literals, so rebinding New Note in the Shortcuts tab left ⌘K still advertising ⌘N —
+  // which is exactly what decision 17 forbids: "a row cannot advertise a key that does something
+  // else". Rows with no binding of their own (Settings…, which the menu bar owns) keep the literal.
+  keysFor: (id) => (liveShortcuts[id] ? keyCaps(liveShortcuts[id]) : null),
   onVisibilityChange: (open, height) => {
     send({ type: "actionsOpen", open, height });
     if (!open) view.focus();
@@ -760,8 +997,8 @@ const switcher = mountSwitcher({
   onRequestDeleted: () => send({ type: "requestDeleted" }),
   onRestore: (storedName) => send({ type: "restoreDeleted", storedName }),
   onForgetDeleted: (storedName) => send({ type: "forgetDeleted", storedName }),
-  onVisibilityChange: (open) => {
-    send({ type: "switcherOpen", open });
+  onVisibilityChange: (open, height) => {
+    send({ type: "switcherOpen", open, height });
     if (!open) view.focus();
   },
 });
@@ -895,19 +1132,38 @@ const host = {
    */
   loadNote(filename: string, text: string, caret: number, pinned: boolean): void {
     applyingRemoteEdit = true;
-    currentFilename = filename;
+    // An empty name means a draft: ⌘N no longer touches the disk, so the pane can hold a note that
+    // has no file yet. Stored as null rather than "" so every `currentFilename ?` guard here —
+    // Delete Note, Pin Pane — declines instead of naming a file that does not exist.
+    currentFilename = filename || null;
 
     const clamped = Math.max(0, Math.min(caret, text.length));
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
       selection: { anchor: clamped },
       scrollIntoView: true,
+      /*
+       * **Loading a note is not an edit, and ⌘Z must not be able to undo it.**
+       *
+       * This dispatch replaces the whole document, and without the annotation it went into the undo
+       * history like anything else — so the first ⌘Z in any note reversed *the load*, which is to
+       * say it emptied the document. Then the write model flushed the empty buffer to the file, in
+       * as long as it takes to notice. Measured: undo straight after opening a note, undo after an
+       * ordinary edit, and undo after switching notes all left an empty document.
+       *
+       * This has been true since the first commit — `addToHistory` has never appeared in this file
+       * — which makes it the oldest and worst bug in the product, and the only one found by someone
+       * pressing ⌘Z rather than by reading anything.
+       */
+      annotations: Transaction.addToHistory.of(false),
     });
+    // And a fresh stack, so undo cannot reach back past this note into the last one.
+    clearHistory();
     applyingRemoteEdit = false;
 
     paneEl.toggleAttribute("data-pinned", pinned);
     document.getElementById("pin")!.setAttribute("aria-pressed", String(pinned));
-    showTitle(text.split("\n", 1)[0] ?? "");
+    showTitle(text.split("\n"));
     wordCountEl.textContent = formatWordCount(countWords(text));
     scheduleContentHeight();
   },
@@ -915,6 +1171,35 @@ const host = {
   /** Puts the caret in the editor without changing anything — what a summon does. */
   focusEditor(): void {
     view.focus();
+  },
+
+  /**
+   * Undo describes **this sitting with the note**, so a summon starts a fresh one.
+   *
+   * Dismissing does not reload the note — the buffer and its history survive offscreen, which is
+   * what keeps a summon under 100ms. So without this, ⌘Z after a summon reaches back across the
+   * dismissal into typing that happened before it, and CodeMirror groups a continuous burst into
+   * one event: write a note in one go, dismiss, come back an hour later, press ⌘Z once, and the
+   * whole note is gone — then the write model flushes the empty buffer to the file.
+   *
+   * That is not the same bug as decision 80's, which was the *load* being undoable, and it is not
+   * fixed by fixing that one. It is the same reasoning decision 51 used for the visit history: this
+   * describes one sitting with the app, and reaching across a dismissal into text you no longer
+   * have any context for is worse than starting fresh.
+   */
+  resetHistory(): void {
+    clearHistory();
+  },
+
+  /**
+   * The draft on screen has just become a real file.
+   *
+   * Deliberately not `loadNote`: the buffer is already correct and the user is typing in it, so
+   * re-sending the document would replace it under their hands and move the caret. Only the name
+   * changes.
+   */
+  setNoteFilename(filename: string): void {
+    currentFilename = filename || null;
   },
 
   setPinned(pinned: boolean): void {
@@ -937,8 +1222,6 @@ const host = {
     translucent?: boolean;
     themeCSS?: string;
     shortcuts?: Record<string, string>;
-    /** Storage tab's retention, so Recently Deleted can state it where it matters. */
-    recentlyDeletedDays?: number;
   }): void {
     const root = document.documentElement;
     if (settings.appearance && settings.appearance !== "system") {
@@ -954,8 +1237,6 @@ const host = {
     // here is that it goes last in the cascade, after tokens/pane/markdown, so a theme can override
     // any token without !important and without knowing the stylesheet order.
     if (settings.themeCSS !== undefined) themeStyleEl.textContent = settings.themeCSS;
-
-    if (settings.recentlyDeletedDays) switcher.setRetentionDays(settings.recentlyDeletedDays);
 
     if (settings.shortcuts) {
       liveShortcuts = { ...DEFAULT_SHORTCUTS, ...settings.shortcuts };

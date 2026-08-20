@@ -57,6 +57,20 @@ export function mountTooltips(paneEl: HTMLElement): void {
     true
   );
 
+  /*
+   * Anything carrying `data-tip`, without a listener of its own.
+   *
+   * `describe` attaches to one element, which is right for the pane's fixed chrome and useless for
+   * the switcher's rows: they are rebuilt from `innerHTML` on every keystroke, so any listener
+   * attached to a row dies with it. Those buttons had `title` instead — the system's yellow bubble,
+   * a second late — which is precisely the inconsistency decision 58 set out to remove and then
+   * left standing in the two places that re-render.
+   */
+  document.addEventListener("mouseover", (event) => {
+    const target = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-tip]");
+    if (target && target !== named) showFor(target, target.dataset.tip ?? "");
+  });
+
   document.addEventListener("keydown", hideTooltip, true);
   paneEl.addEventListener("mouseleave", hideTooltip);
   // The pointer leaving the document — which in a WKWebView means leaving the window — arrives as a
@@ -87,36 +101,41 @@ export function hideTooltip(): void {
   if (tip) tip.hidden = true;
 }
 
+/** Puts the bubble over one control. Shared by `describe` and the `data-tip` delegation above. */
+function showFor(button: HTMLElement, text: string): void {
+  if (!tip || !pane || !text) return;
+  named = button;
+  const { name, keys } = parse(text);
+  tip.innerHTML = keys ? `${escapeHtml(name)}<kbd>${escapeHtml(keys)}</kbd>` : escapeHtml(name);
+  tip.hidden = false;
+
+  const paneBox = pane.getBoundingClientRect();
+  const box = button.getBoundingClientRect();
+  // Below a control in the top half of the pane, above one in the bottom half — so the bubble
+  // never covers the thing it is naming, wherever that thing lives.
+  const below = box.top - paneBox.top < paneBox.height / 2;
+  tip.style.top = below
+    ? `${box.bottom - paneBox.top + 6}px`
+    : `${box.top - paneBox.top - tip.offsetHeight - 6}px`;
+
+  const half = tip.offsetWidth / 2;
+  const centre = box.left - paneBox.left + box.width / 2;
+  tip.style.left = `${Math.min(Math.max(centre, half + 8), paneBox.width - half - 8)}px`;
+}
+
 /**
  * Names one button. `text` carries the shortcut in it — "Notes ⌘P" — which is also the button's
  * accessible name, so the two cannot drift apart.
+ *
+ * For anything rebuilt from `innerHTML`, use a `data-tip` attribute instead: a listener attached
+ * here dies with the element it was attached to.
  */
 export function describe(button: HTMLElement, text: string): void {
   button.setAttribute("aria-label", text);
   // No `title`: the system tooltip would arrive a second later and say the same thing again.
   button.removeAttribute("title");
 
-  const show = () => {
-    if (!tip || !pane) return;
-    named = button;
-    const { name, keys } = parse(text);
-    tip.innerHTML = keys ? `${escapeHtml(name)}<kbd>${escapeHtml(keys)}</kbd>` : escapeHtml(name);
-    tip.hidden = false;
-
-    const paneBox = pane.getBoundingClientRect();
-    const box = button.getBoundingClientRect();
-    // Below a control in the top half of the pane, above one in the bottom half — so the bubble
-    // never covers the thing it is naming, wherever that thing lives.
-    const below = box.top - paneBox.top < paneBox.height / 2;
-    tip.style.top = below
-      ? `${box.bottom - paneBox.top + 6}px`
-      : `${box.top - paneBox.top - tip.offsetHeight - 6}px`;
-
-    const half = tip.offsetWidth / 2;
-    const centre = box.left - paneBox.left + box.width / 2;
-    tip.style.left = `${Math.min(Math.max(centre, half + 8), paneBox.width - half - 8)}px`;
-  };
-
+  const show = () => showFor(button, text);
   const hide = () => hideTooltip();
 
   button.addEventListener("mouseenter", show);
