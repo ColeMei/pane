@@ -91,7 +91,36 @@ const blankLine = Decoration.line({ class: "pane-line-blank" });
 const gapLine = Decoration.line({ class: "pane-line-gap" });
 const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
+/*
+ * A fence that is *showing* its backticks.
+ *
+ * Decision 42 collapsed both fences into "the block's own padding", and that is literally what they
+ * were: an 8px strip of code-slab above the first line of code and below the last. Reveal one and
+ * the strip becomes a full code line with text in it, so the padding it was standing in for
+ * vanishes and ```` ```python ```` sits flush against the top edge of the slab.
+ *
+ * The block gets that padding back explicitly for as long as the fence is visible. It costs height
+ * on the way in, which decision 42 already accepted for the reveal itself.
+ */
+const fenceOpenRaw = Decoration.line({ class: "pane-line-fence-open-raw" });
+const fenceCloseRaw = Decoration.line({ class: "pane-line-fence-close-raw" });
+
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
+
+/*
+ * A list marker showing its source.
+ *
+ * `.pane-syntax` is a colour and nothing else, so a revealed marker fell back to the line's own
+ * `padding-left` — while the rendered marker it replaces sits in a 16px box with a -16px margin
+ * that pulls it back out into the gutter. Measured: the marker jumped **16px to the right** the
+ * moment the caret landed on its line, and the whole line appeared to indent one step. Every kind
+ * of list, which is what made it look like a layout bug rather than a reveal.
+ *
+ * The same box, so the marker stays where it was drawn. It covers the space after the marker too:
+ * that space is hidden while rendered and real while raw, so without it inside the box the text
+ * after the marker lands a space-width right of where it was.
+ */
+const rawListMark = Decoration.mark({ class: "pane-syntax pane-syntax-listmark" });
 
 /** The text of a ticked task item. */
 const doneTaskText = Decoration.mark({ class: "pane-task-done-text" });
@@ -219,6 +248,25 @@ function caretLines(view: EditorView): Set<number> {
   }
   return lines;
 }
+
+/**
+ * Whether the caret got where it is by **typing** rather than by being moved there.
+ *
+ * Decision 44 exempts the caret's blank line from the collapse so that pressing ⏎ in prose lands
+ * the caret at full height and the first keystroke moves nothing. That argument is entirely about
+ * *arriving by editing*. Applied to arriving by clicking or arrowing it buys nothing and costs the
+ * thing it was written to prevent: click the blank line between two paragraphs and it grows 8px to
+ * 20px under the pointer, so the note appears to gain a line you did not ask for. Reported exactly
+ * that way, on the grounds that ⏎ and ⇧⏎ are how you ask for space.
+ *
+ * So the exemption keys off this instead. Set by any document change and cleared by a selection
+ * change that is not one — never cleared by a rebuild for some other reason (a viewport scroll, a
+ * tree finishing), because those do not move the caret and must not change what it is standing on.
+ *
+ * Module state rather than a StateField because it describes the *last update*, not the document,
+ * and there is exactly one editor in this app.
+ */
+let caretArrivedByEdit = false;
 
 function activeLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
@@ -370,9 +418,17 @@ function buildDecorations(view: EditorView): DecorationSet {
           // refuses the same treatment: blank lines are crossed constantly with the arrow keys,
           // whereas a fence is somewhere you arrive rarely and on purpose.
           if (name === "FencedCode") {
-            if (!caret.has(first)) decorations.push(fenceLine.range(doc.line(first).from));
-            if (last > first && !caret.has(last)) {
-              decorations.push(fenceLine.range(doc.line(last).from));
+            if (caret.has(first)) {
+              decorations.push(fenceOpenRaw.range(doc.line(first).from));
+            } else {
+              decorations.push(fenceLine.range(doc.line(first).from));
+            }
+            if (last > first) {
+              if (caret.has(last)) {
+                decorations.push(fenceCloseRaw.range(doc.line(last).from));
+              } else {
+                decorations.push(fenceLine.range(doc.line(last).from));
+              }
             }
           }
           return;
@@ -476,7 +532,9 @@ function buildDecorations(view: EditorView): DecorationSet {
           }
 
           if (isActive) {
-            decorations.push(syntaxMark.range(node.from, node.to));
+            // Through the space after it, so the box matches the rendered marker's — see rawListMark.
+            const after = doc.sliceString(node.to, Math.min(node.to + 1, doc.length));
+            decorations.push(rawListMark.range(node.from, node.to + (after === " " ? 1 : 0)));
           } else if (ordered) {
             // Its own class rather than the raw-syntax one: a rendered `1.` is content the reader is
             // meant to see and is tinted with the accent, whereas `.pane-syntax` is the muted grey
@@ -557,7 +615,8 @@ function buildDecorations(view: EditorView): DecorationSet {
       // An empty *document* is exempt as well, and not for rhythm: its one line carries the
       // placeholder, and an 8px box would leave "Start writing…" spilling out of the line it is
       // drawn in. An unfocused empty pane is exactly when that shows, because nothing is active.
-      if (doc.length > 0 && line.length === 0 && !codeLines.has(n) && !caret.has(n)) {
+      const exempt = caret.has(n) && caretArrivedByEdit;
+      if (doc.length > 0 && line.length === 0 && !codeLines.has(n) && !exempt) {
         decorations.push(blankLine.range(line.from));
         continue;
       }
@@ -614,6 +673,12 @@ const livePreviewPlugin = ViewPlugin.fromClass(
     }
 
     update(update: ViewUpdate) {
+      // Before the rebuild below, because it decides what that rebuild draws — see the note on
+      // `caretArrivedByEdit`. A doc change sets it; a bare selection change clears it; anything else
+      // leaves it alone, because anything else has not moved the caret.
+      if (update.docChanged) caretArrivedByEdit = true;
+      else if (update.selectionSet) caretArrivedByEdit = false;
+
       // Selection is in the list because moving the caret onto a line reveals its source. That is
       // the feature, and it is also why this must stay cheap.
       if (

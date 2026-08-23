@@ -256,10 +256,24 @@
   margin-left: -16px;
 }
 
+/* A revealed marker sits in the same box the rendered one does, or the line jumps 16px right the
+ * moment the caret arrives on it — see `rawListMark` in live-preview.ts. `min-width` rather than
+ * `width`, because `1. ` is wider than `- ` and neither may be clipped. */
+.pane-syntax-listmark {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: -16px;
+}
+
 .cm-line.pane-line-li-1 { padding-left: 26px; }  /* 10 + 16 */
 .cm-line.pane-line-li-2 { padding-left: 48px; }  /* 32 + 16 */
 .cm-line.pane-line-li-3 { padding-left: 70px; }  /* 54 + 16 */
 .cm-line.pane-line-li-4 { padding-left: 92px; }  /* 76 + 16 */
+
+/* The padding a collapsed fence was standing in for — see `fenceOpenRaw` in live-preview.ts. Only
+ * while the fence is showing its backticks; the rest of the time the 8px fence line *is* this. */
+.cm-line.pane-line-fence-open-raw { padding-top: var(--blank-line-height); }
+.cm-line.pane-line-fence-close-raw { padding-bottom: var(--blank-line-height); }
 
 .cm-line.pane-line-code {
   font-family: var(--font-mono);

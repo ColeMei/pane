@@ -326,11 +326,94 @@ export function runRenumber(view, doc, bar) {
   return { checked, failures };
 }
 
+/**
+ * Where things sit, which no test had ever looked at.
+ *
+ * Both of these were reported by eye from the running app and then measured here: a list marker
+ * jumped 16px right the moment the caret landed on its line, because the rendered marker sits in a
+ * 16px box with a -16px margin and the revealed one fell back to the line's own padding; and a
+ * revealed code fence lost the 8px the collapsed strip had been standing in for, so the backticks
+ * sat flush against the top edge of the slab.
+ *
+ * Assertions are relative — "the same with the caret on it as off it" — rather than absolute pixel
+ * counts. Every absolute number written down in this project has been wrong within two releases
+ * (see the ⌘K panel height note), and what these two bugs actually were is *movement*.
+ */
+export function runLayout(view, doc) {
+  const failures = [];
+  let checked = 0;
+
+  const DOC = "- top level\n\n1. first\n2. second\n\n- [ ] a task\n\n```python\ndef hello():\n```\n";
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: DOC } });
+
+  // The probe's window never becomes key, so `view.hasFocus` is false and live preview renders the
+  // whole document flat (decision 53). Only that gate is stubbed, as decision 57's probe did.
+  Object.defineProperty(view, "hasFocus", { get: () => true, configurable: true });
+
+  const lineEl = (n) => {
+    const at = view.domAtPos(view.state.doc.line(n).from);
+    const node = at.node.nodeType === 1 ? at.node : at.node.parentElement;
+    return node.closest(".cm-line");
+  };
+  const markerX = (n) => {
+    const range = doc.createRange();
+    range.selectNodeContents(lineEl(n));
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+    return rects.length ? Math.round(rects[0].left) : null;
+  };
+  const put = (n, column) => {
+    const line = view.state.doc.line(n);
+    view.dispatch({ selection: { anchor: line.from + Math.min(column, line.length) } });
+  };
+  const check = (name, want, got) => {
+    checked += 1;
+    if (got !== want) failures.push({ case: `layout \u00b7 ${name}`, want, got });
+  };
+
+  // A marker does not move when the caret arrives on its line.
+  for (const [kind, lineNo] of [["bullet", 1], ["numbered", 3], ["task", 6]]) {
+    put(lineNo === 1 ? 4 : 1, 0);
+    const away = markerX(lineNo);
+    put(lineNo, 2);
+    check(`the ${kind} marker stays put when the caret lands on it`, away, markerX(lineNo));
+  }
+
+  // A revealed fence keeps the padding the collapsed strip was standing in for.
+  put(1, 0);
+  const strip = Math.round(lineEl(8).getBoundingClientRect().height);
+  put(8, 2);
+  const padding = Math.round(parseFloat(getComputedStyle(lineEl(8)).paddingTop));
+  check("a revealed fence gets the collapsed strip's height back as padding", strip, padding);
+
+  // And its text starts where the code below it does, rather than in its own gutter.
+  check("the fence lines up with its own code", markerX(9), markerX(8));
+
+  // The caret's blank line opens only when the caret got there by **typing** (decision 44's actual
+  // argument), not when it was clicked or arrowed onto — where growing 8px to 20px under the
+  // pointer reads as the note gaining a line nobody asked for.
+  const content = doc.querySelector(".cm-content");
+  const height = (n) => Math.round(lineEl(n).getBoundingClientRect().height);
+
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "para one\n" } });
+  view.dispatch({ selection: { anchor: 8 } });
+  content.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  const landed = view.state.doc.lineAt(view.state.selection.main.head).number;
+  check("Enter lands the caret on a line at full height", 20, height(landed));
+
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "para one\n\npara two\n" } });
+  view.dispatch({ selection: { anchor: 0 } });
+  const collapsed = height(2);
+  view.dispatch({ selection: { anchor: 9 } });
+  check("a blank line the caret is moved onto stays collapsed", collapsed, height(2));
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
 
-  for (const suite of [runUndo, runRenumber]) {
+  for (const suite of [runUndo, runRenumber, runLayout]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);
