@@ -409,11 +409,87 @@ export function runLayout(view, doc) {
   return { checked, failures };
 }
 
+/**
+ * Backspace against Return, from every position Return can leave you in.
+ *
+ * Decision 78 declared these inverses and covered one position — the empty line ⏎-at-the-end-of-a-
+ * paragraph leaves you on. Measured on the running build, the other three all still turned the
+ * paragraph break into a **soft** one, which is the exact state that decision says is wrong, and
+ * pressing Backspace again then ate a character of the paragraph above while the soft break stayed.
+ *
+ * Written from the report, which is decision 84's rule: every position, not every code path.
+ */
+export function runBackspace(view, doc) {
+  const failures = [];
+  let checked = 0;
+
+  const content = doc.querySelector(".cm-content");
+  const press = (key) =>
+    content.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  const set = (text) =>
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+  const check = (name, want) => {
+    checked += 1;
+    const got = view.state.doc.toString();
+    if (got !== want) failures.push({ case: `backspace \u00b7 ${name}`, want, got });
+  };
+  const caretAt = (n) => {
+    const line = view.state.doc.line(n);
+    view.dispatch({ selection: { anchor: line.from } });
+  };
+
+  // Return, then Backspace straight back — the inverse claim, from both places ⏎ can be pressed.
+  set("alphabravo\n");
+  view.dispatch({ selection: { anchor: 5 } });
+  press("Enter");
+  check("Enter in the middle of a paragraph splits it", "alpha\n\nbravo\n");
+  press("Backspace");
+  check("and Backspace puts it straight back", "alphabravo\n");
+
+  set("alpha\n");
+  view.dispatch({ selection: { anchor: 5 } });
+  press("Enter");
+  press("Backspace");
+  check("Enter at the end of a paragraph undoes cleanly too", "alpha\n");
+
+  // The two positions a caret can occupy around an existing break.
+  set("alpha\n\nbravo\n");
+  caretAt(2);
+  press("Backspace");
+  check("Backspace on the separating blank line joins the paragraphs", "alphabravo\n");
+
+  set("alpha\n\nbravo\n");
+  caretAt(3);
+  press("Backspace");
+  check("Backspace at the start of the second paragraph joins them", "alphabravo\n");
+
+  // Never a soft break left behind, and never a character eaten instead.
+  set("alpha\n\nbravo\n");
+  caretAt(2);
+  press("Backspace");
+  press("Backspace");
+  check("a second press is an ordinary delete, not a nibble past a broken line", "alphbravo\n");
+
+  // A blank line inside a fenced block is content, and Backspace there is one character.
+  set("```\nalpha\n\nbravo\n```\n");
+  caretAt(4);
+  press("Backspace");
+  check("inside a fence it deletes one character", "```\nalpha\nbravo\n```\n");
+
+  // Nothing above to join to.
+  set("\nalpha\n");
+  caretAt(2);
+  press("Backspace");
+  check("a blank first line is not a paragraph break", "alpha\n");
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
 
-  for (const suite of [runUndo, runRenumber, runLayout]) {
+  for (const suite of [runUndo, runRenumber, runLayout, runBackspace]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);

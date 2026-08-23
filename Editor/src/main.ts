@@ -492,34 +492,75 @@ function selectBlockThenAll(view: EditorView): boolean {
 }
 
 /**
- * One Backspace undoes one Return.
+ * Backspace undoes a paragraph break instead of turning it into a soft one.
  *
- * ⏎ in prose writes `\n\n` (decision 63), and Backspace deleted one of them — so getting rid of a
- * paragraph you had just started left you on a *soft-broken* line inside the paragraph above,
- * which looks like the editor deciding every paragraph needs a spare line in it. The two keys have
- * to be each other's inverse or Return stops being safe to press.
+ * ⏎ writes `\n\n` (decision 63), so a plain Backspace deletes one of them and leaves the two
+ * paragraphs joined into a single **soft-broken** one — which renders as two lines 20pt apart and
+ * reads as the editor deciding every paragraph needs a spare line in it. Decision 78 fixed that for
+ * the one position it was reported from, the caret on the empty line ⏎-at-the-end-of-a-paragraph
+ * leaves you on, and **the guard it used made that the only position it covered.** Measured on the
+ * running build, the other three all still produced the soft break:
  *
- * Only the shape Return leaves behind: the caret at the start of an empty line whose predecessor is
- * also empty. `para\n\n|text` is a different thing — the caret is on a line with text on it — and
- * still deletes one newline, which is the ordinary join.
+ *   - ⏎ in the *middle* of a paragraph puts the caret at the start of the new one, which is not an
+ *     empty line — so ⌫ straight afterwards was not the inverse of the ⏎ that had just run.
+ *   - The caret on the blank line *between* two paragraphs.
+ *   - The caret at the start of the second paragraph.
+ *
+ * Worse, pressing it twice from there ate a character of the paragraph above while leaving the soft
+ * break in place, so the obvious recovery made things worse.
+ *
+ * The rule is one rule now: **a caret at the start of a line with a blank line above it deletes the
+ * break, not half of it.** The paragraphs join, which is what every block editor does and what the
+ * ⏎ being undone had separated. A soft break is still one ⇧⏎ away.
  */
 function joinBackToParagraph(view: EditorView): boolean {
   const { state } = view;
   const range = state.selection.main;
   if (!range.empty) return false;
 
-  const line = state.doc.lineAt(range.head);
-  if (range.head !== line.from || line.length !== 0 || line.number < 2) return false;
+  const doc = state.doc;
+  const line = doc.lineAt(range.head);
+  if (range.head !== line.from) return false;
 
-  const previous = state.doc.line(line.number - 1);
-  if (previous.length !== 0) return false;
+  // Inside a fenced block a blank line is content, not a paragraph break, and Backspace there means
+  // delete one character, as it does in any code editor.
+  for (let node = syntaxTree(state).resolveInner(range.head, 1); node.parent; node = node.parent) {
+    if (node.name === "FencedCode" || node.name === "CodeBlock") return false;
+  }
 
-  view.dispatch({
-    changes: { from: previous.from - 1, to: range.head },
-    selection: { anchor: previous.from - 1 },
-    userEvent: "delete.backward",
-  });
-  return true;
+  // Standing at the start of a line with a blank one above it: the break is the two newlines
+  // *before* the caret. Line 3 at the earliest, because the deletion starts at the newline before
+  // the blank line and at line 2 that offset is -1 — the original guard said `< 2` and was saved
+  // only by an emptiness test this no longer applies.
+  if (line.number >= 3 && doc.line(line.number - 1).length === 0) {
+    const blank = doc.line(line.number - 1);
+    view.dispatch({
+      changes: { from: blank.from - 1, to: range.head },
+      selection: { anchor: blank.from - 1 },
+      userEvent: "delete.backward",
+    });
+    return true;
+  }
+
+  // Standing *on* the blank line that separates two paragraphs: the break is the newline before the
+  // caret and the one after it. Deleting only the first is what left the soft break, and pressing
+  // Backspace again then ate a character of the paragraph above while the soft break stayed.
+  if (
+    line.length === 0 &&
+    line.number >= 2 &&
+    line.number < doc.lines &&
+    doc.line(line.number - 1).length !== 0 &&
+    doc.line(line.number + 1).length !== 0
+  ) {
+    view.dispatch({
+      changes: { from: doc.line(line.number - 1).to, to: line.to + 1 },
+      selection: { anchor: doc.line(line.number - 1).to },
+      userEvent: "delete.backward",
+    });
+    return true;
+  }
+
+  return false;
 }
 
 /** Built once. It is the ⏎ binding as well, so the two keys cannot drift apart. */
