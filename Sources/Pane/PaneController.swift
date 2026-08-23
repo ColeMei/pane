@@ -18,7 +18,7 @@ final class PaneController: NSObject {
     /// resumes, and nothing that looks like an error — because in two of the three cases nothing
     /// went wrong.
     enum Banner {
-        case conflict(sibling: String)
+        case conflict
         case downloading
         case problem(String)
 
@@ -32,8 +32,20 @@ final class PaneController: NSObject {
 
         var text: String {
             switch self {
-            case .conflict(let sibling):
-                return "This note changed elsewhere. Your version is in \(sibling)."
+            case .conflict:
+                // Decision 76: the name of the thing that happened, and nothing after it.
+                //
+                // This used to go on to print the sibling's filename, and **the filename was the
+                // half that got cut**: decision 2's names are long by construction and the conflict
+                // stamp doubles them, so a 434pt pane rendered "…Your version is in
+                // 2026-08-23-1002…" — all of the prose and none of the payload. Seen the first time
+                // the banner ever fired for real.
+                //
+                // Nothing is lost by dropping it. The pane is already editing the sibling
+                // (decision 25), so your text is on screen; ⌥⌘R reveals the file it is in; and the
+                // switcher lists both. A row that cannot fit the fact it is carrying is better off
+                // carrying the state instead.
+                return "This note changed elsewhere."
             case .downloading:
                 return "Downloading from iCloud…"
             case .problem(let message):
@@ -362,6 +374,22 @@ final class PaneController: NSObject {
     private func adopt(
         filename: String, text: String, hash: String, recordingHistory: Bool = true
     ) {
+        // Everything typed since `open` asked for this note belongs to the note that was on screen
+        // while it was being fetched, and the next four lines replace the buffer holding it.
+        //
+        // `open` flushes too, which covers the ordinary case where a note loads in a millisecond.
+        // A note that has to be **downloaded** does not: decision 13 measures that at 5–20 seconds,
+        // and the pane goes on showing and accepting edits into the previous note for all of it
+        // (decision 8 — the panel is never made read-only). Measured on the running app: type a
+        // character while "Downloading from iCloud…" is up, let the download land inside the 500 ms
+        // debounce, and the character is gone — the write timer fires after the buffer has already
+        // been replaced, finds the new note's text against the new note's baseline, and declines.
+        //
+        // That is decision 10's write model wrong for the **fifth** time and silent for the fifth
+        // time, and the shape is decisions 56 and 74's exactly: something replacing or moving the
+        // buffer without putting what was in it somewhere first.
+        if filename != currentFilename { flush(trigger: .noteSwitched) }
+
         // Recorded here rather than in `open` so the history can only ever contain notes that really
         // opened — a filename that turned out to be missing never reaches this line, which is what
         // keeps Back from walking onto a note that has since been deleted.
@@ -634,7 +662,7 @@ final class PaneController: NSObject {
                     // and every message that names a file is wrong: ⌃X would delete the original,
                     // the one now holding the other machine's version, and ⇧⌘P would pin it.
                     self.editor.call("setNoteFilename", [sibling])
-                    self.showBanner(.conflict(sibling: sibling))
+                    self.showBanner(.conflict)
                 }
 
             case .failed(let message):

@@ -12,6 +12,20 @@ import PaneKit
 final class VaultService: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "dev.colemei.pane.vault", qos: .userInitiated)
+
+    /// Waiting for iCloud happens here rather than on `queue`.
+    ///
+    /// `VaultIO.materialize` is a poll: it sleeps for up to two minutes doing nothing but stat-ing a
+    /// file. On the serial queue that wait sits in front of every write. Measured on the running app
+    /// with a download in flight — everything typed into the note that was still on screen stayed in
+    /// the buffer, the word count rising, with not a byte on disk until the download finished; and
+    /// `drain` at quit is bounded at two seconds, so quitting during one lost the lot.
+    ///
+    /// The ordering argument for the serial queue is about work that *touches* the vault — a write,
+    /// the FSEvents reaction to it, the index refresh behind it. A wait touches nothing, so it does
+    /// not belong in that line. The `load` that follows the wait still does.
+    private let downloads = DispatchQueue(label: "dev.colemei.pane.vault.download", qos: .utility)
+
     private let index = NoteIndex()
 
     /// Only read or written on `queue`.
@@ -98,17 +112,21 @@ final class VaultService: @unchecked Sendable {
 
     /// Asks iCloud for an evicted note. Takes seconds; the pane shows a banner meanwhile.
     func download(_ filename: String, completion: @escaping @MainActor (LoadResult) -> Void) {
+        // `vaultURL` is only read on `queue`, so the hop out to wait is taken from inside it.
         queue.async {
             let url = self.vaultURL.appendingPathComponent(filename)
-            do {
-                try VaultIO.materialize(url)
-            } catch {
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { completion(.failed(String(describing: error))) }
+            self.downloads.async {
+                do {
+                    try VaultIO.materialize(url)
+                } catch {
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { completion(.failed(String(describing: error))) }
+                    }
+                    return
                 }
-                return
+                // Back onto the serial queue for the read, the index update and everything after.
+                self.load(filename, completion: completion)
             }
-            self.load(filename, completion: completion)
         }
     }
 
