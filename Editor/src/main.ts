@@ -45,6 +45,7 @@ import { placeOverlay } from "./overlay";
 import { describe, hideTooltip, mountTooltips } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
+import { renumberOrderedLists } from "./renumber";
 import { mountSwitcher, type NoteSummary } from "./switcher";
 import { MARKDOWN_FORMAT_KEYS, mountFormatBar, setHeading } from "./format-bar";
 import { noteTitle } from "./note-title";
@@ -796,6 +797,10 @@ function baseExtensions(): Extension[] {
 
     livePreview(),
     findHighlighting(),
+    // Ordered lists count themselves. A filter that writes to the document, so it declares the
+    // transactions it is *for* rather than the ones it is against — see the file's own note, and
+    // decision 81, which is what happened the first time that was the other way round.
+    renumberOrderedLists(),
     // An empty note said nothing at all — a caret in a blank rectangle. The reference prompts, and
     // it matters more here than it does there: ⌘N now leaves nothing on disk until the first write,
     // so an empty pane is genuinely a blank page rather than a file that already exists.

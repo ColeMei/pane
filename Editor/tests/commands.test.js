@@ -168,14 +168,172 @@ export function runUndo(view, doc) {
   return { checked, failures };
 }
 
+/**
+ * Ordered lists that renumber themselves.
+ *
+ * These are written from the ways the thing gets *used* rather than from what was built — which is
+ * the lesson of the last attempt, whose cases were written from the implementation and passed
+ * while a list split in two counted wrong. So: delete the first item, delete a middle one, insert
+ * one, split a list with a paragraph, type a marker of your own, and press undo after each.
+ *
+ * Undo is the case that pulled this feature the first time (decision 81), so it is here from the
+ * start rather than added after something goes wrong.
+ */
+export function runRenumber(view, doc, bar) {
+  const failures = [];
+  let checked = 0;
+
+  const content = doc.querySelector(".cm-content");
+  const press = (key, mods = {}) =>
+    content.dispatchEvent(new KeyboardEvent("keydown", {
+      key, bubbles: true, cancelable: true,
+      metaKey: !!mods.meta, shiftKey: !!mods.shift,
+    }));
+
+  // A fixture is set with no `userEvent`, which is deliberately *not* an edit — the same as a note
+  // arriving from Swift. If setting up a case renumbered it, the cases would be testing nothing.
+  const set = (text) =>
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+
+  const edit = (spec) => view.dispatch({ userEvent: "input.type", ...spec });
+  const remove = (from, to) =>
+    view.dispatch({ changes: { from, to, insert: "" }, userEvent: "delete.selection" });
+
+  const check = (name, want) => {
+    checked += 1;
+    const got = view.state.doc.toString();
+    if (got !== want) failures.push({ case: `renumber \u00b7 ${name}`, want, got });
+  };
+
+  // --- the case the feature exists for -------------------------------------------------------
+
+  set("1. a\n2. b\n3. c\n");
+  remove(0, 5);
+  check("deleting the first item restarts at one", "1. b\n2. c\n");
+
+  set("1. a\n2. b\n3. c\n");
+  remove(5, 10);
+  check("deleting a middle item closes the gap", "1. a\n2. c\n");
+
+  set("1. a\n2. b\n");
+  view.dispatch({ selection: { anchor: 4 } });
+  press("Enter");
+  check("an item inserted in the middle pushes the rest down", "1. a\n2. \n3. b\n");
+
+  // The caret does not pay for the correction. Renumbering rewrites markers *above* where you are
+  // typing, and two of them get shorter here — a caret that did not move with them would end up
+  // two characters adrift, which is the failure everything about this editor is tuned to avoid.
+  set("8. a\n9. b\n10. c\n11. d\n");
+  view.dispatch({ selection: { anchor: 21 } });
+  remove(0, 5);
+  check("markers above the caret shrink without dragging it", "1. b\n2. c\n3. d\n");
+  checked += 1;
+  if (view.state.selection.main.head !== 14) {
+    failures.push({
+      case: "renumber \u00b7 the caret stays after the 'd'",
+      want: 14,
+      got: view.state.selection.main.head,
+    });
+  }
+
+  // --- the author's own numbering, which is not ours to change -------------------------------
+
+  set("5. a\n6. b\n7. c\n");
+  edit({ changes: { from: 9, insert: "X" } });
+  check("a run the author started at five stays at five", "5. a\n6. bX\n7. c\n");
+
+  set("5. a\n6. b\n7. c\n");
+  remove(0, 5);
+  check("but an item only first because the one above went restarts at one", "1. b\n2. c\n");
+
+  set("hello\n\n");
+  view.dispatch({ selection: { anchor: 7 } });
+  edit({ changes: { from: 7, insert: "5. mine" }, selection: { anchor: 14 } });
+  check("a marker you type yourself is left alone", "hello\n\n5. mine");
+
+  // --- a list split in two, which the last attempt got wrong ---------------------------------
+
+  set("1. a\n2. b\n3. c\n4. d\n");
+  edit({ changes: { from: 10, insert: "\npara\n\n" } });
+  check(
+    "a paragraph between items splits the list and the second half restarts",
+    "1. a\n2. b\n\npara\n\n1. c\n2. d\n"
+  );
+
+  // --- alongside the things that already write list markers -----------------------------------
+
+  // ⇧⌘7 works out its own start number by looking at the list above. The filter then sees the same
+  // list and must agree with it rather than fight it.
+  set("1. a\n\npara\n");
+  view.dispatch({ selection: { anchor: 7 } });
+  const numbered = [...bar.querySelectorAll("button")]
+    .find((b) => (b.getAttribute("aria-label") || "").startsWith("Numbered list"));
+  numbered.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  check("the numbered-list button and the filter agree", "1. a\n\n2. para\n");
+
+  // Enter continues the list, and Enter on the empty marker leaves it — neither should acquire a
+  // stray number on the way past.
+  set("1. a\n2. b\n");
+  view.dispatch({ selection: { anchor: 9 } });
+  press("Enter");
+  check("Enter continues the numbering", "1. a\n2. b\n3. \n");
+  press("Enter");
+  check("and Enter again leaves the list", "1. a\n2. b\n\n");
+
+  // --- what it must never touch --------------------------------------------------------------
+
+  const fenced = "1. a\n5. b\n\n```\n1. one\n5. five\n```\n";
+  set(fenced);
+  edit({ changes: { from: 22, insert: "" }, selection: { anchor: 22 } });
+  check("digits inside a fence are code, not a list", fenced);
+
+  set("- a\n- b\n- c\n");
+  remove(0, 4);
+  check("a bulleted list has nothing to count", "- b\n- c\n");
+
+  // Opening somebody's note must not rewrite it. `loadNote` is how every note arrives, and a file
+  // whose list says 1, 1, 1 is a file the user wrote that way.
+  window.paneHost.loadNote("keep.md", "1. a\n1. b\n1. c\n", 0, false);
+  check("opening a note renumbers nothing", "1. a\n1. b\n1. c\n");
+
+  // --- nesting -------------------------------------------------------------------------------
+
+  set("1. a\n   1. x\n   4. y\n2. b\n");
+  remove(5, 13);
+  check("a nested list counts on its own", "1. a\n   1. y\n2. b\n");
+
+  set("3. a\n   1. x\n   2. y\n9. b\n");
+  edit({ changes: { from: 12, insert: "X" } });
+  check(
+    "an outer run keeps its own start while the nested one keeps its",
+    "3. a\n   1. xX\n   2. y\n4. b\n"
+  );
+
+  // --- undo, which is why this feature was pulled the first time ------------------------------
+
+  const before = "1. a\n2. b\n3. c\n";
+  window.paneHost.loadNote("undo.md", before, 0, false);
+  remove(0, 5);
+  check("the edit and its renumbering land together", "1. b\n2. c\n");
+  press("z", { meta: true });
+  check("and one undo takes both back", before);
+  press("z", { meta: true, shift: true });
+  check("redo puts both forward again", "1. b\n2. c\n");
+  press("z", { meta: true });
+  press("z", { meta: true });
+  check("undo cannot walk past the load into an empty document", before);
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
 
-  {
-    const undoResult = runUndo(view, doc);
-    checked += undoResult.checked;
-    failures.push(...undoResult.failures);
+  for (const suite of [runUndo, runRenumber]) {
+    const result = suite(view, doc, bar);
+    checked += result.checked;
+    failures.push(...result.failures);
   }
 
   const click = (label) => {
