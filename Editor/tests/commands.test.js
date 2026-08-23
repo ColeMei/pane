@@ -406,6 +406,37 @@ export function runLayout(view, doc) {
   view.dispatch({ selection: { anchor: 9 } });
   check("a blank line the caret is moved onto stays collapsed", collapsed, height(2));
 
+  // And a click on the separator does nothing at all. The line is a real `\n`, but drawn as 8px of
+  // empty space between two paragraphs it reads as the gap rather than as a place, so aiming past
+  // it should not land in it. Typora and Obsidian both swallow the click.
+  const clickCentre = (n) => {
+    const r = lineEl(n).getBoundingClientRect();
+    lineEl(n).dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true, cancelable: true,
+      clientX: Math.round(r.left + 30), clientY: Math.round(r.top + r.height / 2),
+    }));
+  };
+  const head = () => view.state.selection.main.head;
+
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "alpha\n\nbravo\n" } });
+  view.dispatch({ selection: { anchor: 12 } });
+  clickCentre(2);
+  check("clicking the blank line between two paragraphs does nothing", 12, head());
+
+  // The three things that must keep working, each of which a blunter rule would have broken.
+  // Asserted as "did the caret move", not as an offset: the point of each is that the click is
+  // *not* swallowed, and a literal offset would only be testing my arithmetic for the click point.
+  const clickMoves = (name, text, lineNo) => {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+    view.dispatch({ selection: { anchor: 0 } });
+    clickCentre(lineNo);
+    check(name, true, head() !== 0);
+  };
+
+  clickMoves("a trailing blank line is still clickable", "alpha\n", 2);
+  clickMoves("a run of blank lines is still clickable", "alpha\n\n\nbravo\n", 2);
+  clickMoves("a blank line inside a fence is content, not a gap", "```\nfirst\n\nlast\n```\n", 3);
+
   return { checked, failures };
 }
 

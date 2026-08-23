@@ -19,7 +19,7 @@
  */
 
 import { syntaxTree } from "@codemirror/language";
-import { type Extension, type Range, RangeSet, StateField } from "@codemirror/state";
+import { type Extension, type Range, RangeSet, StateField, Transaction } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -676,7 +676,16 @@ const livePreviewPlugin = ViewPlugin.fromClass(
       // Before the rebuild below, because it decides what that rebuild draws — see the note on
       // `caretArrivedByEdit`. A doc change sets it; a bare selection change clears it; anything else
       // leaves it alone, because anything else has not moved the caret.
-      if (update.docChanged) caretArrivedByEdit = true;
+      // A note arriving from Swift is a document change and is emphatically not an edit — it carries
+      // `addToHistory: false` for undo's sake (decision 80), and the same annotation answers this.
+      // Without it, opening a note whose remembered caret offset happens to sit on a blank line
+      // (decision 11 restores the exact offset) came up with that line already open, which is the
+      // reported bug arriving by the one route that never touches the mouse.
+      const restored = update.transactions.some(
+        (tr) => tr.annotation(Transaction.addToHistory) === false
+      );
+      if (restored) caretArrivedByEdit = false;
+      else if (update.docChanged) caretArrivedByEdit = true;
       else if (update.selectionSet) caretArrivedByEdit = false;
 
       // Selection is in the list because moving the caret onto a line reveals its source. That is
@@ -711,6 +720,53 @@ const livePreviewPlugin = ViewPlugin.fromClass(
  * Deliberately an edit rather than a toggle on a model: there is no model. The document is the only
  * state, so the checkbox has to change the same characters the user would have changed by typing.
  */
+/**
+ * A click on the blank line between two paragraphs does nothing at all.
+ *
+ * That line is a real `\n` in the file — the paragraph break itself — so the caret can perfectly
+ * well stand on it, and for a long time it did. But it is drawn as an 8px strip of empty space, and
+ * a strip of empty space between two paragraphs does not read as a place: it reads as the gap
+ * between them. Clicking it and getting a caret you did not ask for, in a gap you were only aiming
+ * *past*, is the note behaving like a text file rather than like a note. Typora and Obsidian both
+ * swallow it.
+ *
+ * **Only a genuine separator** — an empty line with text immediately above *and* below. That is the
+ * case being described and nothing else, which keeps three things working that would otherwise
+ * break: a trailing blank line stays clickable, because it is where "click under the last line of
+ * the note" lands; a run of blank lines stays clickable, because you may well want to delete one;
+ * and a blank line inside a fenced block is content with a background, not a gap.
+ *
+ * Two more guards. `posAtCoords` is asked for a *precise* hit, so a click in the empty space below
+ * the note returns null and falls through to CodeMirror — otherwise a note ending in a blank line
+ * would swallow the most ordinary click there is. And an unfocused editor always lets the click
+ * through, because swallowing it would leave the pane unfocusable by clicking in the wrong spot.
+ *
+ * Arrow keys still walk onto the line, and ⌫ still deletes the break (see `joinBackToParagraph`),
+ * so nothing about the document has become unreachable — only the aiming has got easier.
+ */
+const blankLineClickHandler = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    if (!view.hasFocus) return false;
+
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (pos === null) return false;
+
+    const doc = view.state.doc;
+    const line = doc.lineAt(pos);
+    if (line.length !== 0) return false;
+    if (line.number <= 1 || line.number >= doc.lines) return false;
+    if (doc.line(line.number - 1).length === 0) return false;
+    if (doc.line(line.number + 1).length === 0) return false;
+
+    for (let node = syntaxTree(view.state).resolveInner(line.from, 1); node.parent; node = node.parent) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock") return false;
+    }
+
+    event.preventDefault();
+    return true;
+  },
+});
+
 const taskClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
     const target = event.target as HTMLElement | null;
@@ -777,7 +833,7 @@ export function caretBlankLineSlack(view: EditorView): number {
  * a StateField cannot see. Hence a ViewPlugin.
  */
 export function livePreview(): Extension {
-  return [livePreviewPlugin, taskClickHandler];
+  return [livePreviewPlugin, blankLineClickHandler, taskClickHandler];
 }
 
 // Re-exported so the unused-import checker does not hide a genuine mistake if this is refactored.
