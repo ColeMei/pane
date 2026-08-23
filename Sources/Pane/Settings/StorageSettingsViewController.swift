@@ -155,30 +155,33 @@ final class StorageSettingsViewController: NSViewController {
 
         let noteCount = (try? VaultIO.listNotes(in: source))?.count ?? 0
 
-        let notes: String
-        if noteCount == 0 {
-            notes = "There are no notes to move."
-        } else {
-            let plural = noteCount == 1 ? "" : "s"
-            notes = """
-                Your \(noteCount) note\(plural) can move there with it, or stay where they are at \
-                \(source.path) — Pane will start with an empty folder if they stay.
-                """
-        }
-
+        // Decision 76, reaching the one modal it had not. This ran to three paragraphs, and the
+        // third — "Nothing about this turns on a sync service. It only chooses which folder the
+        // notes live in…" — was decision 21's *argument*, which belongs in the brief rather than in
+        // front of somebody who has just clicked a radio button. The first paragraph restated the
+        // title. What decision 30 actually requires is the source, the destination and the count,
+        // and all three survive in one sentence each.
         let alert = NSAlert()
         alert.messageText = "Move your notes to \(Self.short(destination))?"
-        alert.informativeText = """
-            Pane will point at \(destination.path) from now on.
-
-            \(notes)
-
-            Nothing about this turns on a sync service. It only chooses which folder the notes live \
-            in; iCloud Drive syncs that folder because it is inside iCloud Drive.
-            """
+        //
+        // Only one of the two paths is spelled out, and it is the **source** — because that is the
+        // one notes can be left behind in, and therefore the one you would have to go and find. The
+        // destination is named in the title and was just chosen in a radio or an open panel. Spelled
+        // out, `~/Library/Mobile Documents/com~apple~CloudDocs/Pane` took six of the alert's lines
+        // on its own, which is most of what "too much to read" meant.
+        alert.informativeText = noteCount == 0
+            ? "Pane will use \(Self.tilde(destination)) from now on."
+            : """
+                Your \(noteCount) note\(noteCount == 1 ? "" : "s") can move to \
+                \(Self.short(destination)), or stay in \(Self.tilde(source)) and leave Pane with \
+                an empty folder.
+                """
         alert.alertStyle = .informational
         if noteCount > 0 { alert.addButton(withTitle: "Move Notes") }
-        alert.addButton(withTitle: noteCount > 0 ? "Just Point There" : "Continue")
+        // "Just Point There" was jargon for a thing the user was not thinking about — pointing. The
+        // question on screen is what happens to the *notes*, so both answers are verbs about the
+        // notes and the pair reads as one choice.
+        alert.addButton(withTitle: noteCount > 0 ? "Leave Them" : "Continue")
         alert.addButton(withTitle: "Cancel")
 
         let response = alert.runModal()
@@ -251,5 +254,11 @@ final class StorageSettingsViewController: NSViewController {
 
     private static func short(_ url: URL) -> String {
         isInICloudDrive(url) ? "iCloud Drive" : url.lastPathComponent
+    }
+
+    /// A path a person can read in a sentence. `/Users/colemei/Pane` is four words of noise before
+    /// the one that matters.
+    private static func tilde(_ url: URL) -> String {
+        (url.path as NSString).abbreviatingWithTildeInPath
     }
 }
