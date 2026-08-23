@@ -177,3 +177,43 @@ final class PanePanel: NSPanel {
         }
     }
 }
+
+extension PanePanel {
+
+    /// Steps every pane out of the way of a window the app has put in front on purpose.
+    ///
+    /// A pane sits at `.floating` so it stays above other applications — that is the product. A save
+    /// panel, an `NSAlert` and the Settings window are ordinary windows at `.normal`, so **all four
+    /// moments Pane deliberately activates** (decisions 16, 27, 37 and the Sync alert of decision
+    /// 30) put their window *behind* the pane. Measured on the running app: the Export panel's Save
+    /// button sat under the pane's edge, and Settings opened with its first rows covered.
+    ///
+    /// The pane is lowered rather than the other window raised, and that is the whole design.
+    /// Raising Settings to `.floating` would leave it above every *other* app's windows too, which
+    /// is exactly the behaviour Pane reserves for the pane. Lowering is also scoped by construction:
+    /// it lasts only as long as the window that asked for it.
+    ///
+    /// `isFloatingPanel` is cleared as well, because it owns the level — setting `level` alone left
+    /// the panel back at `.floating` and the save panel still behind it.
+    static func stepAside() {
+        for pane in NSApp.windows.compactMap({ $0 as? PanePanel }) {
+            pane.isFloatingPanel = false
+            pane.level = .normal
+        }
+    }
+
+    /// Puts them back. Safe to call when nothing stepped aside.
+    static func resumeFloating() {
+        for pane in NSApp.windows.compactMap({ $0 as? PanePanel }) {
+            pane.isFloatingPanel = true
+            pane.level = .floating
+        }
+    }
+
+    /// The scoped form, for anything that runs modal.
+    static func steppingAside<T>(_ body: () throws -> T) rethrows -> T {
+        stepAside()
+        defer { resumeFloating() }
+        return try body()
+    }
+}

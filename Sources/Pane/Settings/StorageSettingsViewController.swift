@@ -140,7 +140,7 @@ final class StorageSettingsViewController: NSViewController {
         panel.message = "Choose the folder your notes live in."
         panel.directoryURL = settings.value.vaultURL
 
-        guard panel.runModal() == .OK, let chosen = panel.url else { return }
+        guard PanePanel.steppingAside({ panel.runModal() }) == .OK, let chosen = panel.url else { return }
         // Picking a folder by hand is a statement about where the notes already are, so nothing
         // moves — unlike the Sync radio, which is a statement about where they should be.
         adopt(chosen, movingNotes: false)
@@ -184,7 +184,7 @@ final class StorageSettingsViewController: NSViewController {
         alert.addButton(withTitle: noteCount > 0 ? "Leave Them" : "Continue")
         alert.addButton(withTitle: "Cancel")
 
-        let response = alert.runModal()
+        let response = PanePanel.steppingAside { alert.runModal() }
         let cancel: NSApplication.ModalResponse = noteCount > 0 ? .alertThirdButtonReturn : .alertSecondButtonReturn
         guard response != cancel else {
             refresh(settings.value)  // put the radio back where it was
@@ -219,7 +219,7 @@ final class StorageSettingsViewController: NSViewController {
             alert.messageText = "Pane could not use that folder."
             alert.informativeText = error.localizedDescription
             alert.alertStyle = .warning
-            alert.runModal()
+            PanePanel.steppingAside { alert.runModal() }
             refresh(settings.value)
             return
         }

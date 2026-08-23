@@ -262,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Choose Folder…")
         alert.addButton(withTitle: "Quit Pane")
 
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        guard PanePanel.steppingAside({ alert.runModal() }) == .alertFirstButtonReturn else {
             NSApp.terminate(nil)
             return
         }
@@ -275,7 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.prompt = "Use This Folder"
         panel.message = "Choose the folder your notes live in."
 
-        guard panel.runModal() == .OK, let chosen = panel.url else {
+        guard PanePanel.steppingAside({ panel.runModal() }) == .OK, let chosen = panel.url else {
             presentVaultChooser(message: message, detail: detail)
             return
         }

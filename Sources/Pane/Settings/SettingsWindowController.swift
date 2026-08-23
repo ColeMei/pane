@@ -12,7 +12,7 @@ import PaneKit
 /// resizing to each tab's content. Written out by hand it would be a toolbar delegate, a tab view and
 /// a pile of size animations; the platform already has all three and gets them right.
 @MainActor
-final class SettingsWindowController: NSWindowController {
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private let settings: SettingsStore
     private let general: GeneralSettingsViewController
@@ -66,6 +66,7 @@ final class SettingsWindowController: NSWindowController {
         window.center()
 
         super.init(window: window)
+        window.delegate = self
     }
 
     @available(*, unavailable)
@@ -77,9 +78,17 @@ final class SettingsWindowController: NSWindowController {
     /// is built not to do this; a settings window that opened behind the app you were using would be
     /// a window you cannot find.
     func present() {
+        // The pane is `.floating` and this is an ordinary window, so without this it opens *behind*
+        // the pane with its first rows covered. See `PanePanel.stepAside`.
+        PanePanel.stepAside()
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// And the pane goes back to floating the moment this window is gone.
+    func windowWillClose(_ notification: Notification) {
+        PanePanel.resumeFloating()
     }
 
     /// Pushes a change into every tab, so a value edited on one tab — or in `settings.json` while

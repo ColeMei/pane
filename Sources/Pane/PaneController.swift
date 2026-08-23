@@ -934,10 +934,14 @@ final class PaneController: NSObject {
         panel.title = "Export Note"
 
         // The one place other than "choose vault" (decision 27) where Pane activates on purpose:
-        // a save panel behind every other window is a hang as far as the user is concerned.
+        // a save panel behind every other window is a hang as far as the user is concerned. And
+        // activating is not enough on its own — the pane is `.floating`, so the panel came up behind
+        // it with the Save button under its edge until `stepAside` (see `PanePanel`).
+        PanePanel.stepAside()
         NSApp.activate(ignoringOtherApps: true)
 
         panel.begin { [weak self] response in
+            PanePanel.resumeFloating()
             guard response == .OK, let url = panel.url, let self else { return }
             let html = MarkdownExport.html(
                 from: text,
