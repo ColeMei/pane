@@ -145,7 +145,8 @@ export function mountFind(options: FindOptions) {
   describe(root.querySelector<HTMLElement>("[data-prev]")!, "Previous ⇧⏎");
   describe(root.querySelector<HTMLElement>("[data-next]")!, "Next ⏎");
   describe(root.querySelector<HTMLElement>(".find__close")!, "Close ⎋");
-  describe(root.querySelector<HTMLElement>("[data-disclosure]")!, "Replace ⌥⌘F");
+  // Not this one — its key is rebindable through `settings.json`, so it is set from the binding in
+  // force by `refreshChromeTooltips` in main.ts. The four around it are keys nothing can rebind.
   describe(root.querySelector<HTMLElement>("[data-replace-one]")!, "Replace ⏎");
   describe(root.querySelector<HTMLElement>("[data-replace-all]")!, "Replace all ⌘⏎");
 

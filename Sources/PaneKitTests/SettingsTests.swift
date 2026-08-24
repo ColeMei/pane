@@ -33,13 +33,31 @@ func runSettingsTests() {
         }
 
         // Every shipped default has to survive the round trip, or a menu item silently loses its key.
+        // `allShortcuts`, not `shortcutActions`: the File menu carries New Note and Browse Notes,
+        // and both are fixed rather than recordable — which table a key lives in has nothing to do
+        // with whether a menu item can express it.
         Check.test("every shipped binding is expressible") {
-            for action in Settings.shortcutActions {
+            for action in Settings.allShortcuts {
                 Check.equal(
                     Settings.menuKeyEquivalent(for: action.standard) != nil,
                     true,
                     "\(action.key) → \(action.standard)"
                 )
+            }
+        }
+
+        // The two tables must not overlap, and between them must bind every action the app runs.
+        // A key in both would take a recorder row *and* be documented as fixed; a key in neither
+        // would be an action with no shipped binding, which decision 31 calls a worse lie than an
+        // absent row.
+        Check.test("no action is in both tables") {
+            let recordable = Set(Settings.shortcutActions.map(\.key))
+            let fixed = Set(Settings.fixedShortcuts.map(\.key))
+            Check.equal(recordable.intersection(fixed).isEmpty, true)
+        }
+        Check.test("every action resolves to a binding") {
+            for action in Settings.allShortcuts {
+                Check.equal(Settings.standardShortcuts[action.key]?.isEmpty == false, true, action.key)
             }
         }
     }

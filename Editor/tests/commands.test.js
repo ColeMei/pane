@@ -516,11 +516,53 @@ export function runBackspace(view, doc) {
   return { checked, failures };
 }
 
+/**
+ * Every key the chrome prints comes from the binding in force.
+ *
+ * Decision 17 forbids a control advertising a key that does something else, and decision 68 fixed
+ * that for the ⌘K rows and the File menu. **It did not reach the tooltips**, which were literals —
+ * "Actions ⌘K", "Notes ⌘P", "New note ⌘N", "Replace ⌥⌘F" — so rebinding Browse Notes left the
+ * switcher button still promising ⌘P. Fourth instance of the same defect, found by someone asking
+ * whether those strings were hard-written.
+ *
+ * The find bar's disclosure is here for a sharper reason: ⌥⌘F has no ⌘K row (decision 72) and,
+ * since the Shortcuts tab stopped offering a recorder for it, no row either. That tooltip is the
+ * only place the key is printed anywhere in the app.
+ */
+export function runTooltips(view, doc) {
+  const failures = [];
+  let checked = 0;
+
+  const label = (selector) => doc.querySelector(selector)?.getAttribute("aria-label") ?? null;
+  const check = (name, want, got) => {
+    checked += 1;
+    if (got !== want) failures.push({ case: `tooltip \u00b7 ${name}`, want, got });
+  };
+
+  window.paneHost.applySettings({ shortcuts: {} });
+  check("the switcher button prints its own key", "Notes \u2318P", label("#browse"));
+  check("the actions button prints its own key", "Actions \u2318K", label("#open-actions"));
+  check("the new-note button prints its own key", "New note \u2318N", label("#new-note"));
+
+  window.paneHost.applySettings({ shortcuts: { browseNotes: "Mod-o", actionPanel: "Alt-Mod-k" } });
+  check("a rebound switcher key reaches the bubble", "Notes \u2318O", label("#browse"));
+  check("and a chorded one renders every cap", "Actions \u2325\u2318K", label("#open-actions"));
+  check("a key that was not rebound is left alone", "New note \u2318N", label("#new-note"));
+
+  window.paneHost.applySettings({ shortcuts: {} });
+  check("restoring the defaults restores the bubble", "Notes \u2318P", label("#browse"));
+
+  // The close button has no shortcut and must not grow one.
+  check("a button with no key prints no key", "Close", label("#close"));
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
 
-  for (const suite of [runUndo, runRenumber, runLayout, runBackspace]) {
+  for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);

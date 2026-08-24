@@ -964,12 +964,40 @@ document.getElementById("open-actions")!.addEventListener("click", () => toggleA
  * 47 and 49 were both instances of.
  */
 mountTooltips(paneEl);
-describe(document.getElementById("close")!, "Close");
-describe(document.getElementById("pin")!, "Unpin ⇧⌘P");
-describe(document.getElementById("open-actions")!, "Actions ⌘K");
-describe(document.getElementById("browse")!, "Notes ⌘P");
-describe(document.getElementById("new-note")!, "New note ⌘N");
-describe(document.getElementById("format-toggle")!, "Format ⌥⌘,");
+
+/**
+ * The chrome's tooltips, **read from the binding in force** rather than written out.
+ *
+ * They were literals — "Actions ⌘K", "Notes ⌘P", "New note ⌘N" — so rebinding Browse Notes to ⌘O
+ * left the switcher button still promising ⌘P. That is decision 17's rule broken in a fourth place:
+ * decision 68 fixed the ⌘K rows and the File menu and did not reach here, because a tooltip is
+ * mounted once at start-up and nothing was re-reading it. `refreshChromeTooltips` is called again
+ * whenever settings arrive, which is the same hook the ⌘K rows already use.
+ */
+const CHROME_TIPS: [selector: string, label: string, action: string | null][] = [
+  ["#close", "Close", null],
+  ["#pin", "Unpin", "pinPane"],
+  ["#open-actions", "Actions", "actionPanel"],
+  ["#browse", "Notes", "browseNotes"],
+  ["#new-note", "New note", "newNote"],
+  ["#format-toggle", "Format", "formatBar"],
+  // The find bar's disclosure is the **only** place ⌥⌘F is printed anywhere in the app — it has no
+  // ⌘K row (decision 72) and no Shortcuts row. If this string goes stale the key is documented
+  // nowhere, which is why it is listed here rather than left as a literal beside its neighbours.
+  ["[data-disclosure]", "Replace", "findReplace"],
+];
+
+function refreshChromeTooltips(): void {
+  for (const [selector, label, action] of CHROME_TIPS) {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (!element) continue;
+    const binding = action ? liveShortcuts[action] ?? DEFAULT_SHORTCUTS[action] : undefined;
+    describe(element, binding ? `${label} ${keyCaps(binding).join("")}` : label);
+  }
+}
+// The first call lives beside `liveShortcuts` below, not here: that binding is a `let` declared
+// further down the file, and reading it from up here is a temporal-dead-zone throw — which took
+// out `window.paneHost` entirely and presented as the whole bridge being missing.
 
 formatBar = mountFormatBar(
   document.getElementById("format-bar") as HTMLElement,
@@ -1127,6 +1155,7 @@ function matchesBinding(event: KeyboardEvent, binding: string): boolean {
 
 /** The bindings in force, so the listener below follows a rebind from the Settings window. */
 let liveShortcuts: Record<string, string> = { ...DEFAULT_SHORTCUTS };
+refreshChromeTooltips();
 
 /**
  * An open overlay's own shortcut closes it.
@@ -1289,6 +1318,9 @@ const host = {
       view.dispatch({
         effects: shortcutsCompartment.reconfigure(paneShortcuts(settings.shortcuts)),
       });
+      // The chrome's bubbles print keys too, and a rebind has to reach them or a button goes on
+      // advertising a key that now does something else — decision 17's rule, in its fourth place.
+      refreshChromeTooltips();
     }
   },
 

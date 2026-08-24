@@ -85,30 +85,65 @@ public struct Settings: Codable, Equatable, Sendable {
     /// Every rebindable action, in the order the Shortcuts tab lists them — which is ⌘K's order,
     /// grouped the way ⌘K groups them. One list of sixteen rows sorted by nothing in particular is
     /// hard to look anything up in, and the panel had already settled what belongs beside what.
+    /// The rows the Shortcuts tab offers a recorder for.
+    ///
+    /// **Not every shortcut Pane has** — see `fixedShortcuts` for the rest, and the note there for
+    /// where the line falls. This table is "what you might plausibly want to change", which is a
+    /// different question from "what keys exist", and conflating the two is what took the tab to
+    /// sixteen rows in one column.
     public static let shortcutActions:
         [(key: String, label: String, standard: String, group: String)] = [
-            ("newNote", "New Note", "Mod-n", "Notes"),
-            ("duplicateNote", "Duplicate Note", "Mod-d", "Notes"),
-            ("browseNotes", "Browse Notes", "Mod-p", "Notes"),
             ("navigateBack", "Previous Note", "Mod-[", "Notes"),
             ("navigateForward", "Next Note", "Mod-]", "Notes"),
 
-            ("findInNote", "Find in Note", "Mod-f", "This note"),
-            ("findReplace", "Find and Replace", "Alt-Mod-f", "This note"),
             ("copyAsMarkdown", "Copy as Markdown", "Shift-Mod-c", "This note"),
             ("revealInFinder", "Reveal in Finder", "Alt-Mod-r", "This note"),
             ("exportNote", "Export…", "Shift-Mod-e", "This note"),
             ("deleteNote", "Delete Note", "Ctrl-x", "This note"),
 
-            ("actionPanel", "Action Panel", "Mod-k", "The pane"),
             ("pinPane", "Pin Pane", "Shift-Mod-p", "The pane"),
             ("autoSizing", "Window Auto-sizing", "Shift-Mod-/", "The pane"),
             ("formatBar", "Show Format Bar", "Alt-Mod-,", "The pane"),
             ("hideFromCapture", "Hide from Screen Capture", "Shift-Mod-h", "The pane"),
         ]
 
+    /// Shortcuts that exist, work, and get no recorder row.
+    ///
+    /// **Two questions decide which table a key goes in, and neither of them is taste.**
+    ///
+    /// *Can it be taken from you?* Only a system-wide hotkey registration can — an ordinary
+    /// shortcut in another app cannot reach Pane while the pane is key. And a plain ⌘+letter is
+    /// essentially never registered globally, because doing so would break every text field on the
+    /// machine. ⇧⌘ and ⌥⌘ combinations are exactly what utilities do claim: ⇧⌘E was dead for three
+    /// releases here because a window manager held it, which is the whole argument for the recorder
+    /// (decisions 15, 31) and the reason Export keeps its row.
+    ///
+    /// *Is there another way in?* If a key stops working and nothing else reaches the feature, the
+    /// feature is gone. Every key below still prints itself somewhere the user looks: five of the
+    /// six carry a ⌘K row, and Find and Replace carries the find bar's disclosure tooltip. **⌘[ and
+    /// ⌘] deliberately have neither** (decision 51 gave them no ⌘K row), so the Shortcuts tab is
+    /// their only home in the app and they stay above.
+    ///
+    /// Fixed means *no recorder*, not *impossible*: `settings.json` can still carry any of these,
+    /// because decision 32 makes the file a peer of the window rather than a fallback for it. That
+    /// costs nothing now that every printed key reads the binding in force rather than a literal.
+    public static let fixedShortcuts: [(key: String, label: String, standard: String)] = [
+        ("newNote", "New Note", "Mod-n"),
+        ("duplicateNote", "Duplicate Note", "Mod-d"),
+        ("browseNotes", "Browse Notes", "Mod-p"),
+        ("findInNote", "Find in Note", "Mod-f"),
+        ("findReplace", "Find and Replace", "Alt-Mod-f"),
+        ("actionPanel", "Action Panel", "Mod-k"),
+    ]
+
+    /// Every shortcut Pane binds, recorder or not. What the defaults table, the ⌘K panel and the
+    /// File menu all read — none of them cares which table a key came from.
+    public static var allShortcuts: [(key: String, label: String, standard: String)] {
+        shortcutActions.map { ($0.key, $0.label, $0.standard) } + fixedShortcuts
+    }
+
     public static var standardShortcuts: [String: String] {
-        Dictionary(uniqueKeysWithValues: shortcutActions.map { ($0.key, $0.standard) })
+        Dictionary(uniqueKeysWithValues: allShortcuts.map { ($0.key, $0.standard) })
     }
 
     /// The binding for `action`, falling back to what Pane ships with.

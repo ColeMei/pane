@@ -135,7 +135,15 @@ export function describe(button: HTMLElement, text: string): void {
   // No `title`: the system tooltip would arrive a second later and say the same thing again.
   button.removeAttribute("title");
 
-  const show = () => showFor(button, text);
+  // **Safe to call again with different text**, which it now is: the chrome's bubbles print
+  // shortcuts, and a rebind has to be able to rewrite them. Attaching a second set of listeners
+  // would leave the *first* set still showing the old string from its own closure — a button whose
+  // bubble says ⌘P on one hover and ⌘O on the next. So the listeners go on once and read the label
+  // at hover time rather than capturing it.
+  if (button.dataset.paneDescribed) return;
+  button.dataset.paneDescribed = "1";
+
+  const show = () => showFor(button, button.getAttribute("aria-label") ?? "");
   const hide = () => hideTooltip();
 
   button.addEventListener("mouseenter", show);

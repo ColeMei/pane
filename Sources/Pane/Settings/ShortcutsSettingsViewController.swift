@@ -4,19 +4,23 @@ import PaneKit
 /// Design frame 3c — the Shortcuts tab.
 ///
 /// A plain table, which is the design's own point: every future feature adds a row, never a new
-/// control style. The summon row is the global hotkey (Carbon, decision 9); the rest are bindings
-/// the web layer installs inside a pane.
+/// control style. Every row is a binding the web layer installs inside a pane.
 ///
-/// Frame 3c lists eight rows and this ships fourteen — the summon hotkey plus every entry in
-/// `Settings.shortcutActions` — which is the table doing exactly what the frame said it was for:
-/// every feature that lands adds a row, never a new control style. Seven of the frame's eight are
-/// here; the eighth, Open in New Pane, belongs to multi-pane and is still deferred (decision 18).
-/// The seven beyond the frame — Duplicate Note, Copy as Markdown, Window Auto-sizing, Reveal in
-/// Finder, Export…, Hide from Screen Capture, Delete Note — each arrived with its ⌘K row.
+/// **This tab answers "what would you want to change", not "what keys exist".** Conflating the two
+/// took it to sixteen rows in one column, three of which nobody would ever touch: the summon hotkey
+/// was here *and* on General — the same recorder twice — and ⌘F and ⌥⌘F mean find and replace in
+/// every editor anyone has used. The line now lives in `Settings.fixedShortcuts`, which carries the
+/// reasoning; what matters here is that a key being absent from this tab does not make it absent
+/// from the app. Each one still prints itself in ⌘K or in the control's own tooltip, and every one
+/// of those reads the binding in force rather than a literal.
 ///
-/// The count is `Settings.shortcutActions.count + 1`; don't restate it here without changing it
-/// there. `NSTabViewController` gives each tab its own height, so growing this one does not disturb
-/// the others — measured at 540×564 with fourteen rows.
+/// The summon hotkey is deliberately **not** here any more. It is the one Carbon binding (decision
+/// 9) and the one key that has to work while Pane is not frontmost, so it keeps its recorder — on
+/// General, where it always also was.
+///
+/// The count is `Settings.shortcutActions.count`; don't restate it here without changing it there.
+/// `NSTabViewController` gives each tab its own height, so shrinking this one does not disturb the
+/// others.
 ///
 /// The rule that governs this list has not moved: a recordable row that binds nothing is a worse lie
 /// than an absent row, so a row appears here only when `Settings.shortcutActions` has an entry doing
@@ -26,7 +30,6 @@ import PaneKit
 final class ShortcutsSettingsViewController: NSViewController {
 
     private let settings: SettingsStore
-    private var summonRecorder: HotkeyRecorderView!
     private var paneRecorders: [(action: String, recorder: PaneShortcutRecorderView)] = []
 
     init(settings: SettingsStore) {
@@ -45,17 +48,11 @@ final class ShortcutsSettingsViewController: NSViewController {
         rows.spacing = 0
         rows.translatesAutoresizingMaskIntoConstraints = false
 
-        summonRecorder = HotkeyRecorderView(hotkey: settings.value.summonHotkey)
-        summonRecorder.onRecord = { [weak self] hotkey in
-            self?.settings.update { $0.summonHotkey = hotkey }
-        }
-        rows.addArrangedSubview(row(label: "Summon / dismiss Pane", control: summonRecorder))
-
         var group: String?
         for action in Settings.shortcutActions {
-            // A heading whenever the group changes. Sixteen rows in one undifferentiated column is
-            // a list you read rather than scan; these are ⌘K's own groups, so the two places that
-            // list the same actions agree about which belong together.
+            // A heading whenever the group changes. A flat column is a list you read rather than
+            // scan; these are ⌘K's own groups, so the two places that list the same actions agree
+            // about which belong together.
             if action.group != group {
                 group = action.group
                 rows.addArrangedSubview(header(action.group))
@@ -143,12 +140,16 @@ final class ShortcutsSettingsViewController: NSViewController {
     }
 
     func settingsChanged(_ new: Settings) {
-        summonRecorder?.setHotkey(new.summonHotkey)
         for entry in paneRecorders {
             entry.recorder.setBinding(new.shortcut(entry.action))
         }
     }
 
+    /// Restores every binding this tab can record — and the summon hotkey with them.
+    ///
+    /// The summon row moved to General, but "Restore Defaults" still resets it: this button means
+    /// "put my keys back", and leaving one recorded combination behind because its recorder now
+    /// lives on another tab would be a surprise rather than a distinction.
     @objc private func restoreDefaults() {
         settings.update {
             $0.summonHotkey = .defaultSummon
