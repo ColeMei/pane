@@ -8,8 +8,8 @@
 # The release workflow prints the sha256 in its job summary, so bumping is copy and paste.
 
 cask "pane" do
-  version "0.5.0"
-  sha256 "bff7b6c74a4b3fcf7ad544e8e04f452e1e10ada4c6fd97b4fab8eea534a78650"
+  version "0.6.0"
+  sha256 "5e5860ff177141ae4c2a1753d96497d9d12b543881cafd6fb12264b40dfcd9fc"
 
   url "https://github.com/ColeMei/pane/releases/download/v#{version}/Pane-#{version}.zip"
   name "Pane"
@@ -51,7 +51,9 @@ cask "pane" do
       brew install --cask --no-quarantine ColeMei/pane/pane
 
     Pane requests no privacy permissions at all: the global hotkey goes through
-    RegisterEventHotKey, which needs no Accessibility access, and no network code
-    ships. Your notes are plain .md files in ~/Documents/Pane.
+    RegisterEventHotKey, which needs no Accessibility access. The only request it
+    ever makes to the network is the version check under Settings > About, and
+    only when you press that button. Your notes are plain .md files in
+    ~/Documents/Pane.
   EOS
 end
