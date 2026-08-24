@@ -13,7 +13,7 @@ import { syntaxTree } from "@codemirror/language";
 
 import { blocksIn, linesOf } from "./blocks";
 import { describe } from "./tooltip";
-import type { EditorState } from "@codemirror/state";
+import type { ChangeSet, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 interface Button {
@@ -156,7 +156,11 @@ function applyLink(view: EditorView): void {
       ];
     });
     const set = state.changes(changes);
-    view.dispatch({ changes: set, selection: state.selection.map(set), userEvent: "input" });
+    view.dispatch({
+      changes: set,
+      selection: selectionAround(set, links.map((link) => link!)),
+      userEvent: "input",
+    });
     view.focus();
     return;
   }
@@ -326,6 +330,34 @@ function unwrap(view: EditorView, node: { from: number; to: number }, open: numb
 }
 
 /**
+ * The selection, put back around the **text** after markers were placed around it.
+ *
+ * Not `selection.map(changes)`, which was the bug. That maps both ends the same way and an
+ * insertion sitting exactly on an end pushes that end past it — and worse, ⌘A selects a block
+ * *including its trailing newline*, so the closing marker was inserted strictly inside the
+ * selection and no mapping bias could have saved it. Wrapping `word` left the selection covering
+ * `word**\n`.
+ *
+ * Invisible until a *second, different* button was pressed: ⌘B then ⌘E wrapped that selection and
+ * wrote ``**`word**` ``, four literal characters to any parser — decision 64's own rule broken by
+ * the selection rather than by the command. The matrix missed it because it presses each command
+ * twice and unwrapping reads the syntax tree, so the too-wide selection was still inside the
+ * construct and the round trip passed while the state in between was wrong.
+ *
+ * So the selection is rebuilt from the spans that were actually wrapped rather than mapped from
+ * whatever the user had: the first span's start biased **forward** past its opening marker, the
+ * last span's end biased **backward** before its closing one.
+ */
+function selectionAround(
+  set: ChangeSet,
+  spans: { from: number; to: number }[]
+): { anchor: number; head: number } {
+  const first = spans[0]!;
+  const last = spans[spans.length - 1]!;
+  return { anchor: set.mapPos(first.from, 1), head: set.mapPos(last.to, -1) };
+}
+
+/**
  * Wraps the selection, or unwraps the construct the caret is already in.
  *
  * The unwrap half used to test whether the *selection text* began and ended with the marker, which
@@ -383,7 +415,11 @@ function toggleWrap(
     { from: found!.to - close.length, to: found!.to, insert: "" },
   ]);
   const set = state.changes(changes);
-  view.dispatch({ changes: set, selection: state.selection.map(set), userEvent: "input" });
+  view.dispatch({
+    changes: set,
+    selection: selectionAround(set, wrapping.map((found) => found!)),
+    userEvent: "input",
+  });
   view.focus();
 }
 
@@ -454,15 +490,16 @@ function wrapPerBlock(
     return;
   }
 
+  const wrapped = (perLine ? spansPerLine : spansPerBlock)(state, from, to);
   const changes: { from: number; to?: number; insert: string }[] = [];
-  for (const span of (perLine ? spansPerLine : spansPerBlock)(state, from, to)) {
+  for (const span of wrapped) {
     changes.push({ from: span.from, insert: open });
     changes.push({ from: span.to, insert: close });
   }
   if (changes.length === 0) return;
 
   const set = state.changes(changes);
-  view.dispatch({ changes: set, selection: state.selection.map(set), userEvent: "input" });
+  view.dispatch({ changes: set, selection: selectionAround(set, wrapped), userEvent: "input" });
   view.focus();
 }
 

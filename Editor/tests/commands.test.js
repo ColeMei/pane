@@ -558,6 +558,78 @@ export function runTooltips(view, doc) {
   return { checked, failures };
 }
 
+/**
+ * Two **different** commands in a row, which nothing here had ever pressed.
+ *
+ * The matrix presses each command twice and checks the note comes back, and that passed while the
+ * state in between was wrong: wrapping left the selection covering the closing marker as well as
+ * the text, and unwrapping reads the syntax tree, so the too-wide selection was still inside the
+ * construct and the round trip succeeded anyway. Press a *second, different* button and the wrong
+ * selection is what gets wrapped — ⌘B then ⌘E wrote ``**`word**` ``, four literal characters to any
+ * parser, which is decision 64's own rule broken by the selection rather than by the command.
+ *
+ * Found by pressing keys on the running app during a release smoke test, not by reading anything.
+ */
+export function runStacking(view, bar, doc) {
+  const failures = [];
+  let checked = 0;
+
+  const click = (label) => {
+    const button = [...bar.querySelectorAll("button")]
+      .find((b) => (b.getAttribute("aria-label") || "").startsWith(label));
+    if (!button) throw new Error(`no format-bar button named ${label}`);
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  };
+  const check = (name, want) => {
+    checked += 1;
+    const got = view.state.doc.toString();
+    if (got !== want) failures.push({ case: `stacking \u00b7 ${name}`, want, got });
+  };
+  // ⌘A rather than a hand-set range, and that is the whole point: **⌘A selects the block including
+  // its trailing newline**, so the closing marker lands strictly inside the selection and no
+  // mapping bias could have saved it. A hand-set [0,4) does not reproduce the bug at all — the
+  // first version of this test passed against the broken build.
+  const content = doc.querySelector(".cm-content");
+  const selectAll = () =>
+    content.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "a", metaKey: true, bubbles: true, cancelable: true,
+    }));
+
+  const stack = (name, first, second, want) => {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "word\n" } });
+    view.dispatch({ selection: { anchor: 0 } });
+    selectAll();
+    click(first);
+    click(second);
+    check(name, want);
+  };
+
+  stack("bold then italic", "Bold", "Italic", "***word***\n");
+  stack("bold then inline code", "Bold", "Inline code", "**`word`**\n");
+  stack("bold then underline", "Bold", "Underline", "**<u>word</u>**\n");
+  stack("bold then strikethrough", "Bold", "Strikethrough", "**~~word~~**\n");
+  stack("bold then highlight", "Bold", "Highlight", "**==word==**\n");
+  stack("inline code then bold", "Inline code", "Bold", "`**word**`\n");
+  stack("underline then italic", "Underline", "Italic", "<u>*word*</u>\n");
+
+  // And the selection itself, which is the actual defect: it must still cover the text.
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "word\n" } });
+  view.dispatch({ selection: { anchor: 0 } });
+  selectAll();
+  click("Bold");
+  checked += 1;
+  const range = view.state.selection.main;
+  if (view.state.doc.sliceString(range.from, range.to) !== "word") {
+    failures.push({
+      case: "stacking \u00b7 the selection still covers the text it covered",
+      want: "word",
+      got: view.state.doc.sliceString(range.from, range.to),
+    });
+  }
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
@@ -566,6 +638,12 @@ export function run(view, bar, doc) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);
+  }
+
+  {
+    const stacking = runStacking(view, bar, doc);
+    checked += stacking.checked;
+    failures.push(...stacking.failures);
   }
 
   const click = (label) => {
