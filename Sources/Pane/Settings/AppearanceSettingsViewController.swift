@@ -143,7 +143,9 @@ final class AppearanceSettingsViewController: NSViewController {
             .sorted()
 
         themePopUp?.removeAllItems()
-        themePopUp?.addItem(withTitle: "Pane Default")
+        // "Default", not "Pane Default". Every item in this window is Pane's; saying so on one of
+        // them is the app naming itself inside its own settings.
+        themePopUp?.addItem(withTitle: "Default")
         for file in themeFiles {
             themePopUp?.addItem(withTitle: (file as NSString).deletingPathExtension)
         }

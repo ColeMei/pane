@@ -234,6 +234,18 @@ public struct Settings: Codable, Equatable, Sendable {
     /// worse than one that was never offered.
     public var hideFromScreenCapture: Bool
 
+    /// Whether the pane is on every Space, or belongs to the one it was summoned on.
+    ///
+    /// On is decision 33's behaviour and the default: `.canJoinAllSpaces`, so the pane is already
+    /// everywhere and summoning is only ever a matter of moving it back on screen. That is right for
+    /// a panel you want beside whatever you are doing.
+    ///
+    /// Off is for the other way of working — a pane parked on one desktop, holding one train of
+    /// thought, that does not come along when you switch to something else. Decision 33 is not
+    /// reversed by this: its complaint was that Space behaviour was a *side effect of pinning*, not
+    /// that either behaviour was wrong. This is the explicit control it was asking for.
+    public var showOnEverySpace: Bool
+
     // MARK: Defaults
 
     public init(
@@ -251,7 +263,8 @@ public struct Settings: Codable, Equatable, Sendable {
         markdownTheme: String = "",
         textSize: Double = 15,
         translucentPanes: Bool = true,
-        hideFromScreenCapture: Bool = false
+        hideFromScreenCapture: Bool = false,
+        showOnEverySpace: Bool = true
     ) {
         self.schemaVersion = schemaVersion
         self.vaultPath = vaultPath
@@ -268,6 +281,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.textSize = textSize
         self.translucentPanes = translucentPanes
         self.hideFromScreenCapture = hideFromScreenCapture
+        self.showOnEverySpace = showOnEverySpace
     }
 
     /// Every key is optional on the way in. This file is meant to be hand-edited, which means it
@@ -298,6 +312,8 @@ public struct Settings: Codable, Equatable, Sendable {
         translucentPanes = try c.decodeIfPresent(Bool.self, forKey: .translucentPanes) ?? d.translucentPanes
         hideFromScreenCapture =
             try c.decodeIfPresent(Bool.self, forKey: .hideFromScreenCapture) ?? d.hideFromScreenCapture
+        showOnEverySpace =
+            try c.decodeIfPresent(Bool.self, forKey: .showOnEverySpace) ?? d.showOnEverySpace
 
         // Clamp rather than reject: a hand-typed 0 or 9999 should land somewhere sensible.
         textSize = min(max(textSize, Settings.textSizeRange.lowerBound), Settings.textSizeRange.upperBound)

@@ -113,8 +113,21 @@ final class PanePanel: NSPanel {
     ///
     /// `.fullScreenAuxiliary` joins a fullscreen app as an overlay rather than forcing a Space
     /// switch out of it.
+    /// `Settings.showOnEverySpace`, kept here because `summon` re-asserts the behaviour on every
+    /// summon and has no route to the settings store.
+    ///
+    /// Off drops `.canJoinAllSpaces`, so the pane belongs to the Space it is on rather than being
+    /// drawn on all of them. `.ignoresCycle` and `.fullScreenAuxiliary` stay either way — the pane
+    /// is never a ⌘Tab candidate, and it still overlays a fullscreen app rather than forcing a
+    /// Space switch out of one.
+    var showsOnEverySpace = true {
+        didSet { if showsOnEverySpace != oldValue { applyCollectionBehaviour() } }
+    }
+
     func applyCollectionBehaviour(pinned: Bool = false) {
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        var behaviour: NSWindow.CollectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
+        if showsOnEverySpace { behaviour.insert(.canJoinAllSpaces) }
+        collectionBehavior = behaviour
     }
 
     // MARK: - Summon and dismiss

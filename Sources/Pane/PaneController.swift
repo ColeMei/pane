@@ -858,10 +858,12 @@ final class PaneController: NSObject {
 
     func applySettings() {
         editor.isTranslucent = settings.value.translucentPanes
+        panel.showsOnEverySpace = settings.value.showOnEverySpace
         applyHiddenFromCapture()
         // Not a setting — pane state — but this runs on `ready`, which is the one moment the web
         // layer needs telling. Its ⌘K label is otherwise wrong until the row is pressed once.
         editor.call("setAutoSizing", [paneState.autoSizing])
+        editor.call("setOnEverySpace", [settings.value.showOnEverySpace])
 
         // The material picks its light or dark variant from the window's appearance, so the two have
         // to be told the same thing — otherwise a dark-mode pane gets a light blur behind dark text.
@@ -1057,6 +1059,13 @@ extension PaneController: EditorWebViewDelegate {
 
         case .toggleAutoSizing:
             toggleAutoSizing()
+
+        case .toggleSpaceBehaviour:
+            let now = !settings.value.showOnEverySpace
+            settings.update { $0.showOnEverySpace = now }
+            // Decision 73's rule, reached by a second route: what this changes is invisible until
+            // you switch Space, so without a line the key reads as having done nothing at all.
+            editor.call("showToast", [now ? "Showing on every Space" : "Keeping to this Space"])
 
         case .duplicateNote(let text):
             duplicate(text: text)

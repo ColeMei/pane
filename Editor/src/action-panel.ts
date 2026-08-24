@@ -44,6 +44,8 @@ interface ActionPanelOptions {
   isHiddenFromCapture: () => boolean;
   /** Same, for auto-sizing — which a drag can turn off without anyone pressing this row. */
   isAutoSizing: () => boolean;
+  /** Same, for whether the pane is drawn on every Space or belongs to the one it is on. */
+  isOnEverySpace: () => boolean;
   run: (id: string) => void;
   /** The key caps to print for a row, from the bindings in force. Null keeps the row's own. */
   keysFor: (id: string) => string[] | null;
@@ -96,6 +98,13 @@ const GROUPS: ActionRow[][] = [
       keys: ["⇧", "⌘", "/"],
     },
     { id: "formatBar", label: "Show Format Bar", d: "M3 3h8M7 3v9", keys: ["⌥", "⌘", ","] },
+    {
+      id: "spaceBehaviour",
+      label: "Keep on This Space",
+      // Two overlapping rectangles: one desktop behind another.
+      d: "M1.5 2.5h7v6h-7zM5.5 5.5h7v6h-7",
+      keys: [],
+    },
     {
       id: "hideFromCapture",
       label: "Hide from Screen Capture",
@@ -201,6 +210,9 @@ export function mountActionPanel(options: ActionPanelOptions) {
     // is dragged (decision 40). The label is the only place that silent change is ever stated.
     if (row.id === "autoSizing" && !options.isAutoSizing()) {
       return "Enable Window Auto-sizing";
+    }
+    if (row.id === "spaceBehaviour" && !options.isOnEverySpace()) {
+      return "Show on Every Space";
     }
     return row.label;
   }

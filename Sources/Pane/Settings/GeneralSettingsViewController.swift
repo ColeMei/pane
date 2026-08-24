@@ -64,6 +64,13 @@ final class GeneralSettingsViewController: NSViewController {
         menuBar.state = current.showMenuBarIcon ? .on : .off
         form.row("", menuBar)
 
+        // ---- spaces ------------------------------------------------------------------------
+        let spaces = SettingsForm.checkbox(
+            "Show on every Space", target: self, action: #selector(showOnEverySpaceChanged)
+        )
+        spaces.state = current.showOnEverySpace ? .on : .off
+        form.row("Spaces", spaces)
+
         // ---- dock --------------------------------------------------------------------------
         let dock = SettingsForm.checkbox(
             "Show Dock icon", target: self, action: #selector(showDockIconChanged)
@@ -72,6 +79,10 @@ final class GeneralSettingsViewController: NSViewController {
         form.row("Dock", dock)
 
         view = form.makeContentView()
+    }
+
+    @objc private func showOnEverySpaceChanged(_ sender: NSButton) {
+        settings.update { $0.showOnEverySpace = sender.state == .on }
     }
 
     /// Keeps the recorder honest when the hotkey changed somewhere else — a hand edit to

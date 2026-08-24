@@ -74,6 +74,7 @@ type OutboundMessage =
   | { type: "exportNote"; text: string }
   | { type: "toggleHideFromCapture" }
   | { type: "toggleAutoSizing" }
+  | { type: "toggleSpaceBehaviour" }
   | { type: "duplicateNote"; text: string }
   | { type: "requestDeleted" }
   | { type: "restoreDeleted"; storedName: string }
@@ -800,6 +801,7 @@ const actionHandlers: Record<string, () => boolean> = {
   exportNote: () => (send({ type: "exportNote", text: view.state.doc.toString() }), true),
   hideFromCapture: () => (send({ type: "toggleHideFromCapture" }), true),
   autoSizing: () => (send({ type: "toggleAutoSizing" }), true),
+  spaceBehaviour: () => (send({ type: "toggleSpaceBehaviour" }), true),
   duplicateNote: () => (send({ type: "duplicateNote", text: view.state.doc.toString() }), true),
   recentlyDeleted: () => (switcher.openDeleted(), true),
 };
@@ -1021,6 +1023,7 @@ let hiddenFromCapture = false;
 /** Likewise window state, and it changes without this layer being asked: dragging the pane turns it
  *  off (decision 40). Only ever set from Swift. */
 let autoSizing = true;
+let onEverySpace = true;
 
 const actionsEl = document.getElementById("actions") as HTMLElement;
 const switcherEl = document.getElementById("switcher") as HTMLElement;
@@ -1048,6 +1051,7 @@ const actions = mountActionPanel({
   isPinned: () => paneEl.hasAttribute("data-pinned"),
   isHiddenFromCapture: () => hiddenFromCapture,
   isAutoSizing: () => autoSizing,
+  isOnEverySpace: () => onEverySpace,
   run: (id) => actionHandlers[id]?.(),
   // The keys a row prints come from the bindings in force, not from a literal beside the label.
   // They were literals, so rebinding New Note in the Shortcuts tab left ⌘K still advertising ⌘N —
@@ -1335,6 +1339,10 @@ const host = {
 
   setHiddenFromCapture(hidden: boolean): void {
     hiddenFromCapture = hidden;
+  },
+
+  setOnEverySpace(on: boolean): void {
+    onEverySpace = on;
   },
 
   setAutoSizing(on: boolean): void {
