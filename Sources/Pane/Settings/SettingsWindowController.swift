@@ -19,6 +19,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let storage: StorageSettingsViewController
     private let appearance: AppearanceSettingsViewController
     private let shortcuts: ShortcutsSettingsViewController
+    private let about: AboutSettingsViewController
 
     init(
         settings: SettingsStore,
@@ -30,16 +31,18 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         storage = StorageSettingsViewController(settings: settings)
         appearance = AppearanceSettingsViewController(settings: settings)
         shortcuts = ShortcutsSettingsViewController(settings: settings)
+        about = AboutSettingsViewController()
         storage.onWillMoveNotes = onWillMoveNotes
         storage.onVaultChanged = onVaultChanged
 
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
-        for controller in [general, storage, appearance, shortcuts] as [NSViewController] {
+        for controller in [general, storage, appearance, shortcuts, about] as [NSViewController] {
             tabs.addTabViewItem(NSTabViewItem(viewController: controller))
         }
         // SF Symbols matching the frame's own glyphs: gear, folder, half-filled circle, keyboard.
-        let symbols = ["gearshape", "folder", "circle.lefthalf.filled", "keyboard"]
+        // About is the one tab the frames do not draw, and takes the system's own about glyph.
+        let symbols = ["gearshape", "folder", "circle.lefthalf.filled", "keyboard", "info.circle"]
         for (item, symbol) in zip(tabs.tabViewItems, symbols) {
             item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: item.label)
         }
@@ -51,7 +54,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         // Loading all four views up front is the cost, and it is the right trade here: a settings
         // window is opened rarely and never on the hot path, and lazily-loaded tabs would each have
         // to guess their own size before they had one.
-        for controller in [general, storage, appearance, shortcuts] as [NSViewController] {
+        for controller in [general, storage, appearance, shortcuts, about] as [NSViewController] {
             controller.preferredContentSize = controller.view.fittingSize
         }
 
@@ -98,5 +101,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         storage.settingsChanged(new)
         appearance.settingsChanged(new)
         shortcuts.settingsChanged(new)
+        about.settingsChanged(new)
     }
 }

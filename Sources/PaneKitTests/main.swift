@@ -14,5 +14,6 @@ runVaultIOTests()
 runRecentlyDeletedTests()
 runMarkdownExportTests()
 runAutoSizingTests()
+runReleaseCheckTests()
 
 exit(Check.finish())
