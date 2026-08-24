@@ -104,6 +104,7 @@ public struct Settings: Codable, Equatable, Sendable {
             ("pinPane", "Pin Pane", "Shift-Mod-p", "The pane"),
             ("autoSizing", "Window Auto-sizing", "Shift-Mod-/", "The pane"),
             ("formatBar", "Show Format Bar", "Alt-Mod-,", "The pane"),
+            ("spaceBehaviour", "Keep on This Space", "Alt-Mod-s", "The pane"),
             ("hideFromCapture", "Hide from Screen Capture", "Shift-Mod-h", "The pane"),
         ]
 

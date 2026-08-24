@@ -103,7 +103,7 @@ const GROUPS: ActionRow[][] = [
       label: "Keep on This Space",
       // Two overlapping rectangles: one desktop behind another.
       d: "M1.5 2.5h7v6h-7zM5.5 5.5h7v6h-7",
-      keys: [],
+      keys: ["⌥", "⌘", "S"],
     },
     {
       id: "hideFromCapture",

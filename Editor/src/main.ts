@@ -732,6 +732,7 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
   hideFromCapture: "Shift-Mod-h",
   duplicateNote: "Mod-d",
   autoSizing: "Shift-Mod-/",
+  spaceBehaviour: "Alt-Mod-s",
 };
 
 const shortcutsCompartment = new Compartment();
