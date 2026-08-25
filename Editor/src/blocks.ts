@@ -19,6 +19,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
+import type { SyntaxNode } from "@lezer/common";
 
 export interface Block {
   /** Document offsets of the whole block, including any soft-wrapped continuation lines. */
@@ -68,7 +69,26 @@ export function blockAt(state: EditorState, pos: number, side: -1 | 1 = -1): Blo
 
   // A list item's own range, not the paragraph inside it — see BLOCK_NODES.
   if (node.parent?.name === "ListItem") node = node.parent;
-  return { from: node.from, to: node.to, name: node.name };
+
+  // A list item that contains a nested list ends where that list begins.
+  //
+  // Its tree range covers everything under it, so without this the outer item's "continuation
+  // lines" are the whole nested list — and once nested items are blocks in their own right
+  // (see `blocksIn`), the two overlap and one press produces two conflicting edits for the same
+  // line. An item's *own* content is what it can carry a marker for.
+  const to = node.name === "ListItem" ? endOfOwnContent(state, node) : node.to;
+  return { from: node.from, to, name: node.name };
+}
+
+/** Where a list item's own lines stop and its first nested list starts. */
+function endOfOwnContent(state: EditorState, item: SyntaxNode): number {
+  for (let child = item.firstChild; child; child = child.nextSibling) {
+    if (child.name !== "BulletList" && child.name !== "OrderedList") continue;
+    // The end of the line *before* the nested list, so the item keeps every line that is its own.
+    const line = state.doc.lineAt(child.from);
+    return line.number > 1 ? state.doc.line(line.number - 1).to : item.from;
+  }
+  return item.to;
 }
 
 /**
@@ -90,7 +110,14 @@ export function blocksIn(state: EditorState, from: number, to: number): Block[] 
     const line = doc.line(n);
     if (line.text.trim() === "") continue;
 
-    const block = blockAt(state, line.from, 1);
+    // Resolved at the line's first real character, not at its start.
+    //
+    // **`ListItem` starts at the line start for a top-level item and at the marker for a nested
+    // one** — decision 85 recorded that trap in the renumbering filter and it is the same one here.
+    // At `line.from` on a nested item the innermost node is still the *outer* item, so a caret in
+    // `   1. a` converted `2. A` instead, and a selection of two nested items converted their
+    // parents. Past the indent, the innermost node is the nested item's own marker.
+    const block = blockAt(state, line.from + /^[ \t]*/.exec(line.text)![0].length, 1);
     if (!block) continue;
     if (blocks.some((b) => b.from === block.from && b.to === block.to)) continue;
     blocks.push(block);

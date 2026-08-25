@@ -630,11 +630,181 @@ export function runStacking(view, bar, doc) {
   return { checked, failures };
 }
 
+/**
+ * The three list buttons, which are one control with three values.
+ *
+ * Every command tested only for **its own** marker, so a marker of a different kind was invisible
+ * and the new one went in front of it. Measured on the shipped build before the fix — these are the
+ * bytes it actually wrote:
+ *
+ *     "1. Hi"    + Bulleted  ->  "- 1. Hi"
+ *     "- Hi"     + Numbered  ->  "1. - Hi"
+ *     "- Hi"     + Task      ->  "- [ ] - Hi"
+ *     "1. Hi"    + Task      ->  "- [ ] 1. Hi"
+ *     "- [ ] Hi" + Bulleted  ->  "[ ] Hi"      <- the destructive one: not a list at all any more
+ *
+ * Each of the first four is a list item whose *text* begins with something that looks like a marker,
+ * so the pane drew both and the format bar lit both buttons — which is how it was reported, as the
+ * bullet button looking pressed on a numbered list. The button was telling the truth about a
+ * document the commands had corrupted.
+ *
+ * The nested cases are the other half, and they were reported in the same screenshot because every
+ * list in it was nested. `ListItem` starts at the line start for a top-level item and at the
+ * **marker** for a nested one, so resolving at the line's start returned the *outer* item: a caret
+ * in `   1. a` converted `2. A` instead. Decision 85 recorded exactly that trap in the renumbering
+ * filter; this is the second file to meet it.
+ */
+export function runListKinds(view, doc, bar) {
+  const failures = [];
+  let checked = 0;
+
+  const click = (label) => {
+    const button = [...bar.querySelectorAll("button")]
+      .find((b) => (b.getAttribute("aria-label") || "").startsWith(label));
+    if (!button) throw new Error(`no format-bar button named ${label}`);
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  };
+  const content = doc.querySelector(".cm-content");
+  const selectAll = () =>
+    content.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "a", metaKey: true, bubbles: true, cancelable: true,
+    }));
+  const set = (text) => {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+    view.dispatch({ selection: { anchor: 0 } });
+  };
+  const check = (name, want) => {
+    checked += 1;
+    const got = view.state.doc.toString();
+    if (got !== want) failures.push({ case: `list kinds \u00b7 ${name}`, want, got });
+  };
+
+  /** Whole document, then the buttons in order. */
+  const all = (name, start, clicks, want) => {
+    set(start);
+    selectAll();
+    selectAll();
+    for (const c of clicks) click(c);
+    check(name, want);
+  };
+
+  // Every pair, both directions. A kind replaces a kind; it never sits in front of one.
+  all("numbered becomes bulleted", "1. Hi\n2. A\n", ["Bulleted list"], "- Hi\n- A\n");
+  all("bulleted becomes numbered", "- Hi\n- A\n", ["Numbered list"], "1. Hi\n2. A\n");
+  all("bulleted becomes a task", "- Hi\n- A\n", ["Task list"], "- [ ] Hi\n- [ ] A\n");
+  all("numbered becomes a task", "1. Hi\n2. A\n", ["Task list"], "- [ ] Hi\n- [ ] A\n");
+
+  // The one that destroyed structure rather than doubling it: `- [ ] ` starts with a bullet, so the
+  // bullet pattern matched half of it and "removed" the half.
+  all("a task becomes a plain bullet", "- [ ] Hi\n- [ ] A\n", ["Bulleted list"], "- Hi\n- A\n");
+  all("a task turns itself off", "- [ ] Hi\n- [ ] A\n", ["Task list"], "Hi\nA\n");
+
+  // Its own button still toggles off, and round-trips through another kind and back.
+  all("bulleted turns itself off", "1. Hi\n2. A\n",
+    ["Bulleted list", "Bulleted list"], "Hi\nA\n");
+  all("and the note comes back through the other kind", "1. Hi\n2. A\n",
+    ["Bulleted list", "Numbered list"], "1. Hi\n2. A\n");
+
+  // A mixed selection finishes the job rather than stripping half of it — the same rule the inline
+  // commands follow (decision 78).
+  all("a mixed selection is finished, not halved", "- Hi\n1. A\n\n",
+    ["Bulleted list"], "- Hi\n- A\n\n");
+
+  const NEST = "1. Hi\n2. A\n   1. a\n   2. b\n3. B\n";
+  const caretAt = (name, needle, label, want) => {
+    set(NEST);
+    view.dispatch({ selection: { anchor: NEST.indexOf(needle) } });
+    click(label);
+    check(name, want);
+  };
+
+  caretAt("a caret in a nested item converts that item", "a\n", "Bulleted list",
+    // `b` restarts at 1 because `a` stopped being an ordered item above it — decision 85's rule,
+    // and the reason this case is worth having: the two features meet here.
+    "1. Hi\n2. A\n   - a\n   1. b\n3. B\n");
+  caretAt("a caret in a top-level item leaves the nested list alone", "Hi", "Bulleted list",
+    "- Hi\n2. A\n   1. a\n   2. b\n3. B\n");
+
+  // A selection across a nesting boundary takes each item at its own level.
+  set(NEST);
+  view.dispatch({ selection: { anchor: NEST.indexOf("   1. a"), head: NEST.indexOf("3. B") } });
+  click("Bulleted list");
+  check("a selection across levels takes each item at its own level",
+    "1. Hi\n2. A\n   - a\n   - b\n- B\n");
+
+  // And every one of those again from the **keyboard**, because the bar's buttons and the shortcuts
+  // were two implementations of the same command. Fixing the buttons left ⇧⌘7/8/9 doing the old
+  // thing, and this suite passed the whole time because it only ever pressed buttons — decision 84
+  // in a new costume, found by driving the running app rather than by reading anything.
+  // `code` as well as `key`: CodeMirror resolves a binding from the physical key when the character
+  // is shifted, so a synthetic ⇧⌘B carrying only `key: "b"` matched **Bold** instead.
+  const CODES = { 7: "Digit7", 8: "Digit8", 9: "Digit9", B: "KeyB" };
+  const key = (k, mods = { metaKey: true, shiftKey: true }) =>
+    content.dispatchEvent(new KeyboardEvent("keydown", {
+      key: k, code: CODES[k], keyCode: k === "B" ? 66 : k.charCodeAt(0),
+      bubbles: true, cancelable: true, ...mods,
+    }));
+
+  const viaKey = (name, start, keys, want) => {
+    set(start);
+    selectAll();
+    selectAll();
+    for (const k of keys) key(k);
+    check(name, want);
+  };
+
+  viaKey("⇧⌘8 converts a numbered list", "1. Hi\n2. A\n", ["8"], "- Hi\n- A\n");
+  viaKey("⇧⌘7 converts a bulleted list", "- Hi\n- A\n", ["7"], "1. Hi\n2. A\n");
+  viaKey("⇧⌘9 converts a bulleted list", "- Hi\n- A\n", ["9"], "- [ ] Hi\n- [ ] A\n");
+  viaKey("⇧⌘8 converts a task", "- [ ] Hi\n- [ ] A\n", ["8"], "- Hi\n- A\n");
+  viaKey("⇧⌘8 twice comes back to a paragraph", "1. Hi\n2. A\n", ["8", "8"], "Hi\nA\n");
+
+  // Each nesting level numbers for itself. A flat counter across the selection gave
+  // `1. 2.    3.    4. 3.` and the renumbering filter left the nested pair alone — correctly, since
+  // decision 85 keeps a run's first number when the author chose it, and it could not tell nobody
+  // had. Found by pressing the key on the running app after the button case already passed.
+  viaKey("⇧⌘7 numbers each nesting level for itself",
+    "Hi\n\nA\n\n   a\n\n   b\n\nB\n", ["7"],
+    "1. Hi\n\n2. A\n\n   1. a\n\n   2. b\n\n3. B\n");
+  viaKey("and converting a nested numbered list keeps the levels apart",
+    "- Hi\n- A\n   - a\n   - b\n- B\n", ["7"],
+    "1. Hi\n2. A\n   1. a\n   2. b\n3. B\n");
+
+  // A quote is a container rather than a kind, so it stacks on a list — the one block command that
+  // deliberately does not replace.
+  viaKey("⇧⌘B quotes a list rather than replacing it", "- Hi\n- A\n", ["B"], "> - Hi\n> - A\n");
+
+  // The pressed state, which is what made the corruption visible. A task is a bullet in the tree,
+  // so Bulleted lit alongside Task on every checkbox before this.
+  content.dispatchEvent(new KeyboardEvent("keydown", {
+    key: ",", metaKey: true, altKey: true, bubbles: true, cancelable: true,
+  }));
+  const pressed = () => [...bar.querySelectorAll("button")]
+    .filter((b) => b.getAttribute("aria-pressed") === "true")
+    .map((b) => (b.getAttribute("aria-label") || "").replace(/ .*/, ""))
+    .join(",");
+  const lit = (name, text, offset, want) => {
+    set(text);
+    view.dispatch({ selection: { anchor: offset } });
+    checked += 1;
+    const got = pressed();
+    if (got !== want) failures.push({ case: `list kinds \u00b7 ${name}`, want, got });
+  };
+
+  lit("a numbered item lights one button", "1. Hi\n", 4, "Numbered");
+  lit("a bulleted item lights one button", "- Hi\n", 3, "Bulleted");
+  lit("a task lights one button, not two", "- [ ] Hi\n", 7, "Task");
+  lit("a nested item lights its own kind", "1. Hi\n   - a\n", 12, "Bulleted");
+  lit("a paragraph lights none", "Hi\n", 1, "");
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
 
-  for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips]) {
+  for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips, runListKinds]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);

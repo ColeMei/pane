@@ -30,6 +30,8 @@ interface Button {
    * nothing to key off and can never render — which is exactly what the design audit found.
    */
   active?: string[];
+  /** Names that *cancel* `active` — see the bullet button, which a task would otherwise light. */
+  inactiveWith?: string[];
   /**
    * The same, for the two constructs the parser has no node for (decision 61). Underline and
    * highlight were the only buttons on the bar that could never draw themselves pressed, which
@@ -95,7 +97,7 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
   {
     label: "",
     title: "Quote ⇧⌘B",
-    custom: (view: EditorView) => applyBlockMarker(view, () => "> ", /^>\s?/),
+    custom: applyQuote,
     active: ["Blockquote"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M3 2.5v9M6 3.5h6M6 7h6M6 10.5h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   },
@@ -112,14 +114,18 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
   {
     label: "",
     title: "Bulleted list ⇧⌘8",
-    custom: (view: EditorView) => applyBlockMarker(view, () => "- ", /^[-*+]\s/),
+    custom: applyBulletList,
     active: ["BulletList"],
+    // A task is a bullet in the tree — `BulletList` > `ListItem` > `Task` — so this lit alongside
+    // Task list on every checkbox, which reads as the line being two kinds of list at once. The
+    // three are one control with three values, so the most specific wins.
+    inactiveWith: ["Task"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M2 3h1M2 7h1M2 11h1M5.5 3H12M5.5 7H12M5.5 11H12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   },
   {
     label: "",
     title: "Task list ⇧⌘9",
-    custom: (view: EditorView) => applyBlockMarker(view, () => "- [ ] ", /^[-*+]\s\[[ xX]\]\s/),
+    custom: applyTaskList,
     active: ["Task"],
     svg: `<svg width="13" height="13" viewBox="0 0 14 14"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2.8 3.8l1 1 1.6-1.8M8 3.8h4M8 10h4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`,
   },
@@ -198,7 +204,16 @@ function activeMarks(state: EditorState): Set<string> {
   // A cursor rather than a node chain — `TreeCursor.parent()` walks up in place, which avoids naming
   // the node type and the casts that came with it.
   const cursor = syntaxTree(state).cursorAt(state.selection.main.head, -1);
+  // Only the innermost list counts. A bullet nested inside a numbered list has both on its ancestor
+  // chain, so both buttons lit — true about the caret, and not what the bar is answering. The bar
+  // says what *this line* is, and a line has exactly one kind of marker.
+  let listSeen = false;
   do {
+    const isList = cursor.name === "BulletList" || cursor.name === "OrderedList";
+    if (isList) {
+      if (listSeen) continue;
+      listSeen = true;
+    }
     names.add(cursor.name);
   } while (cursor.parent());
 
@@ -513,8 +528,62 @@ function applyWrapPair(view: EditorView, open: string, close: string): void {
   toggleWrap(view, open, close, undefined);
 }
 
+/**
+ * The block commands, defined once because they are pressed two ways.
+ *
+ * The format bar's buttons and the keyboard shortcuts used to be **two implementations of the same
+ * command**, each passing its own literals to `applyBlockMarker`. So fixing the buttons left ⇧⌘7,
+ * ⇧⌘8 and ⇧⌘9 doing the old thing, and the matrix — which presses buttons — passed the whole time.
+ * That is decision 84 in a new costume: a suite that covers what you built is not one that covers
+ * what people do, and people press the key.
+ *
+ * **Function declarations, not `const` arrows.** The button table is a module-scope array built at
+ * import time, so an arrow declared further down is still in its temporal dead zone when the table
+ * is constructed — which took out Quote, Bulleted list and Task list entirely, and the matrix said
+ * so in fifteen assertions at once.
+ */
 /** A leading `1. ` or `1) `, which is what "already an ordered list" means. */
 const ORDERED_MARKER = /^(\d+)[.)]\s/;
+
+/** A leading `- [ ] ` or `- [x] `. Tested before `BULLET_MARKER`, which it would otherwise match. */
+const TASK_MARKER = /^[-*+]\s\[[ xX]\]\s/;
+
+/**
+ * A bullet that is **not** a task.
+ *
+ * The negative lookahead is load-bearing rather than tidy. Without it, pressing Bulleted list on
+ * `- [ ] Hi` matched the leading `- ` and "removed" it, leaving `[ ] Hi` — not a task, not a bullet,
+ * not a list at all, and the only one of these faults that destroyed structure rather than doubling
+ * it.
+ */
+const BULLET_MARKER = /^[-*+]\s(?!\[[ xX]\]\s)/;
+
+/**
+ * Any list marker of any kind, which is what the three list buttons *replace* rather than stack on.
+ *
+ * The three are one control with three values — a line is a bullet, or numbered, or a task, and
+ * never two of those at once. Every command here used to test only for **its own** marker, so a
+ * marker of a different kind was invisible to it and the new one went in front: `1. Hi` + Bulleted
+ * gave `- 1. Hi`, `- Hi` + Numbered gave `1. - Hi`, and `1. Hi` + Task gave `- [ ] 1. Hi`. Each of
+ * those is a list item whose *text* begins with what looks like a marker, so the pane drew both and
+ * the format bar lit both buttons — which is how it was reported, as the bullet button looking
+ * pressed on a numbered list. The button was telling the truth about a document the commands had
+ * corrupted.
+ *
+ * Task first: `- [ ] ` starts with a bullet, so testing bullets first would match half of it.
+ *
+ * Blockquote deliberately does not use this. `> - a` is a real thing to want and CommonMark agrees;
+ * a quote is a container, and these three are kinds of the same leaf.
+ */
+const ANY_LIST_MARKER = new RegExp(
+  `(?:${TASK_MARKER.source.slice(1)}|${BULLET_MARKER.source.slice(1)}|${ORDERED_MARKER.source.slice(1)})`
+);
+const ANY_LIST_MARKER_AT_START = new RegExp(`^${ANY_LIST_MARKER.source}`);
+
+/** The leading whitespace of a line, which every marker sits *after* rather than at column zero. */
+function indentOf(text: string): number {
+  return /^[ \t]*/.exec(text)![0].length;
+}
 
 /**
  * Puts a marker on **each block** the selection covers, and on nothing else.
@@ -528,32 +597,50 @@ const ORDERED_MARKER = /^(\d+)[.)]\s/;
  * to no block — and a soft-wrapped paragraph is one block, so it takes one marker with its
  * continuation lines indented to sit under the text rather than under the marker.
  *
- * @param markerFor  the marker for the n-th block, so ordered lists can count.
+ * @param markerFor  the marker for the n-th block, given its indent so an ordered list can count
+ *                   each nesting level separately.
  * @param existing   what already counts as this marker, for the toggle-off test.
+ * @param replaces   what a *different* kind of the same thing looks like, which this one takes the
+ *                   place of rather than sitting in front of.
  */
 function applyBlockMarker(
   view: EditorView,
-  markerFor: (index: number) => string,
-  existing: RegExp
+  markerFor: (index: number, indent: number) => string,
+  existing: RegExp,
+  replaces?: RegExp
 ): void {
   const state = view.state;
   const blocks = blocksIn(state, state.selection.main.from, state.selection.main.to);
   if (blocks.length === 0) return;
 
   const doc = state.doc;
-  // Off only when every block already carries one — on a mixed selection the button should finish
-  // the job rather than strip the markers from half of it.
-  const removing = blocks.every((block) => existing.test(doc.lineAt(block.from).text));
+  // Everything is measured after the leading whitespace, not at column zero. A nested item is
+  // indented — `   1. a` — so a marker anchored at `^` matched nothing on it, and the command
+  // cheerfully wrote its own marker in front of the indent: `-    1. a`, which is a top-level
+  // bullet whose text happens to start with spaces. Every list in the report was nested, which is
+  // why this arrived alongside the stacking rather than after it.
+  const markerStart = (line: { from: number; text: string }) => line.from + indentOf(line.text);
+  const body = (text: string) => text.slice(indentOf(text));
+
+  // Off only when every block already carries **this** marker — on a mixed selection the button
+  // should finish the job rather than strip the markers from half of it. A selection of a bullet
+  // and a numbered item is mixed in exactly this sense, so Bulleted converts the numbered one.
+  const removing = blocks.every((block) => existing.test(body(doc.lineAt(block.from).text)));
 
   const changes: { from: number; to: number; insert: string }[] = [];
 
   blocks.forEach((block, index) => {
     const lines = linesOf(state, block);
     const first = lines[0]!;
-    const had = existing.exec(first.text)?.[0].length ?? 0;
-    const insert = removing ? "" : markerFor(index);
+    const text = body(first.text);
+    const own = existing.exec(text)?.[0].length ?? 0;
+    // Going on, a marker of another kind is *replaced*; coming off, only our own is taken, so a
+    // press that removes cannot also eat something it did not put there.
+    const had = removing ? own : Math.max(own, replaces?.exec(text)?.[0].length ?? 0);
+    const insert = removing ? "" : markerFor(index, indentOf(first.text));
+    const start = markerStart(first);
 
-    changes.push({ from: first.from, to: first.from + had, insert });
+    changes.push({ from: start, to: start + had, insert });
 
     // Continuation lines follow the marker in or out, so the text stays aligned under itself.
     for (const line of lines.slice(1)) {
@@ -588,16 +675,59 @@ function applyOrderedList(view: EditorView): void {
 
   // Look past the blank line that separates a paragraph from the list above it — otherwise
   // extending a list always restarts at one, because the line directly above is never the list.
+  //
+  // Only a line at the **same indent** counts. A nested list is a different list, so continuing
+  // from its parent would number a new top-level item after the deepest number above it — and
+  // continuing from a *child* would be worse still.
+  const firstLine = state.doc.lineAt(blocks[0]!.from);
+  const depth = indentOf(firstLine.text);
   let start = 1;
-  for (let n = state.doc.lineAt(blocks[0]!.from).number - 1; n >= 1; n--) {
+  for (let n = firstLine.number - 1; n >= 1; n--) {
     const text = state.doc.line(n).text;
     if (text.trim() === "") continue;
-    const previous = ORDERED_MARKER.exec(text);
-    if (previous) start = Number(previous[1]) + 1;
+    const indent = indentOf(text);
+    if (indent > depth) continue;
+    if (indent === depth) {
+      const previous = ORDERED_MARKER.exec(text.slice(indent));
+      if (previous) start = Number(previous[1]) + 1;
+    }
     break;
   }
 
-  applyBlockMarker(view, (index) => `${start + index}. `, ORDERED_MARKER);
+  // Each nesting level counts for itself.
+  //
+  // A flat `start + index` across every block in the selection numbered straight through the
+  // indents — `1. Hi`, `2. A`, `   3. a`, `   4. b` — and the renumbering filter then left the
+  // nested pair alone, correctly, because decision 85 keeps a run's first number when the author
+  // chose it. It could not tell that nobody had.
+  //
+  // A deeper level restarts at 1, and going back out resets it, which is what a sublist is.
+  const counters = new Map<number, number>();
+  applyBlockMarker(
+    view,
+    (_index, indent) => {
+      for (const level of [...counters.keys()]) if (level > indent) counters.delete(level);
+      const next = (counters.get(indent) ?? (indent === depth ? start : 1) - 1) + 1;
+      counters.set(indent, next);
+      return `${next}. `;
+    },
+    ORDERED_MARKER,
+    ANY_LIST_MARKER_AT_START
+  );
+}
+
+/** The three list kinds and the quote, each written once. See the note above `ORDERED_MARKER`. */
+function applyBulletList(view: EditorView): void {
+  applyBlockMarker(view, () => "- ", BULLET_MARKER, ANY_LIST_MARKER_AT_START);
+}
+
+function applyTaskList(view: EditorView): void {
+  applyBlockMarker(view, () => "- [ ] ", TASK_MARKER, ANY_LIST_MARKER_AT_START);
+}
+
+/** No `replaces`: `> - a` is a real thing to want, so a quote stacks where a list kind replaces. */
+function applyQuote(view: EditorView): void {
+  applyBlockMarker(view, () => "> ", /^>\s?/);
 }
 
 /**
@@ -700,10 +830,10 @@ export const MARKDOWN_FORMAT_KEYS: {
   { key: "Mod-u", label: "Underline", run: (v) => (applyWrapPair(v, "<u>", "</u>"), true) },
   { key: "Shift-Mod-m", label: "Highlight", run: (v) => (applyWrap(v, "=="), true) },
   { key: "Alt-Mod-c", label: "Code block", run: (v) => (applyCodeBlock(v), true) },
-  { key: "Shift-Mod-b", label: "Quote", run: (v) => (applyBlockMarker(v, () => "> ", /^>\s?/), true) },
+  { key: "Shift-Mod-b", label: "Quote", run: (v) => (applyQuote(v), true) },
   { key: "Shift-Mod-7", label: "Numbered list", run: (v) => (applyOrderedList(v), true) },
-  { key: "Shift-Mod-8", label: "Bulleted list", run: (v) => (applyBlockMarker(v, () => "- ", /^[-*+]\s/), true) },
-  { key: "Shift-Mod-9", label: "Task list", run: (v) => (applyBlockMarker(v, () => "- [ ] ", /^[-*+]\s\[[ xX]\]\s/), true) },
+  { key: "Shift-Mod-8", label: "Bulleted list", run: (v) => (applyBulletList(v), true) },
+  { key: "Shift-Mod-9", label: "Task list", run: (v) => (applyTaskList(v), true) },
   { key: "Alt-Mod-1", label: "Heading 1", run: (v) => (setHeading(v, 1), true) },
   { key: "Alt-Mod-2", label: "Heading 2", run: (v) => (setHeading(v, 2), true) },
   { key: "Alt-Mod-3", label: "Heading 3", run: (v) => (setHeading(v, 3), true) },
@@ -737,6 +867,7 @@ export function mountFormatBar(
   const stateful: {
     element: HTMLButtonElement;
     names: string[];
+    unless: string[];
     pair?: [string, string];
   }[] = [];
 
@@ -751,6 +882,7 @@ export function mountFormatBar(
   stateful.push({
     element: heading,
     names: ["ATXHeading1", "ATXHeading2", "ATXHeading3", "ATXHeading4", "ATXHeading5", "ATXHeading6"],
+    unless: [],
   });
 
   // The menu itself is native, opened by Swift.
@@ -797,7 +929,12 @@ export function mountFormatBar(
     });
 
     if (item.active || item.activePair) {
-      stateful.push({ element: button, names: item.active ?? [], pair: item.activePair });
+      stateful.push({
+        element: button,
+        names: item.active ?? [],
+        unless: item.inactiveWith ?? [],
+        pair: item.activePair,
+      });
     }
     root.appendChild(button);
   }
@@ -831,10 +968,11 @@ export function mountFormatBar(
       // stutter while typing.
       if (!root.offsetParent) return;
       const marks = activeMarks(view.state);
-      for (const { element, names, pair } of stateful) {
+      for (const { element, names, unless, pair } of stateful) {
         const on =
-          names.some((n) => marks.has(n)) ||
-          (pair ? enclosingPair(view.state, pair[0], pair[1]) !== null : false);
+          !unless.some((n) => marks.has(n)) &&
+          (names.some((n) => marks.has(n)) ||
+            (pair ? enclosingPair(view.state, pair[0], pair[1]) !== null : false));
         element.setAttribute("aria-pressed", String(on));
       }
     },
