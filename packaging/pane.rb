@@ -6,14 +6,10 @@
 # same pull request as the code they describe, instead of drifting in a repo nobody opens.
 #
 # The release workflow prints the sha256 in its job summary, so bumping is copy and paste.
-#
-# The asset became a .dmg with v0.6.2 (decision 102). Do not mirror this file to the tap before that
-# tag exists: v0.6.1 and earlier published a .zip, and a cask pointing at an asset the release does
-# not have is an install that 404s.
 
 cask "pane" do
-  version "0.6.1"
-  sha256 "3e34566daedbfe65b768ce9f784a19438048e7a5c9860843686452804146ef6d"
+  version "0.6.2"
+  sha256 "665563fd6bae4da3bc8b5980760c4926ea9f3b58163aba3c6609df0aa36a9ae5"
 
   url "https://github.com/ColeMei/pane/releases/download/v#{version}/Pane-#{version}.dmg"
   name "Pane"
