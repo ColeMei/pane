@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="artifacts/pane-icon.png" alt="Pane app icon" width="120">
+</p>
+
 <h1 align="center">Pane</h1>
 
 <p align="center">
