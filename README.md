@@ -138,3 +138,7 @@ view-only decoration, so what lands on disk is byte-for-byte what you typed.
 ## License
 
 MIT
+
+## Acknowledgement
+
+Special thanks to [linux.do](https://linux.do)
