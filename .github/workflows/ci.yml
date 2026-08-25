@@ -54,3 +54,12 @@ jobs:
             echo "error: Info.plist declares a privacy usage description — see decision 9" >&2
             exit 1
           fi
+
+          # And decision 99 the same way. A release bundle carrying PaneScratchBuild would resolve
+          # its Application Support to "Pane (Debug)" and default its vault to ~/Pane-scratch, so
+          # every installer would open an empty folder on first run and their notes would look gone.
+          # This step builds with the release default, so the key must be absent.
+          if plutil -p "$APP/Contents/Info.plist" | grep -q "PaneScratchBuild"; then
+            echo "error: a release bundle is stamped as a scratch build — see decision 99" >&2
+            exit 1
+          fi
