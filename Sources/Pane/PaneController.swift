@@ -156,8 +156,10 @@ final class PaneController: NSObject {
 
         // Offscreen from the start: the web view has to be laid out and warm before the first
         // summon, and the first summon must not be the first time anything renders.
-        panel.setFrameOrigin(CGPoint(x: -30_000, y: -30_000))
-        panel.orderFront(nil)
+        //
+        // Through the panel rather than by setting the origin here, because "offscreen" is a state
+        // the panel defends and not just a coordinate — see `PanePanel.parkBeforeFirstSummon`.
+        panel.parkBeforeFirstSummon()
     }
 
     // MARK: - Pane state

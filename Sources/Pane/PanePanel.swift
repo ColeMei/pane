@@ -32,6 +32,12 @@ final class PanePanel: NSPanel {
 
     private var onscreenFrame: CGRect?
 
+    /// Whether the pane is meant to be on screen, held rather than derived.
+    ///
+    /// `isSummoned` used to read the origin alone, which made "dismissed" a fact about geometry that
+    /// anything moving the window could overwrite — and something does. See `reparkAfterScreenChange`.
+    private var parked = false
+
     override var canBecomeKey: Bool { true }
 
     /// Never main. Main window status is what drives the menu bar, and Pane's whole trick is not
@@ -83,6 +89,56 @@ final class PanePanel: NSPanel {
         maxSize = NSSize(width: PanelGeometry.maximumWidth, height: .greatestFiniteMagnitude)
 
         applyCollectionBehaviour(pinned: false)
+        observeScreenChanges()
+    }
+
+    // MARK: - Staying parked across a display change
+
+    /// AppKit rescues windows that sit on no display, and a dismissed pane is exactly that.
+    ///
+    /// Dismiss parks the window at `offscreenOrigin` rather than hiding it, because
+    /// `setIsVisible(false)` suspends the WebContent process and a suspended web view cannot meet the
+    /// 100 ms summon bar. The cost of that trick is that the window is, as far as AppKit is
+    /// concerned, a window the user has lost: when the screen configuration changes — a monitor
+    /// sleeping and waking, a lid closing and opening, a display unplugged — it walks the window list
+    /// and moves anything outside every screen back onto the main one. So closing and reopening a
+    /// laptop put a dismissed pane on the desktop, unasked, with nobody having summoned it.
+    ///
+    /// **Measured, by flipping the display mode with `CGConfigureDisplayWithDisplayMode` and logging
+    /// every frame call.** Two things came out of it that guesswork got wrong:
+    ///
+    /// - **`constrainFrameRect` is not the hook.** It *is* consulted — with `(240, 752)`, the origin
+    ///   AppKit had already picked — and returning the rect unchanged changed nothing: the very next
+    ///   call was `setFrame` to `(240, 784)`. Overriding it to decline the rescue reads exactly like
+    ///   a fix and is not one, so there is no override here.
+    /// - **The notification arrives after the move, which is what makes it work.** By the time this
+    ///   fires the origin already reads `(240, 784)`, so re-parking has something to undo. Both
+    ///   happen in the same millisecond, so nothing is drawn on screen in between.
+    ///
+    /// The other half of the fix is that `parked` has to be true in the first place. It was not:
+    /// `PaneController.init` parked the pane at startup with a bare `setFrameOrigin` on its own copy
+    /// of the literal, so a pane that had never been summoned was offscreen with `parked` false and
+    /// this guard switched off. That is now `parkBeforeFirstSummon`.
+    ///
+    /// A pane that is genuinely on screen is left alone, and should be: it may have been on the
+    /// display that just went away, and AppKit bringing it back is the right answer there.
+    ///
+    /// The remembered frame is untouched — `onscreenFrame` is where the pane returns to, and a
+    /// display change must not silently redefine it. `PanelGeometry` reconciles it against the
+    /// connected displays at summon time, which is the right moment: the answer depends on the
+    /// screens attached *then*, not on the screens attached when the lid shut.
+    private func observeScreenChanges() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(reparkAfterScreenChange),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+    }
+
+    @objc private func reparkAfterScreenChange() {
+        guard parked, frame.origin != Self.offscreenOrigin else { return }
+        setFrameOrigin(Self.offscreenOrigin)
     }
 
     /// Lives in `PanelGeometry` so the clamp and the window agree; kept here as the name the rest
@@ -132,7 +188,7 @@ final class PanePanel: NSPanel {
 
     // MARK: - Summon and dismiss
 
-    var isSummoned: Bool { onscreenFrame == nil ? false : frame.origin != Self.offscreenOrigin }
+    var isSummoned: Bool { onscreenFrame != nil && !parked }
 
     /// Puts the pane back where it was, on the Space you are on now.
     ///
@@ -140,6 +196,7 @@ final class PanePanel: NSPanel {
     ///   remembered frame, already reconciled against the connected displays by `PanelGeometry`.
     func summon(at frame: CGRect, pinned: Bool) {
         onscreenFrame = frame
+        parked = false
         setFrame(frame, display: false)
 
         // Re-assert the collection behaviour on every summon, not just when the pin state changes.
@@ -157,13 +214,27 @@ final class PanePanel: NSPanel {
         orderFrontRegardless()
     }
 
+    /// Parks the pane before it has ever been summoned.
+    ///
+    /// The web view has to be laid out and warm before the first summon, so the window is ordered
+    /// front offscreen at startup rather than shown later. That has to go through here rather than
+    /// through a bare `setFrameOrigin`: `parked` is what every guard in this file reads, and a window
+    /// sitting at `offscreenOrigin` with `parked` still false is a pane AppKit is free to rescue onto
+    /// the desktop at the next display change, which is exactly what it did.
+    func parkBeforeFirstSummon() {
+        parked = true
+        setFrameOrigin(Self.offscreenOrigin)
+        orderFront(nil)
+    }
+
     /// Moves the pane out of sight without letting the web view go to sleep.
     ///
     /// - Returns: the frame it was occupying, for `state.json`.
     @discardableResult
     func dismiss() -> CGRect? {
         let was = frame
-        guard was.origin != Self.offscreenOrigin else { return onscreenFrame }
+        guard !parked else { return onscreenFrame }
+        parked = true
         onscreenFrame = was
         setFrameOrigin(Self.offscreenOrigin)
         return was
@@ -176,12 +247,12 @@ final class PanePanel: NSPanel {
     /// knows where it ended up. Returning the origin stashed at summon time instead meant every drag
     /// was thrown away and the pane reappeared wherever it was last *programmatically* placed.
     var rememberedFrame: CGRect? {
-        frame.origin == Self.offscreenOrigin ? onscreenFrame : frame
+        parked ? onscreenFrame : frame
     }
 
     /// Resizes while offscreen or onscreen without losing track of where "onscreen" is.
     func applyHeight(_ frame: CGRect) {
-        if self.frame.origin == Self.offscreenOrigin {
+        if parked {
             onscreenFrame = frame
             setContentSize(frame.size)
         } else {
