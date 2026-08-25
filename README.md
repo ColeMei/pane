@@ -36,8 +36,8 @@ everything else you own.
 brew install --cask ColeMei/pane/pane
 ```
 
-Or download the `.zip` from the [latest release](https://github.com/ColeMei/pane/releases) and drag
-`Pane.app` to `/Applications`.
+Or download the `.dmg` from the [latest release](https://github.com/ColeMei/pane/releases), open it,
+and drag `Pane.app` onto the `Applications` folder beside it.
 
 > [!IMPORTANT]
 > **macOS will say Pane "is damaged and can't be opened". It isn't.**
