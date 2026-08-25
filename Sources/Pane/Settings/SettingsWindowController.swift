@@ -8,9 +8,12 @@ import PaneKit
 /// concession — settings change rarely, and putting them in a pane would cost the pane chrome it has
 /// to carry every second of every day for a window opened twice a year.
 ///
-/// `NSTabViewController` in `.toolbar` style is the frame's chrome exactly: icon above label, window
-/// resizing to each tab's content. Written out by hand it would be a toolbar delegate, a tab view and
-/// a pile of size animations; the platform already has all three and gets them right.
+/// `NSTabViewController` in `.toolbar` style is the frame's chrome exactly: icon above label. Written
+/// out by hand it would be a toolbar delegate, a tab view and a pile of size animations; the platform
+/// already has all three and gets them right.
+///
+/// The one thing taken off it is per-tab sizing — see `preferredContentSize` below. The window is one
+/// size, and the tab that does not fit scrolls.
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
@@ -47,15 +50,27 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: item.label)
         }
 
-        // Each tab tells the tab controller how tall it wants to be, which is what makes the window
-        // resize as you switch — the standard behaviour for a preference window. Without it every
-        // tab gets the tallest tab's height and three of the four end in dead space.
+        // One window size for all five tabs, computed rather than chosen.
         //
-        // Loading all four views up front is the cost, and it is the right trade here: a settings
-        // window is opened rarely and never on the hot path, and lazily-loaded tabs would each have
-        // to guess their own size before they had one.
+        // Per-tab sizing is `NSTabViewController`'s standard behaviour and it was fine while the
+        // tabs were within a hundred points of each other. Shortcuts is not: it is roughly twice the
+        // tallest of the rest, so switching to it threw the window open and switching away snapped
+        // it shut, with the tab bar moving under the pointer as you read it. About was the same
+        // fault sideways, at 380 wide against everyone else's 540.
+        //
+        // So the window is the size of the tallest tab that has to fit whole, and Shortcuts — the
+        // one tab that does not — scrolls inside it. Taking the max rather than writing a number
+        // down is decision 82's rule: a constant tuned against today's tallest tab is wrong the
+        // first time a row is added to another one.
+        //
+        // Loading all five views up front is the cost, and it is the right trade here: a settings
+        // window is opened rarely and never on the hot path, and a lazily-loaded tab would have to
+        // guess its own size before it had one.
+        let sized = [general, storage, appearance, about] as [NSViewController]
+        let height = sized.map(\.view.fittingSize.height).max() ?? PanePanel.defaultHeight
+        let size = NSSize(width: SettingsForm.contentWidth, height: height)
         for controller in [general, storage, appearance, shortcuts, about] as [NSViewController] {
-            controller.preferredContentSize = controller.view.fittingSize
+            controller.preferredContentSize = size
         }
 
         let window = NSWindow(contentViewController: tabs)

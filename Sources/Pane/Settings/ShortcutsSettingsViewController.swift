@@ -99,9 +99,34 @@ final class ShortcutsSettingsViewController: NSViewController {
 
             container.bottomAnchor.constraint(greaterThanOrEqualTo: footer.bottomAnchor, constant: 20),
 
-            container.widthAnchor.constraint(equalToConstant: 540),
+            container.widthAnchor.constraint(equalToConstant: SettingsForm.contentWidth),
         ])
-        view = container
+
+        // This is the one tab that does not fit the window every other tab wants.
+        //
+        // `NSTabViewController` gives each tab its own height, which is the standard behaviour and
+        // was fine while every tab was within a hundred points of the others. Ten rows in three
+        // groups plus a footer is roughly twice the tallest of the rest, so switching to it threw
+        // the window open and switching away snapped it shut — the window jumping around the screen
+        // as you read the tab bar. Every tab is one size now (see `SettingsWindowController`), and
+        // the tab that does not fit scrolls rather than deciding the size for the other four.
+        //
+        // The scroll view holds the container at its natural height and lets the tab clip it, which
+        // is why the container keeps hugging vertically: the rows must stay their own height rather
+        // than sharing out whatever the scroll view has.
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.horizontalScrollElasticity = .none
+        scroll.documentView = container
+        container.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            container.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            container.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+        ])
+
+        view = scroll
     }
 
     /// A group's name, in the type the rest of the window uses for a quiet label.

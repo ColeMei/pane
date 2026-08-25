@@ -92,7 +92,9 @@ final class AboutSettingsViewController: NSViewController {
             stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 28),
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24),
             stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 380),
+            // Every tab is the same width, or `NSTabViewController` resizes the *window* on the way
+            // in and out of this one. It was 380 and did exactly that.
+            container.widthAnchor.constraint(equalToConstant: SettingsForm.contentWidth),
         ])
         // Same rule as every other tab: pin to the top and hug vertically, or `NSTabViewController`
         // stretches this one to the tallest tab and the stack scatters.

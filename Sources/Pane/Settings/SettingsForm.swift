@@ -13,6 +13,15 @@ import AppKit
 @MainActor
 final class SettingsForm {
 
+    /// The width every tab is, and the padding around the content in it.
+    ///
+    /// The frames are 540 wide inside the window chrome. It is a constant here rather than a literal
+    /// per tab because `NSTabViewController` sizes the window to whichever tab is showing, so a tab
+    /// that disagrees makes the *window* change width as you switch tabs — which is what the About
+    /// tab did at 380, snapping the window narrower and back.
+    static let contentWidth: CGFloat = 540
+    static let contentInset: CGFloat = 24
+
     let grid: NSGridView
     private let labelWidth: CGFloat
 
@@ -180,13 +189,14 @@ final class SettingsForm {
 
         NSLayoutConstraint.activate([
             grid.topAnchor.constraint(equalTo: container.topAnchor, constant: 20),
-            grid.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
+            grid.leadingAnchor.constraint(
+                equalTo: container.leadingAnchor, constant: Self.contentInset
+            ),
             grid.trailingAnchor.constraint(
-                lessThanOrEqualTo: container.trailingAnchor, constant: -24
+                lessThanOrEqualTo: container.trailingAnchor, constant: -Self.contentInset
             ),
             container.bottomAnchor.constraint(greaterThanOrEqualTo: grid.bottomAnchor, constant: 24),
-            // The frames are 540 wide inside the window chrome.
-            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 540),
+            container.widthAnchor.constraint(equalToConstant: Self.contentWidth),
         ])
         return container
     }
