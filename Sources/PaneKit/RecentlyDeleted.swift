@@ -31,7 +31,7 @@ public enum RecentlyDeleted {
     /// resolves `state.json` — so the two land beside each other rather than in two ideas of where
     /// Application Support is.
     public static func standardStore(
-        appName: String = "Pane",
+        appName: String = BuildProfile.current.supportDirectoryName,
         fileManager: FileManager = .default
     ) throws -> URL {
         let base = try fileManager.url(

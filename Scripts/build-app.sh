@@ -93,6 +93,18 @@ fi
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" \
 	"$ROOT/Scripts/Info.plist" > "$CONTENTS/Info.plist"
 
+# A debug build is a scratch build: its own Application Support folder, and a vault default of
+# ~/Pane-scratch rather than ~/Documents/Pane. See PaneKit/BuildProfile.swift for why — in short,
+# the two builds shared one settings.json, so pointing the debug one at a scratch vault repointed
+# the daily one with it, and every scripted keystroke landed in real notes.
+#
+# Stamped here rather than read from an environment variable, because `open build/Pane.app` does not
+# carry the environment and a rule that only holds when you remember to export something is not a
+# rule. --release never gets the key, so a release bundle cannot come out of this script scratched.
+if [[ "$CONFIG" == "debug" ]]; then
+	/usr/libexec/PlistBuddy -c "Add :PaneScratchBuild bool true" "$CONTENTS/Info.plist" >/dev/null
+fi
+
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
 if [[ -f "$ROOT/Scripts/AppIcon.icns" ]]; then

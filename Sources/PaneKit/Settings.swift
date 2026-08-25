@@ -22,7 +22,9 @@ public struct Settings: Codable, Equatable, Sendable {
     /// it, and so a vault under the home directory survives the account being renamed.
     public var vaultPath: String
 
-    public static let defaultVaultPath = "~/Documents/Pane"
+    /// `~/Documents/Pane`, unless this is a scratch build — see `BuildProfile`, which is also why
+    /// this is computed rather than a literal.
+    public static var defaultVaultPath: String { BuildProfile.current.defaultVaultPath }
 
     public var vaultURL: URL {
         URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath)

@@ -15,5 +15,6 @@ runRecentlyDeletedTests()
 runMarkdownExportTests()
 runAutoSizingTests()
 runReleaseCheckTests()
+runBuildProfileTests()
 
 exit(Check.finish())

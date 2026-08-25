@@ -35,10 +35,11 @@ public final class JSONFileStore<Value: Codable> {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    /// Standard location: `~/Library/Application Support/Pane/<name>`.
+    /// Standard location: `~/Library/Application Support/Pane/<name>` — or the scratch build's own
+    /// folder beside it, which is what keeps a debug session out of the daily build's settings.
     public static func inApplicationSupport(
         _ name: String,
-        appName: String = "Pane",
+        appName: String = BuildProfile.current.supportDirectoryName,
         fileManager: FileManager = .default
     ) throws -> JSONFileStore<Value> {
         let base = try fileManager.url(
