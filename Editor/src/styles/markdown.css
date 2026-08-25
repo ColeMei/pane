@@ -256,6 +256,31 @@
   margin-left: -16px;
 }
 
+/* A rendered marker takes no selection highlight, and the reason is geometry rather than taste.
+ *
+ * An `inline-block` is an atomic inline box, so a selection crossing it paints **two** rectangles:
+ * the box itself, whose height is its `line-height`, and the text inside it. Measured at 15px text:
+ * the box is 20.0 tall at y=47 while the body text beside it is 18.0 tall at y=48, so every list
+ * line's highlight was a pair of mismatched rectangles a pixel out of step — reported as the
+ * selection looking jagged, and worse on a task, where the checkbox is 13.0 tall at y=162.6 against
+ * text at 160.
+ *
+ * Matching the heights is not available: 18 is the font's own painted height at this size, not a
+ * number this stylesheet gets to set, and pinning it would be decision 82's class exactly — a
+ * constant tuned against one text size that goes wrong at the next one.
+ *
+ * So the markers step out of the selection instead, which is also what Typora, Obsidian and Bear
+ * do. They are rendered chrome: the `-` or `1.` in the file is replaced by a widget, and a widget
+ * is not the thing you are selecting. Nothing is lost — copy reads the document rather than the DOM
+ * selection, so ⇧⌘C still carries the markers, and the **raw** marker under the caret is real text
+ * with no rule here, so it highlights like any other character. */
+.pane-list-marker,
+.pane-list-number,
+.pane-task {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* A revealed marker sits in the same box the rendered one does, or the line jumps 16px right the
  * moment the caret arrives on it — see `rawListMark` in live-preview.ts. `min-width` rather than
  * `width`, because `1. ` is wider than `- ` and neither may be clipped. */
