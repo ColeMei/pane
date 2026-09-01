@@ -249,11 +249,28 @@
  * for bullets, numbers and checkboxes alike — and a continuation line needs no rule of its own,
  * because 26 is simply where its padding already puts it. Decision 55's measured marker/text of
  * 32/48 (absolute, with the content padding) is unchanged. */
+/* The three numbers this whole block is built out of, named once.
+ *
+ * `--list-lead` is how far a first-level marker sits right of the text column's own left edge. It
+ * was 10 and the reference measures 6.5 — its marker at 31 against paragraph text at 24.5, on the
+ * same note at the same size. The absolute figures are not comparable between the two (the column
+ * is centred with `margin: 0 auto`, so its offset moves with the pane's width), but that 6.5 is,
+ * and the typography pass's twelve-point correction stopped 3.5 short of it.
+ *
+ * `--list-step` is the 22 between levels, which the reference measures too and which was always
+ * right. `--list-marker-box` is the fixed slot a marker sits in. Every padding below is derived
+ * from the three rather than written out — decision 82. */
+:root {
+  --list-lead: 6.5px;
+  --list-step: 22px;
+  --list-marker-box: 16px;
+}
+
 .pane-list-marker,
 .pane-list-number {
   display: inline-block;
-  width: 16px;
-  margin-left: -16px;
+  width: var(--list-marker-box);
+  margin-left: calc(-1 * var(--list-marker-box));
 }
 
 /* A rendered marker takes no selection highlight, and the reason is geometry rather than taste.
@@ -286,14 +303,21 @@
  * `width`, because `1. ` is wider than `- ` and neither may be clipped. */
 .pane-syntax-listmark {
   display: inline-block;
-  min-width: 16px;
-  margin-left: -16px;
+  min-width: var(--list-marker-box);
+  margin-left: calc(-1 * var(--list-marker-box));
 }
 
-.cm-line.pane-line-li-1 { padding-left: 26px; }  /* 10 + 16 */
-.cm-line.pane-line-li-2 { padding-left: 48px; }  /* 32 + 16 */
-.cm-line.pane-line-li-3 { padding-left: 70px; }  /* 54 + 16 */
-.cm-line.pane-line-li-4 { padding-left: 92px; }  /* 76 + 16 */
+/* Lead-in, plus the marker's box back, plus one step a level. */
+.cm-line.pane-line-li-1 { padding-left: calc(var(--list-lead) + var(--list-marker-box)); }
+.cm-line.pane-line-li-2 {
+  padding-left: calc(var(--list-lead) + var(--list-marker-box) + var(--list-step));
+}
+.cm-line.pane-line-li-3 {
+  padding-left: calc(var(--list-lead) + var(--list-marker-box) + 2 * var(--list-step));
+}
+.cm-line.pane-line-li-4 {
+  padding-left: calc(var(--list-lead) + var(--list-marker-box) + 3 * var(--list-step));
+}
 
 /* The padding a collapsed fence was standing in for — see `fenceOpenRaw` in live-preview.ts. Only
  * while the fence is showing its backticks; the rest of the time the 8px fence line *is* this. */

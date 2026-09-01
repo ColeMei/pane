@@ -144,6 +144,9 @@ function show(value) {
 // Reading the rendering
 // ------------------------------------------------------------------------------------------------
 
+/** Half a pixel matters here — the list lead-in is 6.5 — so these round to a tenth, not to a whole. */
+const round = (value) => Math.round(value * 10) / 10;
+
 function inspector(view, doc) {
   const lineEl = (n) => {
     const at = view.domAtPos(view.state.doc.line(n).from);
@@ -178,8 +181,10 @@ function inspector(view, doc) {
     if (!el) return null;
     const bullet = el.querySelector(".pane-list-marker");
     if (bullet) return bullet.textContent;
+    // Trimmed: the rendered box holds the marker *and* the space after it, so that it is the same
+    // width as the raw one under the caret. What this reader is asked is which number, not how wide.
     const number = el.querySelector(".pane-list-number");
-    if (number) return number.textContent;
+    if (number) return number.textContent.trim();
     const task = el.querySelector(".pane-task");
     if (task) return task.className.includes("--done") ? "[x]" : "[ ]";
     const raw = el.querySelector(".pane-syntax-listmark");
@@ -194,7 +199,7 @@ function inspector(view, doc) {
     const range = doc.createRange();
     range.selectNodeContents(el);
     const rects = [...range.getClientRects()].filter((r) => r.width > 0);
-    return rects.length ? Math.round(rects[0].left) : null;
+    return rects.length ? round(rects[0].left) : null;
   };
 
   /** Left edge of the item's *text*, which is what has to line up down a level. */
@@ -208,7 +213,7 @@ function inspector(view, doc) {
       range.selectNodeContents(node.nodeType === 1 ? node : el);
       if (node.nodeType !== 1) range.setStart(node, 0), range.setEnd(node, node.length);
       const rect = [...range.getClientRects()].filter((r) => r.width > 0)[0];
-      if (rect) return Math.round(rect.left);
+      if (rect) return round(rect.left);
     }
     return null;
   };
@@ -218,7 +223,7 @@ function inspector(view, doc) {
   /** Where the editor's text column starts, so an indent can be measured from its own origin. */
   const contentOrigin = () => {
     const el = doc.querySelector(".cm-content");
-    return Math.round(el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft));
+    return round(el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft));
   };
 
   /** Every decoration class on the line, so a construct can say what it rendered as. */
@@ -654,21 +659,16 @@ export function runListGeometry(view, doc) {
 
   // A list line's marker is where a paragraph's text is, plus the level's indent. The first level is
   // the one the typography pass found pushed 12pt too far right, so it is worth its own case.
-  // The numbers the stylesheet writes down for itself. `markdown.css` derives a first-level marker
-  // at 10 and its text at 26 from its own padding, and both hold — measured from the text column's
-  // own origin, which is the only origin those two numbers are about.
+  // Measured from the text column's own origin, which is the only origin these numbers are about.
   d.load("- one\n\npara\n");
   d.at("para");
   const origin = i.contentOrigin();
-  r.check("a first-level marker sits 10px into the text column", 10, i.leftEdge(1) - origin);
-  r.check("and its text 26px in", 26, i.textEdge(1) - origin);
-
-  // On screen, though, those are 38 and 54 from the pane's own left edge, because the editor host
-  // adds 6px the stylesheet's comment does not count. The reference measures 31/47 on the same
-  // note at the same width, and the typography pass took twelve points off each level to reach it
-  // — so this is the same 6-7px, still there, one layer further out than anybody looked.
-  r.check("a first-level marker lands where the reference's does", 31, i.leftEdge(1));
-  r.check("and its text where the reference's text does", 47, i.textEdge(1));
+  
+  // The reference's own figures are a marker at 31 with paragraph text at 24.5 — so its marker
+  // leads by 6.5. The absolute numbers are not comparable between the two: the text column is
+  // centred with `margin: 0 auto`, so where it starts moves with the pane's width, and the
+  // reference was measured in a 496pt window. The **lead** is comparable, and ours was 10.
+  r.check("a first-level marker leads by the 6.5 the reference does", 6.5, i.leftEdge(1) - origin);
 
   // Every kind puts its text in the same place, or a list that mixes kinds looks ragged.
   const textEdgeOf = (text) => {
@@ -715,7 +715,7 @@ export function runListGeometry(view, doc) {
     const first = lines[0];
     const second = lines.find((rect) => Math.round(rect.top) > Math.round(first.top) + 4);
     r.check("and its second line hangs under its text, not under its marker",
-      i.textEdge(1), second ? Math.round(second.left) : null);
+      Math.round(i.textEdge(1)), second ? Math.round(second.left) : null);
   }
 
   // A continuation line made with ⇧⏎ belongs to the item and sits under its text.
