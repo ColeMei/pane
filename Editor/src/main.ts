@@ -16,7 +16,7 @@ import "./styles/switcher.css";
 import "./styles/action-panel.css";
 
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import {
   deleteMarkupBackward,
   insertNewlineContinueMarkupCommand,
@@ -44,6 +44,7 @@ import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
 import { describe, hideTooltip, mountTooltips } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
+import { listAwareTab } from "./list-indent";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { renumberOrderedLists } from "./renumber";
 import { mountSwitcher, type NoteSummary } from "./switcher";
@@ -912,7 +913,7 @@ function baseExtensions(): Extension[] {
       // only ever fires with the caret in the editor — where the reflex is "put this away", not
       // "cancel something".
       { key: "Escape", run: () => (send({ type: "close" }), true) },
-      indentWithTab,
+      listAwareTab,
       // After the markdown bindings above, so Backspace only deletes a bracket pair once
       // `deleteMarkupBackward` has declined the position.
       ...closeBracketsKeymap,
