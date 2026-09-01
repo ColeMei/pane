@@ -127,6 +127,15 @@ final class PaneController: NSObject {
     /// `adopt` is shared by every way into a note, and only this one starts the name unsettled.
     private var pendingCreatedName: String?
 
+    /// The caret offset the editor last reported, whether or not there is a file to record it under.
+    ///
+    /// `recordCaret` is keyed on `currentFilename`, and a draft has none for the whole of its life
+    /// — so everything typed before the first write left no caret behind, and the state entry
+    /// `adoptDraft` creates started at 0. Any reload before the next keystroke then put the caret at
+    /// the top of the note (decision 11 says it restores to the exact offset), and what was typed
+    /// next went into the **title**, which decision 103 renames the file after.
+    private var lastReportedCaret = 0
+
     // MARK: Layout
 
     private var lastContentHeight: CGFloat = PanePanel.defaultHeight
@@ -538,7 +547,16 @@ final class PaneController: NSObject {
         // under whatever the first line said at the 500 ms pause, which is very often half a title.
         unsettledName = filename
 
-        state.update { $0.recordOpen(filename, at: Date()) }
+        state.update {
+            $0.recordOpen(filename, at: Date())
+            // Seeded from the caret the editor last reported, because a draft has no filename to
+            // record one under: `.edited` keys `recordCaret` on `currentFilename`, which is nil for
+            // the whole of a draft's life. Without this the entry starts at 0, and a reload arriving
+            // before the next keystroke — an external write, an eviction — puts the caret at the top
+            // of the note. What is typed next then goes into the **title**, which decision 103 uses
+            // to rename the file.
+            $0.recordCaret(filename, offset: lastReportedCaret)
+        }
         var pane = paneState
         pane.noteFilename = filename
         paneState = pane
@@ -1320,6 +1338,7 @@ extension PaneController: EditorWebViewDelegate {
 
         case .edited(let text, let caret):
             bufferText = text
+            lastReportedCaret = caret
             if let filename = currentFilename {
                 state.update { $0.recordCaret(filename, offset: caret) }
                 vault.noteBufferChanged(filename: filename, text: text)
@@ -1327,6 +1346,7 @@ extension PaneController: EditorWebViewDelegate {
             scheduleWrite()
 
         case .caret(let caret, let scrollLine):
+            lastReportedCaret = caret
             guard let filename = currentFilename else { return }
             state.update { $0.recordCaret(filename, offset: caret, scrollLine: scrollLine) }
 
