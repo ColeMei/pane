@@ -44,7 +44,7 @@ import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
 import { describe, hideTooltip, mountTooltips } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
-import { listAwareTab } from "./list-indent";
+import { contentColumn, listAwareTab, outdentListItem } from "./list-indent";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { renumberOrderedLists } from "./renumber";
 import { mountSwitcher, type NoteSummary } from "./switcher";
@@ -675,11 +675,118 @@ function exitEmptyBlockquote(view: EditorView): boolean {
   // `"> ".repeat(n)` would turn `>>>` into `> > ` — both are valid two-level quotes, but silently
   // restyling markdown the user wrote is not something a byte-for-byte editor gets to do.
   const outer = markers.slice(0, markers.lastIndexOf(">")).replace(/[ \t]+$/, "");
-  const next = outer ? `${indent}${outer} ` : "";
 
+  // The last level leaves the quote, and leaves a blank line behind it — see `leaveBlock`.
+  if (!outer) {
+    leaveBlock(view, line);
+    return true;
+  }
+
+  const next = `${indent}${outer} `;
   view.dispatch({
     changes: { from: line.from, to: line.to, insert: next },
     selection: { anchor: line.from + next.length },
+    userEvent: "input",
+  });
+  return true;
+}
+
+/**
+ * Leave a markup block, landing on an empty line with a blank one above it.
+ *
+ * A line directly under a list item or a quote line is a **lazy continuation** of it — every
+ * markdown parser reads it that way, and so does live preview. So an exit that leaves the caret
+ * immediately under the block puts the next paragraph back inside it: measured on the running
+ * build, leaving a quote and typing a paragraph put the paragraph in the quote and the Enter after
+ * that printed `> ` in front of a line nobody meant to quote. pandoc reads the three paragraphs
+ * that came out of it as one `<blockquote><p>`.
+ *
+ * The blank line is only *added* when there is not one already, which is `escapeCodeBlock`'s rule:
+ * holding the key down should not stack empty lines up behind the block.
+ */
+function leaveBlock(view: EditorView, line: { from: number; to: number; number: number }): void {
+  const doc = view.state.doc;
+  const below = line.number < doc.lines ? doc.line(line.number + 1) : null;
+  const insert = below && below.text.trim() === "" ? "" : "\n";
+  view.dispatch({
+    changes: { from: line.from, to: line.to, insert },
+    // One offset for both: clearing the line puts the line below at `line.from + 1`, and inserting
+    // a newline puts the new empty line there too.
+    selection: { anchor: line.from + 1 },
+    scrollIntoView: true,
+    userEvent: "input",
+  });
+}
+
+/**
+ * ⏎ on an empty **top-level** list item leaves the list, and leaves a blank line behind it.
+ *
+ * `continueMarkup` outdents an empty nested item one level, which is right, and on the outermost
+ * level it drops the marker and stops — leaving the caret on a bare line directly under the last
+ * item, which `leaveBlock` explains is not a paragraph at all. Runs before `continueMarkup` so it
+ * only ever sees the outermost level; everything nested is still that command's job.
+ */
+function exitListToParagraph(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const line = state.doc.lineAt(range.head);
+  if (!EMPTY_LIST_ITEM.test(line.text)) return false;
+  if (/^[ \t]*>/.test(line.text)) return false;
+
+  const item = enclosingNode(state, line.from + /^[ \t]*/.exec(line.text)![0].length, "ListItem");
+  if (!item) return false;
+  // Nested items outdent one level at a time; only the outermost one leaves the list.
+  for (let node = item.parent; node; node = node.parent) {
+    if (node.name === "ListItem") return false;
+  }
+
+  leaveBlock(view, line);
+  return true;
+}
+
+/** The nearest enclosing node of a given name, or null. */
+function enclosingNode(state: EditorState, pos: number, name: string) {
+  let node = syntaxTree(state).resolveInner(pos, 1);
+  while (node.parent && node.name !== name) node = node.parent;
+  return node.name === name ? node : null;
+}
+
+/**
+ * ⏎ at the end of an opening fence writes the closing one.
+ *
+ * Without it, ` ```python ` and Enter leaves the fence unterminated — and an unterminated fence runs
+ * to the end of the document, so **everything typed for the rest of the note is code**, in the file
+ * as well as on screen. There is no way out of it either: ⇧⏎'s `escapeCodeBlock` needs a closing
+ * fence to step past. Typora and Obsidian both write the closing fence on this keystroke.
+ */
+function closeOpenFence(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const line = state.doc.lineAt(range.head);
+  if (range.head !== line.to) return false;
+  const opening = /^[ \t]*(`{3,}|~{3,})[^`~]*$/.exec(line.text);
+  if (!opening) return false;
+
+  const block = enclosingNode(state, line.from, "FencedCode");
+  if (!block) return false;
+
+  // An unterminated block has one `CodeMark` where a closed one has two. Counting them is the only
+  // reading that survives a fence written with four backticks or with tildes.
+  let marks = 0;
+  for (let child = block.firstChild; child; child = child.nextSibling) {
+    if (child.name === "CodeMark") marks += 1;
+  }
+  if (marks > 1) return false;
+
+  const fence = opening[1]!;
+  view.dispatch({
+    changes: { from: line.to, insert: `\n\n${fence}` },
+    selection: { anchor: line.to + 1 },
+    scrollIntoView: true,
     userEvent: "input",
   });
   return true;
@@ -705,6 +812,7 @@ const EMPTY_LIST_ITEM = /^[ \t]*(?:>[ \t]*)*(?:[-*+]|\d+[.)])[ \t]*(?:\[[ xX]\][
  */
 function exitEmptyMarkup(view: EditorView): boolean {
   if (exitEmptyBlockquote(view)) return true;
+  if (exitListToParagraph(view)) return true;
 
   const { state } = view;
   const range = state.selection.main;
@@ -715,6 +823,110 @@ function exitEmptyMarkup(view: EditorView): boolean {
   if (!inside(state, range.head, "ListItem")) return false;
 
   return continueMarkup(view);
+}
+
+/**
+ * ⇧⏎ inside a list item lines the new line up under the item's text.
+ *
+ * A soft break is "another line of this item", so it has to reach the item's content column or it
+ * is not part of the item at all — `  - two` needs four spaces, not the two CodeMirror's generic
+ * indentation was supplying. CommonMark rescues the two-space version as a lazy continuation, so
+ * the file happened to mean the right thing; nothing else would have.
+ *
+ * The stylesheet has always drawn it correctly (`pane-line-li-N` goes on the continuation line
+ * too), which is exactly why this survived: the pane showed the indent the buffer did not have.
+ */
+function softBreakInListItem(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+  if (!inside(state, range.head, "ListItem")) return false;
+  if (inside(state, range.head, "FencedCode") || inside(state, range.head, "CodeBlock")) return false;
+
+  const column = contentColumn(state, range.head);
+  if (column === null || column === 0) return false;
+
+  const insert = `\n${" ".repeat(column)}`;
+  view.dispatch({
+    ...state.replaceSelection(insert),
+    scrollIntoView: true,
+    userEvent: "input",
+  });
+  return true;
+}
+
+/**
+ * ⌫ on a line holding nothing but a marker undoes the ⏎ that made it.
+ *
+ * Decision 90 made ⏎ and ⌫ inverses in prose, from all four positions. It did not reach the markup
+ * blocks: `> quoted`, Enter, Backspace left `> quoted\n` — the marker gone and the newline still
+ * there, so one keystroke undid half of one keystroke and a second was needed to finish.
+ *
+ * Only when the line above is the block this marker was continued *from*. A marker somebody has
+ * just typed under a paragraph is not a break to undo, and Backspace there still deletes one
+ * character, as it always did.
+ */
+function undoMarkerBreak(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const doc = state.doc;
+  const line = doc.lineAt(range.head);
+  if (range.head !== line.to || line.number < 2) return false;
+
+  const quote = /^[ \t]*(?:>[ \t]*)+$/.test(line.text);
+  if (!quote && !EMPTY_LIST_ITEM.test(line.text)) return false;
+
+  const above = doc.line(line.number - 1);
+  const continued = quote
+    ? /^[ \t]*>/.test(above.text)
+    : /^[ \t]*(?:>[ \t]*)*(?:[-*+]|\d+[.)])[ \t]/.test(above.text);
+  if (!continued) return false;
+
+  view.dispatch({
+    changes: { from: above.to, to: line.to },
+    selection: { anchor: above.to },
+    userEvent: "delete.backward",
+  });
+  return true;
+}
+
+/**
+ * ⌫ at the start of a list item's text takes the item out of the list.
+ *
+ * `deleteMarkupBackward` removes the marker and leaves the indentation standing, so `  - two`
+ * became `  two` — which is a lazy continuation of the item above it, and the two items silently
+ * became one. A nested item outdents instead, one level per press, which is what Typora and
+ * Obsidian do and what ⇧⇥ does; the outermost level drops the marker and takes a blank line with
+ * it, for the same reason `exitListToParagraph` does.
+ */
+function unindentListItem(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const doc = state.doc;
+  const line = doc.lineAt(range.head);
+  const match = /^([ \t]*)((?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)/.exec(line.text);
+  if (!match) return false;
+  const [, indent, marker] = match as unknown as [string, string, string];
+  if (range.head !== line.from + indent.length + marker.length) return false;
+  // `enclosingNode` rather than `inside`: the latter resolves with a -1 bias, and at the start of a
+  // top-level item that reaches the *previous* line's node — decision 78's bias rule, and it made
+  // this decline on exactly the case it exists for.
+  if (!enclosingNode(state, line.from + indent.length, "ListItem")) return false;
+
+  if (indent.length > 0) return outdentListItem(view);
+
+  const above = line.number > 1 ? doc.line(line.number - 1) : null;
+  const blank = above !== null && above.text.trim() !== "";
+  view.dispatch({
+    changes: { from: line.from, to: range.head, insert: blank ? "\n" : "" },
+    selection: { anchor: line.from + (blank ? 1 : 0) },
+    userEvent: "delete.backward",
+  });
+  return true;
 }
 
 /**
@@ -875,12 +1087,14 @@ function baseExtensions(): Extension[] {
         // ⇧⏎, in order: get out of a code block, else leave an empty marker line, else fall through
         // to CodeMirror's plain newline. Every one of those is "a newline that does not carry the
         // markup forward"; the chain is which flavour of that applies where.
-        { key: "Shift-Enter", run: chain(escapeCodeBlock, exitEmptyMarkup) },
+        { key: "Shift-Enter", run: chain(escapeCodeBlock, exitEmptyMarkup, softBreakInListItem) },
         // In order: leave an empty quote, continue a list or quote, else start a new paragraph.
         // `continueMarkup` declines in prose (it needs a list or quote context), which is what
         // leaves the last link reachable at all.
-        { key: "Enter", run: chain(exitEmptyBlockquote, continueMarkup, newParagraph) },
-        { key: "Backspace", run: chain(joinBackToParagraph, deleteMarkupBackward) },
+        { key: "Enter", run: chain(exitEmptyBlockquote, closeOpenFence, exitListToParagraph,
+                                   continueMarkup, newParagraph) },
+        { key: "Backspace", run: chain(undoMarkerBreak, joinBackToParagraph, unindentListItem,
+                                       deleteMarkupBackward) },
         { key: "Mod-a", run: selectBlockThenAll },
       ])
     ),

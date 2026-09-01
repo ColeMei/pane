@@ -465,7 +465,7 @@ export function runTypedLists(view, doc) {
   d.type("- alpha");
   d.press("Enter", { shiftKey: true });
   d.type("continued");
-  r.check("Shift-Enter continues the item without a new marker", "- alpha\ncontinued", d.text(),
+  r.check("Shift-Enter continues the item under its own text", "- alpha\n  continued", d.text(),
     "- alpha ⇧⏎ continued");
 
   d.reset();
@@ -491,8 +491,10 @@ export function runTypedLists(view, doc) {
   d.press("Enter"); d.type("two");
   d.at("two", 0);
   d.press("Backspace");
-  r.check("Backspace at the start of a top-level item removes the marker", "- one\ntwo", d.text(),
-    "caret before `two`, ⌫");
+  // A blank line, for `exitListToParagraph`'s reason: without it the text that has just stopped
+  // being an item is a lazy continuation of the item above, which is the same bug in a new place.
+  r.check("Backspace at the start of a top-level item makes it a paragraph", "- one\n\ntwo",
+    d.text(), "caret before `two`, ⌫");
 
   return { checked: r.checked, failures: r.failures };
 }
