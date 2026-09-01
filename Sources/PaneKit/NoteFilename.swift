@@ -105,8 +105,20 @@ public enum NoteFilename {
         existing: Set<String>,
         timeZone: TimeZone = .current
     ) -> String {
+        unique(
+            stem: "\(timestampComponent(date, timeZone: timeZone))-\(slug(from: title))",
+            existing: existing
+        )
+    }
+
+    /// The uniquing on its own, for a stem that already exists.
+    ///
+    /// Decision 103 renames a young note as its title settles, and it has to keep the *original*
+    /// timestamp rather than taking today's — so it cannot go through `unique(title:date:…)`, which
+    /// builds a fresh one. One implementation of the `-2` rule rather than two: the second copy of a
+    /// naming rule is how decision 100 went wrong.
+    public static func unique(stem: String, existing: Set<String>) -> String {
         let taken = Set(existing.map { $0.lowercased() })
-        let stem = "\(timestampComponent(date, timeZone: timeZone))-\(slug(from: title))"
 
         let first = "\(stem).\(fileExtension)"
         if !taken.contains(first.lowercased()) { return first }

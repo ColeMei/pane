@@ -69,6 +69,8 @@ type OutboundMessage =
   | { type: "switcherOpen"; open: boolean; height: number }
   | { type: "actionsOpen"; open: boolean; height: number }
   | { type: "revealInFinder" }
+  /** ⌘K row fifteen (decision 103). Swift owns the vault, so the page can only ask. */
+  | { type: "renameFile" }
   | { type: "openSettings" }
   | { type: "copyAsMarkdown"; text: string }
   | { type: "exportNote"; text: string }
@@ -811,6 +813,7 @@ const actionHandlers: Record<string, () => boolean> = {
   spaceBehaviour: () => (send({ type: "toggleSpaceBehaviour" }), true),
   duplicateNote: () => (send({ type: "duplicateNote", text: view.state.doc.toString() }), true),
   recentlyDeleted: () => (switcher.openDeleted(), true),
+  renameFile: () => (send({ type: "renameFile" }), true),
 };
 
 function paneShortcuts(bindings: Record<string, string>): Extension {

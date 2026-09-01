@@ -133,6 +133,18 @@ const GROUPS: ActionRow[][] = [
       keys: [],
     },
     {
+      id: "renameFile",
+      label: "Rename File…",
+      // A tag with a hole in it: this row is about the *file's* name, not the note's title, which is
+      // line one and needs no menu item.
+      d: "M7.5 1.5H12.5V6.5L7 12 1.5 6.5zM10 4h.01",
+      // Unbound, and for Recently Deleted's reason exactly: decision 103 makes the name follow the
+      // title on its own, so this is the escape hatch for a title improved an hour later — a place
+      // you go looking for rather than something you fire off. Decision 31 keeps it out of the
+      // Shortcuts table on the same grounds.
+      keys: [],
+    },
+    {
       id: "deleteNote",
       label: "Delete Note",
       d: "M3 4h8l-.7 8.5H3.7zM2 4h10M5.5 4V2.5h3V4",

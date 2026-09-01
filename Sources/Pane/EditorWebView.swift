@@ -27,6 +27,8 @@ enum PaneMessage {
     /// how many rows survived the filter — and the pane has to grow to hold it.
     case actionsOpen(open: Bool, height: CGFloat)
     case revealInFinder
+    /// ⌘K row fifteen (decision 103): rename the file behind this note by hand.
+    case renameFile
     case openSettings
     /// The buffer travels with both of these rather than Swift using its own copy, which the write
     /// debounce (decision 10) leaves up to 500 ms behind what is on screen.
@@ -100,6 +102,8 @@ enum PaneMessage {
             )
         case "revealInFinder":
             self = .revealInFinder
+        case "renameFile":
+            self = .renameFile
         case "copyAsMarkdown":
             self = .copyAsMarkdown(text: string("text"))
         case "exportNote":

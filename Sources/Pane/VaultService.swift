@@ -247,6 +247,136 @@ final class VaultService: @unchecked Sendable {
         }
     }
 
+    // MARK: - Renaming
+
+    enum RenameResult: Sendable {
+        case renamed(to: String)
+        /// The name it wants is taken, or the file is not where we left it. Not an error the user
+        /// needs told about — the name simply stays as it is.
+        case declined
+        case failed(String)
+    }
+
+    /// Moves a note to a new name in the same vault (decision 103).
+    ///
+    /// On `queue` like every other vault operation, which is what makes the ordering against a write
+    /// and against the FSEvents reaction to that write an argument rather than a race. The caller is
+    /// responsible for having flushed first — decision 56's rule, the one ⌃X and every vault
+    /// re-point already follow — and for the auto-rename path that is automatic, because it runs off
+    /// the back of the write completing.
+    ///
+    /// Coordinated `.forMoving` / `.forReplacing` so a sync provider is told the item's identity is
+    /// changing rather than inferring a delete plus a create from the two events.
+    func rename(
+        _ filename: String,
+        to newName: String,
+        text: String,
+        completion: @escaping @MainActor (RenameResult) -> Void
+    ) {
+        queue.async {
+            let source = self.vaultURL.appendingPathComponent(filename)
+            let destination = self.vaultURL.appendingPathComponent(newName)
+            var result: RenameResult = .declined
+
+            guard filename != newName,
+                  FileManager.default.fileExists(atPath: source.path),
+                  !FileManager.default.fileExists(atPath: destination.path)
+            else {
+                DispatchQueue.main.async { MainActor.assumeIsolated { completion(.declined) } }
+                return
+            }
+
+            var coordinationError: NSError?
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            coordinator.coordinate(
+                writingItemAt: source, options: .forMoving,
+                writingItemAt: destination, options: .forReplacing,
+                error: &coordinationError
+            ) { from, to in
+                do {
+                    // Announced separately from the coordination: the move is what the provider
+                    // needs to hear about, and `itemAt:didMoveTo:` is how it is told.
+                    coordinator.item(at: from, willMoveTo: to)
+                    try FileManager.default.moveItem(at: from, to: to)
+                    coordinator.item(at: from, didMoveTo: to)
+                    self.index.forget(filename)
+                    self.index.update(filename: newName, text: text, modified: Date())
+                    result = .renamed(to: newName)
+                } catch {
+                    result = .failed(String(describing: error))
+                }
+            }
+            if let coordinationError {
+                result = .failed(coordinationError.localizedDescription)
+            }
+
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(result) } }
+        }
+    }
+
+    /// The name decision 103 says this note should now have, applied. Nil title changes are cheap:
+    /// `NoteNaming.rename` returns nil and nothing touches the disk.
+    ///
+    /// The listing has to happen here rather than in `PaneController` because `existing` is a read of
+    /// the vault, and every read of the vault goes on this queue.
+    func renameFollowingTitle(
+        _ filename: String,
+        title: String,
+        text: String,
+        completion: @escaping @MainActor (RenameResult) -> Void
+    ) {
+        queue.async {
+            let existing = Set(
+                (try? VaultIO.listNotes(in: self.vaultURL))?.map(\.lastPathComponent) ?? []
+            )
+            guard let wanted = NoteNaming.rename(
+                current: filename, title: title, existing: existing
+            ) else {
+                DispatchQueue.main.async { MainActor.assumeIsolated { completion(.declined) } }
+                return
+            }
+            self.rename(filename, to: wanted, text: text, completion: completion)
+        }
+    }
+
+    /// Where a note went when something outside Pane renamed it.
+    ///
+    /// The identity test is the content hash, because a rename is the one vault event that changes a
+    /// note's name and nothing else. Requires **exactly one** match: two files with identical bytes
+    /// in one FSEvents burst is a copy, not a move, and guessing between them would point the pane
+    /// at the wrong one and take the caret and the pin with it.
+    func findRenamed(
+        of filename: String,
+        among candidates: [String],
+        matching hash: String,
+        completion: @escaping @MainActor (String?) -> Void
+    ) {
+        queue.async {
+            // FSEvents coalesces, so a burst naming a file that still exists is an ordinary edit
+            // somewhere else in the vault. Reading it here rather than inferring it from the burst.
+            let missing = VaultIO.availability(
+                of: self.vaultURL.appendingPathComponent(filename)
+            ) == .missing
+
+            var hashes: [String: String] = [:]
+            if missing {
+                for name in candidates where name != filename && NoteFilename.isNoteFile(name) {
+                    let url = self.vaultURL.appendingPathComponent(name)
+                    guard VaultIO.availability(of: url) == .available,
+                          let data = try? VaultIO.readWithoutMaterializing(url)
+                    else { continue }
+                    hashes[name] = ContentHash.of(data)
+                }
+            }
+
+            // The decision itself is pure and lives in PaneKit, where it is tested.
+            let answer = VaultSync.renameTarget(
+                of: filename, originalIsMissing: missing, candidates: hashes, baselineHash: hash
+            )
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(answer) } }
+        }
+    }
+
     /// Moves a note into Recently Deleted rather than unlinking it (decision 20).
     ///
     /// This used to call `trashItem`, which was the honest stand-in while the retention control in

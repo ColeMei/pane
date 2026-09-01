@@ -50,6 +50,37 @@ public enum VaultSync {
         case adoptBaseline
     }
 
+    /// Which file the open note moved to, when something outside Pane renamed it (decision 103).
+    ///
+    /// A rename is the one vault event that changes a note's *name* and nothing else, so the test is
+    /// the content hash: whichever newly-seen file holds the bytes we last wrote is the note.
+    ///
+    /// **Exactly one match, or nothing.** Two files with identical bytes in one FSEvents burst is a
+    /// copy, not a move, and guessing between them would take the caret and the pin to the wrong
+    /// one. Nothing is also the right answer when the original is still there — a burst that names
+    /// other files is an ordinary edit elsewhere in the vault.
+    ///
+    /// - Parameters:
+    ///   - filename: the open note's name.
+    ///   - originalIsMissing: whether that file is actually gone. A burst alone does not say so;
+    ///     FSEvents coalesces, and it reports directories as often as files.
+    ///   - candidates: every other name in the burst that is still present, with its hash.
+    ///   - baselineHash: the bytes we last read from or wrote to the open note.
+    public static func renameTarget(
+        of filename: String,
+        originalIsMissing: Bool,
+        candidates: [String: String],
+        baselineHash: String
+    ) -> String? {
+        guard originalIsMissing else { return nil }
+
+        let matches = candidates
+            .filter { $0.key != filename && $0.value == baselineHash }
+            .map(\.key)
+
+        return matches.count == 1 ? matches[0] : nil
+    }
+
     /// Decides what a change on disk means.
     ///
     /// - Parameters:

@@ -111,6 +111,19 @@ final class PaneController: NSObject {
     /// One create in flight at a time, for `flush`'s reason: two would make two files.
     private var isMaterialising = false
 
+    /// The note whose filename is still following its first line (decision 103), if any.
+    ///
+    /// Set for a note **this pane created**, and cleared by the first of: dismiss, a note switch,
+    /// quit, an external write, an external rename, or a hand rename through ⌘K. That list is the
+    /// rule — the name follows only while Pane is the only thing that has touched the file and the
+    /// note has not been left. Once anything else knows this file by path, renaming under it is
+    /// decision 74's trap extended to a process we do not control.
+    private var unsettledName: String?
+
+    /// Carries "this note was just created here" across the async `open` that follows a create.
+    /// `adopt` is shared by every way into a note, and only this one starts the name unsettled.
+    private var pendingCreatedName: String?
+
     // MARK: Layout
 
     private var lastContentHeight: CGFloat = PanePanel.defaultHeight
@@ -276,6 +289,9 @@ final class PaneController: NSObject {
 
     func dismiss() {
         flush(trigger: .dismissed)
+        // Decision 103's freeze list, first entry. The write above still lands; only the *name*
+        // stops following, so a note comes back on the next summon under the name you left it with.
+        unsettledName = nil
         rememberFrame()
         panel.dismiss()
         editor.call("setFocused", [false])
@@ -405,6 +421,10 @@ final class PaneController: NSObject {
         currentFilename = filename
         bufferText = text
         baselineHash = hash
+        // Arriving at a note settles its name unless this pane just made it. "The note has not been
+        // left" is the rule, and a note switch is leaving it (decision 103).
+        unsettledName = (filename == pendingCreatedName) ? filename : nil
+        pendingCreatedName = nil
 
         state.update { $0.recordOpen(filename, at: Date()) }
         var pane = paneState
@@ -458,6 +478,9 @@ final class PaneController: NSObject {
             switch result {
             case .success(let created):
                 self.currentFilename = nil        // force `open` past its no-op guard
+                // A note made from a switcher query is named from the query, and the user carries on
+                // typing the first line — so its name is as unsettled as a draft's (decision 103).
+                self.pendingCreatedName = created.filename
                 self.open(created.filename)
             case .failure(let error):
                 self.showBanner(.problem("Could not create a note: \(error.localizedDescription)"))
@@ -503,6 +526,9 @@ final class PaneController: NSObject {
         recordVisit(filename)
         currentFilename = filename
         baselineHash = hash
+        // Decision 103. This is the exact case the decision exists for: the file has just appeared
+        // under whatever the first line said at the 500 ms pause, which is very often half a title.
+        unsettledName = filename
 
         state.update { $0.recordOpen(filename, at: Date()) }
         var pane = paneState
@@ -529,6 +555,10 @@ final class PaneController: NSObject {
             switch result {
             case .success(let created):
                 self.currentFilename = nil        // force `open` past its no-op guard
+                // A copy is named after the note it came from, and retitling the copy is most of
+                // why anyone makes one — so its name follows too, until the copy is left
+                // (decision 103). Without this a duplicate keeps the original's slug for life.
+                self.pendingCreatedName = created.filename
                 self.open(created.filename)
                 // Decision 50's rule, which had only ever been applied to ⌃X: an action with a
                 // consequence that says nothing reads as "nothing happened". ⌘D is the worst case
@@ -639,10 +669,12 @@ final class PaneController: NSObject {
         vault.write(text: text, to: filename, expectedHash: baselineHash) { [weak self] result in
             guard let self else { return }
             self.isWriting = false
+            var didWrite = false
 
             switch result {
             case .written(let hash):
                 if filename == self.currentFilename { self.baselineHash = hash }
+                didWrite = true
 
             case .conflicted(let sibling, let hash):
                 // Decision 8. The original keeps the other machine's version; our text is now in the
@@ -678,6 +710,164 @@ final class PaneController: NSObject {
             if self.writeRequestedWhileWriting {
                 self.writeRequestedWhileWriting = false
                 self.flush(trigger: trigger)
+            } else if didWrite {
+                // Decision 103, and deliberately here rather than in the `.written` case above: the
+                // bytes have to be on disk under the old name before anything moves, **and** no
+                // further write may be pending. A write requested during this one is enqueued for
+                // the *old* filename, and the vault queue is serial — so renaming first would put
+                // that write behind the move, where `VaultIO.write`'s `case .missing: break`
+                // recreates the old name. That is the very duplicate this decision came to fix,
+                // arriving by a different door.
+                self.considerRename()
+            }
+        }
+    }
+
+    // MARK: - The filename follows the title (decision 103)
+
+    /// Asks whether this note's name should move, and moves it if so.
+    ///
+    /// Piggybacks the 500 ms write debounce rather than running a timer of its own: the question
+    /// "has the title changed" only has a new answer when the text has changed, which is exactly
+    /// when a write happens.
+    private func considerRename() {
+        guard let filename = currentFilename, unsettledName == filename, !isWriting else { return }
+
+        let text = bufferText
+        holdingTheWriteGate { done in
+            vault.renameFollowingTitle(
+                filename, title: MarkdownDocument.title(of: text), text: text
+            ) { [weak self] result in
+                defer { done() }
+                guard let self, case .renamed(let newName) = result else { return }
+                // The pane may have moved on while the move was on the queue.
+                guard self.currentFilename == filename else { return }
+                self.repoint(from: filename, to: newName)
+                // Still unsettled: the title can go on changing, and so can the name.
+                self.unsettledName = newName
+            }
+        }
+    }
+
+    /// Runs a file move under the same gate a write runs under.
+    ///
+    /// `isWriting` is not really "a write is in flight" — it is "nothing else may write to this
+    /// note's name right now", and a rename needs exactly that. Without it a `scheduleWrite` timer
+    /// firing mid-move enqueues a write for the *old* filename behind the move on the serial vault
+    /// queue, and `VaultIO.write` recreates a note it finds missing. Anything deferred this way is
+    /// flushed once the name has settled, so nothing is dropped — only delayed by one hop.
+    private func holdingTheWriteGate(_ body: (@escaping @MainActor () -> Void) -> Void) {
+        isWriting = true
+        body { [weak self] in
+            guard let self else { return }
+            self.isWriting = false
+            if self.writeRequestedWhileWriting {
+                self.writeRequestedWhileWriting = false
+                self.flush(trigger: .typingStopped)
+            }
+        }
+    }
+
+    /// Points everything that knows this note by name at its new one.
+    ///
+    /// **This is decision 74's list**, and it has now been got wrong twice — Move Notes wrote to the
+    /// old folder, and after a conflict the editor did not know which file it was in, so ⌃X would
+    /// have deleted the original. One function so there is one list: the pane's own pointer, the
+    /// state entry carrying the caret, the pin and `lastOpened`, the pane record, the visit history,
+    /// the web layer's copy of the name, the menu bar's pins, and an open switcher.
+    ///
+    /// `baselineHash` is deliberately untouched: a rename moves the same bytes, so what is on disk
+    /// still matches what we last wrote. `NoteIndex` moves inside `VaultService.rename`, on the
+    /// queue that owns it.
+    private func repoint(from old: String, to new: String) {
+        currentFilename = new
+
+        state.update { s in
+            if let moved = s.notes.removeValue(forKey: old) { s.notes[new] = moved }
+        }
+
+        var pane = paneState
+        pane.noteFilename = new
+        paneState = pane
+
+        // Back and Forward hold filenames, so an un-rewritten entry is a ⌘[ onto a file that no
+        // longer exists — which `open` would then treat as a missing note and drop from state.
+        for index in history.indices where history[index] == old { history[index] = new }
+
+        // The web layer is told for the same reason the conflict path tells it: `loadNote` is the
+        // only other thing that sets this, and this path must not reload (it would move the caret).
+        editor.call("setNoteFilename", [new])
+        onPinsChanged?()
+        refreshSwitcherIfOpen()
+    }
+
+    /// ⌘K's "Rename File…" — the escape hatch for a title improved an hour later.
+    ///
+    /// Only the slug is editable. The timestamp is the creation time and decision 2's real content,
+    /// so it is shown and not offered; a rename that could rewrite it would be a different feature.
+    private func renameFileByHand() {
+        guard let filename = currentFilename else { return }
+
+        let stem = (filename as NSString).deletingPathExtension
+        let chars = Array(stem)
+        let hasTimestamp = NoteFilename.creationDate(from: filename) != nil
+        let prefix = hasTimestamp ? String(chars.prefix(NoteFilename.timestampWidth + 1)) : ""
+        let editable = String(stem.dropFirst(prefix.count))
+
+        // A dialog you have to type into has to be reachable, and Pane never activates on its own —
+        // so this joins Settings and the vault chooser as a place where it does. `steppingAside` is
+        // decision 91: the pane floats above everything, including this, until it is told not to.
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Rename File"
+        // The frozen half, shown so it is clear what is not on offer.
+        alert.informativeText = hasTimestamp
+            ? "\(prefix)…\u{2009}.\(NoteFilename.fileExtension)"
+            : filename
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 22))
+        field.stringValue = editable
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+
+        guard PanePanel.steppingAside({ alert.runModal() }) == .alertFirstButtonReturn else { return }
+
+        let typed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty field is a slip, not a request for a note called `untitled` — and unlike the
+        // automatic rename this one cannot be undone by typing the next character.
+        guard !typed.isEmpty else { return }
+        // Through `slug` rather than taken literally: what the user types is a title, and the same
+        // rules that make a filename out of a first line make one out of this.
+        let slug = NoteFilename.slug(from: typed)
+        let newName = NoteFilename.unique(
+            stem: prefix + slug,
+            existing: [] // uniquing against the vault happens in `VaultService.rename`, which refuses
+                         // an existing destination — asking twice would race the answer anyway.
+        )
+        guard newName != filename else { return }
+
+        // Decision 56: flush before the file moves. The same rule ⌃X and every vault re-point follow,
+        // and the one this path can actually break — there may be up to 500 ms of typing outstanding.
+        flush(trigger: .noteSwitched)
+        let text = bufferText
+        holdingTheWriteGate { done in
+            vault.rename(filename, to: newName, text: text) { [weak self] result in
+                defer { done() }
+                guard let self else { return }
+                switch result {
+                case .renamed(let moved):
+                    guard self.currentFilename == filename else { return }
+                    self.repoint(from: filename, to: moved)
+                    // The user has chosen a name. Nothing may move it again.
+                    self.unsettledName = nil
+                case .declined:
+                    self.showBanner(.problem("A note is already called that."))
+                case .failed(let message):
+                    self.showBanner(.problem("Could not rename: \(message)"))
+                }
             }
         }
     }
@@ -688,11 +878,24 @@ final class PaneController: NSObject {
     func vaultChanged(filenames: [String]) {
         refreshSwitcherIfOpen()
 
-        guard let current = currentFilename, filenames.contains(current) else { return }
+        guard let current = currentFilename else { return }
+        guard filenames.contains(current) else {
+            // The burst does not name the open note, so nothing here is about it — unless the note
+            // is gone from the vault entirely, which is what a rename in Finder looks like from
+            // here. Decision 103's external-rename half.
+            followExternalRename(of: current, within: filenames) {}
+            return
+        }
 
         vault.diskHash(current) { [weak self] hash in
             guard let self, current == self.currentFilename else { return }
-            guard let diskHash = hash else { return }   // gone or evicted — not our call to make here
+            guard let diskHash = hash else {
+                // Gone or evicted. If it is *gone*, a rename in Finder is the likeliest reason — a
+                // rename usually names both paths in one burst, so this is where following one most
+                // often starts. Eviction is still not our call to make here.
+                self.followExternalRename(of: current, within: filenames) {}
+                return
+            }
 
             switch VaultSync.react(
                 diskHash: diskHash,
@@ -704,8 +907,13 @@ final class PaneController: NSObject {
 
             case .adoptBaseline:
                 self.baselineHash = diskHash
+                // Somebody else's write, byte-identical to our buffer but not to our baseline. It is
+                // still somebody else: decision 103 freezes the name (another tool knows this file
+                // by path now, and renaming under it is decision 74's trap one process further out).
+                self.freezeNameOnExternalWrite(current)
 
             case .reload:
+                self.freezeNameOnExternalWrite(current)
                 self.vault.load(current) { [weak self] result in
                     guard let self, case .loaded(let text, let hash) = result else { return }
                     guard current == self.currentFilename else { return }
@@ -719,9 +927,48 @@ final class PaneController: NSObject {
                 }
 
             case .writeConflictSibling:
+                self.freezeNameOnExternalWrite(current)
                 // Push our version out now; `VaultIO.write` sees the mismatch and makes the sibling.
                 self.flush(trigger: .reloadPending)
             }
+        }
+    }
+
+    /// Decision 103's freeze list: an external write ends the name's freedom to move.
+    private func freezeNameOnExternalWrite(_ filename: String) {
+        guard unsettledName == filename else { return }
+        unsettledName = nil
+    }
+
+    /// Follows the open note when something outside Pane renamed its file.
+    ///
+    /// Today this **silently duplicates the note**: `vaultChanged` only reacts when the burst names
+    /// the current filename, so a rename was ignored; the pane went on pointing at the dead name;
+    /// and `VaultIO.write` takes `case .missing: break` — "recreating a note deleted elsewhere is
+    /// fine" — and writes the old name back. You end up with both files, and `state.json` keeps the
+    /// caret and the pin on the dead one.
+    ///
+    /// The fix is the move decision 25 already makes for a conflict sibling: the buffer follows its
+    /// text. And then the name freezes, because the user has chosen one.
+    private func followExternalRename(
+        of filename: String,
+        within burst: [String],
+        otherwise: @escaping @MainActor () -> Void
+    ) {
+        guard let hash = baselineHash else {
+            otherwise()
+            return
+        }
+
+        vault.findRenamed(of: filename, among: burst, matching: hash) { [weak self] moved in
+            guard let self, self.currentFilename == filename else { return }
+            guard let moved else {
+                otherwise()
+                return
+            }
+            self.repoint(from: filename, to: moved)
+            // The user has chosen a name (decision 103's freeze list).
+            self.unsettledName = nil
         }
     }
 
@@ -1050,6 +1297,9 @@ extension PaneController: EditorWebViewDelegate {
             // grows to a height the placement rule in overlay.ts is happy with.
             actionsPaneHeight = open ? PanelGeometry.paneHeight(forOverlay: height) : 0
             applyContentHeight(heightWanted)
+
+        case .renameFile:
+            renameFileByHand()
 
         case .revealInFinder:
             guard let filename = currentFilename else { return }
