@@ -79,6 +79,10 @@ final class Runner: NSObject, WKNavigationDelegate {
             }
             let checked = (result["checked"] as? NSNumber)?.intValue ?? 0
             let failures = result["failures"] as? [[String: Any]] ?? []
+            // A suite that returns `mode: "report"` is an instrument rather than a gate: it prints
+            // what diverged and exits 0, because a divergence nobody has decided to fix yet must not
+            // block a tag. `commands.test.js` returns no mode and is unaffected.
+            let reporting = (result["mode"] as? String) == "report"
 
             if failures.isEmpty {
                 print("✓ \(checked) editor assertions, all passing")
@@ -89,8 +93,8 @@ final class Runner: NSObject, WKNavigationDelegate {
                 print("    want \(String(describing: failure["want"] ?? ""))")
                 print("    got  \(String(describing: failure["got"] ?? ""))")
             }
-            print("✗ \(failures.count) of \(checked) editor assertions failed")
-            exit(1)
+            print("\(reporting ? "—" : "✗") \(failures.count) of \(checked) assertions diverged")
+            exit(reporting ? 0 : 1)
         } catch {
             print("editor-probe: \(error)")
             exit(2)
