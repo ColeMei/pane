@@ -81,7 +81,7 @@ export function blockAt(state: EditorState, pos: number, side: -1 | 1 = -1): Blo
 }
 
 /** Where a list item's own lines stop and its first nested list starts. */
-function endOfOwnContent(state: EditorState, item: SyntaxNode): number {
+export function endOfOwnContent(state: EditorState, item: SyntaxNode): number {
   for (let child = item.firstChild; child; child = child.nextSibling) {
     if (child.name !== "BulletList" && child.name !== "OrderedList") continue;
     // The end of the line *before* the nested list, so the item keeps every line that is its own.

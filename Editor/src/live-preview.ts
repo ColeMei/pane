@@ -19,6 +19,7 @@
  */
 
 import { syntaxTree } from "@codemirror/language";
+import { endOfOwnContent } from "./blocks";
 import { type Extension, type Range, RangeSet, StateField, Transaction } from "@codemirror/state";
 import {
   Decoration,
@@ -453,7 +454,15 @@ function buildDecorations(view: EditorView): DecorationSet {
           // indent at all — so "- one / two" drew `two` hard against the pane's left edge while
           // `one` sat 26px in. It takes the item's padding without the hanging indent, which is
           // what puts it under the text rather than under the marker.
-          const itemLast = doc.lineAt(Math.min(node.to, doc.length));
+          //
+          // **The item's own content, not its whole range.** A `ListItem` covers the list nested
+          // beneath it, so running to `node.to` stamped the outer depth onto every nested line as
+          // well: a third-level line came out carrying `li-1 li-2 li-3`, and which indent it
+          // actually got was decided by the order of four equal-specificity rules in
+          // `markdown.css`. It came out right — deepest last, so deepest wins — for a reason
+          // nobody had written down, and reordering that block would have silently un-indented
+          // every nested list in the app. Same shape as the fence-ordering bug in decision 71.
+          const itemLast = doc.lineAt(Math.min(endOfOwnContent(view.state, node.node), doc.length));
           for (let n = itemFirst.number + 1; n <= itemLast.number; n++) {
             const line = doc.line(n);
             if (line.length === 0) continue;
