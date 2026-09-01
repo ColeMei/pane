@@ -273,6 +273,17 @@
   margin-left: calc(-1 * var(--list-marker-box));
 }
 
+/* A number is as wide as its digits once there are two of them.
+ *
+ * `width: 16px` fits `1. ` and clips nothing, but a revealed `10. ` is wider — and the raw mark
+ * below has always had `min-width`, so the caret landing on item ten moved the line 8px right and
+ * back. Both boxes hold the same characters now, marker and following space alike, so raw and
+ * rendered are the same width by construction rather than by both happening to be under 16. */
+.pane-list-number {
+  width: auto;
+  min-width: var(--list-marker-box);
+}
+
 /* A rendered marker takes no selection highlight, and the reason is geometry rather than taste.
  *
  * An `inline-block` is an atomic inline box, so a selection crossing it paints **two** rectangles:

@@ -548,8 +548,12 @@ function buildDecorations(view: EditorView): DecorationSet {
             // Its own class rather than the raw-syntax one: a rendered `1.` is content the reader is
             // meant to see and is tinted with the accent, whereas `.pane-syntax` is the muted grey
             // that marks characters only showing because the caret is on the line.
-            decorations.push(numberMark.range(node.from, node.to));
-            hideSpaceAfter(node.to);
+            // Through the space after it, exactly as the raw mark above is. The two boxes then
+            // hold the same characters and are the same width for any number of digits, so the
+            // caret arriving on item ten no longer shifts the line — hiding the space here made
+            // the rendered box narrower than the raw one by a space.
+            const gap = doc.sliceString(node.to, Math.min(node.to + 1, doc.length)) === " " ? 1 : 0;
+            decorations.push(numberMark.range(node.from, node.to + gap));
           } else {
             decorations.push(
               Decoration.replace({ widget: new BulletWidget(listDepth(view, node.from)) }).range(
