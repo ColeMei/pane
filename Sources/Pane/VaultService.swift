@@ -131,17 +131,50 @@ final class VaultService: @unchecked Sendable {
         }
     }
 
-    /// The hash of what is on disk right now, without materialising anything. Used by the watcher to
-    /// tell our own echo from someone else's write.
-    func diskHash(_ filename: String, completion: @escaping @MainActor (String?) -> Void) {
+    /// What is on disk right now, without materialising anything.
+    ///
+    /// Used by the watcher to tell our own echo from someone else's write — and, since decision 105,
+    /// to notice that the open note has been evicted. This used to be `diskHash` returning an
+    /// optional, and `nil` meant "gone **or** evicted, not our call to make here": the caller simply
+    /// bailed, so if iCloud dataless-ed the note you were looking at, the pane went on showing stale
+    /// text with no banner and no way to know. "Downloading…" fired only on *open*, never mid-session.
+    enum DiskState: Sendable {
+        case available(hash: String)
+        case evicted
+        case missing
+        /// There, not evicted, and unreadable — a permissions problem or a torn write. The caller
+        /// does nothing, which is what the old `nil` did for every one of these cases.
+        case unreadable
+    }
+
+    func diskState(_ filename: String, completion: @escaping @MainActor (DiskState) -> Void) {
         queue.async {
             let url = self.vaultURL.appendingPathComponent(filename)
-            var hash: String?
-            if VaultIO.availability(of: url) == .available,
-               let data = try? VaultIO.readWithoutMaterializing(url) {
-                hash = ContentHash.of(data)
+            let state: DiskState
+            switch VaultIO.availability(of: url) {
+            case .missing:
+                state = .missing
+            case .evicted:
+                state = .evicted
+            case .available:
+                if let data = try? VaultIO.readWithoutMaterializing(url) {
+                    state = .available(hash: ContentHash.of(data))
+                } else {
+                    state = .unreadable
+                }
             }
-            DispatchQueue.main.async { MainActor.assumeIsolated { completion(hash) } }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(state) } }
+        }
+    }
+
+    /// iCloud's own unresolved conflict versions of a note, written out as ordinary siblings
+    /// (decision 105). Returns the names it created, which is empty in the overwhelmingly common case.
+    func harvestConflicts(_ filename: String, completion: @escaping @MainActor ([String]) -> Void) {
+        queue.async {
+            let url = self.vaultURL.appendingPathComponent(filename)
+            let written = VaultIO.harvestConflictVersions(of: url).map(\.lastPathComponent)
+            if !written.isEmpty { _ = try? self.index.refresh(vault: self.vaultURL) }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(written) } }
         }
     }
 

@@ -111,6 +111,9 @@ final class PaneController: NSObject {
     /// One create in flight at a time, for `flush`'s reason: two would make two files.
     private var isMaterialising = false
 
+    /// One mid-session download at a time (decision 105a). FSEvents bursts arrive in twos.
+    private var isDownloadingCurrent = false
+
     /// The note whose filename is still following its first line (decision 103), if any.
     ///
     /// Set for a note **this pane created**, and cleared by the first of: dismiss, a note switch,
@@ -437,6 +440,11 @@ final class PaneController: NSObject {
         editor.call("loadNote", [filename, text, noteState.caretOffset, noteState.isPinned])
         hideBanner()
         if isVisible { editor.focusEditor() }
+
+        // Decision 105b, on load as well as on a vault change: a losing version can have been filed
+        // days ago, while this note was not open, and nothing would ever have surfaced it. After
+        // `hideBanner`, because finding one raises the banner.
+        harvestConflicts(of: filename)
     }
 
     /// ⌘N, and the switcher's "no results — ⏎ makes one titled with what you typed".
@@ -887,15 +895,41 @@ final class PaneController: NSObject {
             return
         }
 
-        vault.diskHash(current) { [weak self] hash in
+        vault.diskState(current) { [weak self] disk in
             guard let self, current == self.currentFilename else { return }
-            guard let diskHash = hash else {
-                // Gone or evicted. If it is *gone*, a rename in Finder is the likeliest reason — a
-                // rename usually names both paths in one burst, so this is where following one most
-                // often starts. Eviction is still not our call to make here.
-                self.followExternalRename(of: current, within: filenames) {}
+
+            let diskHash: String
+            switch disk {
+            case .unreadable:
                 return
+
+            case .missing:
+                // A rename usually names *both* paths in one burst, so this is where following one
+                // most often starts — the old name is in `filenames` and gone from disk.
+                self.followExternalRename(of: current, within: filenames) { [weak self] in
+                    guard let self else { return }
+                    // Genuinely gone. The state entry deliberately stays: `VaultIO.write` recreates a
+                    // note deleted elsewhere rather than dropping what is in the buffer, and throwing
+                    // the caret and the pin away here would strand a note that is about to come back.
+                    self.checkVaultStillThere()
+                }
+                return
+
+            case .evicted:
+                // Decision 105a. The open note has been dataless-ed under us — "Optimize Mac Storage"
+                // reclaiming it, or a remote update arriving as a placeholder. Before this the pane
+                // showed stale text with no banner: "downloading…" only ever fired on `open`.
+                self.reloadEvictedNote(current)
+                return
+
+            case .available(let hash):
+                diskHash = hash
             }
+
+            // Decision 105b. iCloud files a losing version rather than telling anyone, and it can
+            // arrive long after the edit that caused it — which is why this is here as well as on
+            // load, and why Pane's own hash conflict does not cover it.
+            self.harvestConflicts(of: current)
 
             switch VaultSync.react(
                 diskHash: diskHash,
@@ -938,6 +972,51 @@ final class PaneController: NSObject {
     private func freezeNameOnExternalWrite(_ filename: String) {
         guard unsettledName == filename else { return }
         unsettledName = nil
+    }
+
+    /// Decision 105a: the open note was evicted, so fetch it back and adopt it.
+    ///
+    /// Routed into the paths `open()` already has rather than new ones — the same
+    /// `.downloading` banner, the same `vault.download`, the same `adopt`.
+    private func reloadEvictedNote(_ filename: String) {
+        // Unsaved edits over bytes we have never seen is decision 8's case exactly, and the answer is
+        // already written: flush, and `VaultIO.write` sees `.evicted` and makes the conflict sibling
+        // rather than destroying content that only exists on another machine. Downloading here would
+        // replace the buffer with the remote text and take the unsaved edits with it.
+        guard bufferHash == baselineHash else {
+            flush(trigger: .reloadPending)
+            return
+        }
+
+        // FSEvents bursts arrive in twos and threes; without this the pane starts a second download
+        // on top of the first and the banner flickers between them.
+        guard !isDownloadingCurrent else { return }
+        isDownloadingCurrent = true
+
+        freezeNameOnExternalWrite(filename)
+        showBanner(.downloading)
+        vault.download(filename) { [weak self] result in
+            guard let self else { return }
+            self.isDownloadingCurrent = false
+            guard filename == self.currentFilename else { return }
+            if case .loaded(let text, let hash) = result {
+                self.adopt(filename: filename, text: text, hash: hash, recordingHistory: false)
+            } else {
+                self.showBanner(.problem("Could not download \(filename) from iCloud."))
+            }
+        }
+    }
+
+    /// Decision 105b: writes out iCloud's own losing versions as ordinary siblings.
+    ///
+    /// The banner is the one decision 8 already ships, and the loser is a normal note in a flat
+    /// vault — so this adds no UI at all. Silent when there is nothing, which is nearly always.
+    private func harvestConflicts(of filename: String) {
+        vault.harvestConflicts(filename) { [weak self] written in
+            guard let self, !written.isEmpty else { return }
+            self.showBanner(.conflict)
+            self.refreshSwitcherIfOpen()
+        }
     }
 
     /// Follows the open note when something outside Pane renamed its file.

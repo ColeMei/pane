@@ -218,6 +218,62 @@ public enum VaultIO {
         return outcome
     }
 
+    // MARK: - iCloud's own conflicts
+
+    /// Files iCloud is holding as unresolved conflict versions of `url`, written out as ordinary
+    /// notes beside it (decision 105).
+    ///
+    /// This is the one genuine data-loss surface Pane had left, and nothing in the codebase touched
+    /// `NSFileVersion`. Two machines editing the same note offline gives iCloud a winner and a loser;
+    /// the loser is filed as an unresolved conflict version, which is invisible in the Finder and in
+    /// every list Pane draws. Pane's own hash conflict does not catch it: that fires only when *this*
+    /// machine has unsaved edits at the moment the change lands, and a loser can arrive long after.
+    ///
+    /// Entirely inside decision 8's existing vocabulary and with no new UI — the loser becomes a
+    /// `-conflict-<timestamp>` sibling, which is a normal note in the flat vault: it appears in ⌘P,
+    /// it opens in a pane, and it can be reconciled by hand. The banner is the one that already
+    /// exists for a hash conflict.
+    ///
+    /// A version whose bytes cannot be read is **left unresolved**: marking it resolved is what
+    /// discards it, so the one thing this must never do is resolve a version it failed to save.
+    @discardableResult
+    public static func harvestConflictVersions(of url: URL, now: Date = Date()) -> [URL] {
+        guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
+              !versions.isEmpty
+        else { return [] }
+
+        let folder = url.deletingLastPathComponent()
+        // Re-listed per sibling below; seeded here so two losers in the same minute do not collide —
+        // `conflictSibling`'s timestamp is minute-resolution.
+        var taken = Set(
+            (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        )
+
+        var written: [URL] = []
+        for version in versions {
+            guard let data = try? Data(contentsOf: version.url) else { continue }
+
+            let base = NoteFilename.conflictSibling(for: url.lastPathComponent, date: now)
+            let name = NoteFilename.unique(
+                stem: (base as NSString).deletingPathExtension,
+                existing: taken
+            )
+            let sibling = folder.appendingPathComponent(name)
+
+            do {
+                try data.write(to: sibling, options: [.atomic])
+            } catch {
+                continue
+            }
+            taken.insert(name)
+            written.append(sibling)
+
+            // Only now. Resolving is what tells iCloud the version can go.
+            version.isResolved = true
+        }
+        return written
+    }
+
     /// `<stem>-conflict-<timestamp>.md`, beside the original, as an ordinary note the user can open.
     public static func conflictURL(for url: URL, now: Date = Date()) -> URL {
         url.deletingLastPathComponent()

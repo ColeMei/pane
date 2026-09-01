@@ -233,5 +233,22 @@ func runVaultIOTests() {
                 "raw buffer must NOT match — this is the comparison that loops if used"
             )
         }
+
+        // Decision 105b runs on every load and on every vault change for the open note, so its
+        // ordinary case — an unsynced file with no conflict versions — has to be silent and free.
+        // What it must never do on this machine is invent a sibling.
+        Check.test("harvesting conflicts is silent when iCloud has filed none") {
+            let url = vaultDirectory().appendingPathComponent("plain.md")
+            _ = try? VaultIO.write(text: "no conflicts here\n", to: url, expectedHash: nil)
+
+            Check.equal(VaultIO.harvestConflictVersions(of: url).isEmpty, true)
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)) ?? []
+            Check.equal(names.contains { $0.contains("-conflict-") }, false)
+        }
+
+        Check.test("harvesting a file that is not there is not an error") {
+            let url = vaultDirectory().appendingPathComponent("never-existed.md")
+            Check.equal(VaultIO.harvestConflictVersions(of: url).isEmpty, true)
+        }
     }
 }
