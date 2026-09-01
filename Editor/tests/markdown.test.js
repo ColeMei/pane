@@ -1,12 +1,13 @@
 /*
  * The markdown torture suite: what a text worker actually does to an editor.
  *
- * Separate from `commands.test.js`, and deliberately so. That file is a **gate** — every assertion
- * in it describes behaviour we have decided on and shipped, and red means red. This file is an
- * **instrument**: it asserts what the editor *should* do measured against our locked decisions,
- * then CommonMark, then what Typora does — so a case here may be red because the editor is wrong
- * and nobody has decided to fix it yet. `Scripts/test-markdown.sh` prints the table and exits 0.
- * A case that gets fixed moves into `commands.test.js`, where it becomes a gate.
+ * Separate from `commands.test.js` because it asks a different question. That file is about the
+ * **commands** — eleven of them against every shape of selection. This one is about the
+ * **keyboard**: what a person typing markdown gets, measured against our locked decisions first,
+ * CommonMark second, and Typora third.
+ *
+ * It started as an instrument, printing divergences and exiting 0 while eleven of them waited for a
+ * decision. All eleven are fixed, so it is a gate now: red means a regression.
  *
  * Two things make it different from everything already here:
  *
@@ -829,14 +830,28 @@ export function runLineBreaks(view, doc) {
   r.check("Backspace undoes the break after a quote line", "> quoted", d.text(),
     "> quoted ⏎ ⌫");
 
-  // Repeated Enters must not compound into a run of blank lines nobody typed.
+  // A second Enter adds **one** line, not another paragraph break.
+  //
+  // ⏎ from a line with text writes `\n\n`; ⏎ from a line that is already blank writes one `\n`.
+  // So holding the key stacks blank lines at one a press rather than two, which is decision 89's
+  // argument — the gap between two paragraphs is not a place — without taking away the writer's
+  // ability to put deliberate space in a note. Locked rather than left as the shape the code
+  // happened to have.
   d.reset();
   d.type("one");
   d.press("Enter");
   d.press("Enter");
   d.type("two");
-  r.check("two Enters in prose give two paragraph breaks, not four newlines", "one\n\n\n\ntwo",
+  r.check("a second Enter adds one line, not a second paragraph break", "one\n\n\ntwo",
     d.text(), "one ⏎ ⏎ two");
+
+  d.reset();
+  d.type("one");
+  d.press("Enter");
+  d.press("Enter");
+  d.press("Enter");
+  d.type("two");
+  r.check("and a third adds one more", "one\n\n\n\ntwo", d.text(), "one ⏎ ⏎ ⏎ two");
 
   return { checked: r.checked, failures: r.failures };
 }
@@ -873,11 +888,14 @@ export function runConstructs(view, doc) {
   line1("an H1", "# One", "# One", "pane-line-h1");
   line1("an H2", "## Two", "## Two", "pane-line-h2");
   line1("an H3", "### Three", "### Three", "pane-line-h3");
-  // Four, five and six are real CommonMark and the app draws no rule for them. Whatever they do,
-  // they must at least not come out looking like body text with three hashes bolted on.
-  line1("an H4", "#### Four", "#### Four", "pane-line-h4");
-  line1("an H5", "##### Five", "##### Five", "pane-line-h5");
-  line1("an H6", "###### Six", "###### Six", "pane-line-h6");
+  // Four, five and six are real CommonMark and the design draws three heading levels, so they
+  // render at level three **on purpose** — a decision, not a gap. The bytes keep all six hashes,
+  // which is the half that matters: the file keeps its levels for whatever opens it next, and Pane
+  // simply has no fourth size to show them at.
+  line1("an H4 keeps its hashes and renders at level three", "#### Four", "#### Four",
+    "pane-line-h3");
+  line1("an H5 does the same", "##### Five", "##### Five", "pane-line-h3");
+  line1("an H6 does the same", "###### Six", "###### Six", "pane-line-h3");
   // `#Title` with no space is not a heading in CommonMark, and must not draw as one.
   line1("a hash with no space is not a heading", "#Title", "#Title", "");
 
@@ -1077,5 +1095,5 @@ export function run(view, bar, doc) {
       });
     }
   }
-  return { checked, failures, mode: "report" };
+  return { checked, failures };
 }

@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# The markdown torture suite — an instrument, not a gate.
+# The markdown suite: what a person typing markdown gets.
 #
-# `Scripts/test-editor.sh` is the gate: everything in it is behaviour we decided on, and red means a
-# regression. This runs `Editor/tests/markdown.test.js`, which asserts what the editor *should* do
-# against our locked decisions, then CommonMark, then Typora — so a red case here may be a bug
-# nobody has decided to fix yet. It exits 0 either way, and writes the table to
-# `markdown-findings.txt` so the divergences can be read beside the code.
+# The companion to `Scripts/test-editor.sh`, and the other half of the same job. That one drives the
+# **commands** — eleven of them against every shape of selection. This one drives the **keyboard**:
+# every case is a keystroke script, and every nested list in it is built the way a person builds one.
 #
-# A case that gets fixed moves into `Editor/tests/commands.test.js`, where it becomes a gate.
+# Run both before tagging. This one also writes its table to `markdown-findings.txt`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
