@@ -894,6 +894,36 @@ function undoMarkerBreak(view: EditorView): boolean {
 }
 
 /**
+ * ⌫ on a marker somebody typed rather than one a ⏎ wrote deletes one character.
+ *
+ * `deleteMarkupBackward` — CodeMirror's own, and the last link in the Backspace chain — takes the
+ * whole marker off an empty list item. That is right for a marker the editor put there and wrong
+ * for one the writer just typed: `hello` ⏎ `- ` ⌫ threw away both characters of the marker and the
+ * blank line above it, three keystrokes undone by one. `undoMarkerBreak` has already claimed the
+ * marker-only lines that a break made, so anything reaching here is typed, and Backspace on typed
+ * text means one character.
+ */
+function deleteTypedMarker(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  if (!range.empty) return false;
+
+  const line = state.doc.lineAt(range.head);
+  if (range.head !== line.to) return false;
+  const marker = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|(?:>[ \t]*)+)$/;
+  if (!marker.test(line.text) || line.text.trim() === "") return false;
+
+  // An explicit one-character change rather than `deleteCharBackward`, which skips atomic ranges —
+  // and the rendered marker is one, so it took `- ` off whole and put us back where we started.
+  view.dispatch({
+    changes: { from: range.head - 1, to: range.head },
+    selection: { anchor: range.head - 1 },
+    userEvent: "delete.backward",
+  });
+  return true;
+}
+
+/**
  * ⌫ at the start of a list item's text takes the item out of the list.
  *
  * `deleteMarkupBackward` removes the marker and leaves the indentation standing, so `  - two`
@@ -913,6 +943,11 @@ function unindentListItem(view: EditorView): boolean {
   if (!match) return false;
   const [, indent, marker] = match as unknown as [string, string, string];
   if (range.head !== line.from + indent.length + marker.length) return false;
+  // The *start of the text* means there is text. A line holding nothing but a marker belongs to
+  // `undoMarkerBreak` when a ⏎ made it, and to an ordinary Backspace when somebody typed `- ` under
+  // a paragraph — where taking the whole marker and a blank line with it deletes two keystrokes'
+  // worth on one press.
+  if (line.text.length === indent.length + marker.length) return false;
   // `enclosingNode` rather than `inside`: the latter resolves with a -1 bias, and at the start of a
   // top-level item that reaches the *previous* line's node — decision 78's bias rule, and it made
   // this decline on exactly the case it exists for.
@@ -1108,7 +1143,7 @@ function baseExtensions(): Extension[] {
         { key: "Enter", run: chain(exitEmptyBlockquote, closeOpenFence, exitListToParagraph,
                                    continueMarkup, newParagraph) },
         { key: "Backspace", run: chain(undoMarkerBreak, joinBackToParagraph, unindentListItem,
-                                       deleteMarkupBackward) },
+                                       deleteTypedMarker, deleteMarkupBackward) },
         { key: "Mod-a", run: selectBlockThenAll },
       ])
     ),

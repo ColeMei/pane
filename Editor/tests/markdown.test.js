@@ -859,6 +859,17 @@ export function runLineBreaks(view, doc) {
   r.check("Backspace undoes the break after a quote line", "> quoted", d.text(),
     "> quoted ⏎ ⌫");
 
+  // A bullet typed under a paragraph is text until something makes it a list. Backspace there is
+  // an ordinary Backspace — it takes one character — and must not reach back past the marker into
+  // the break above it.
+  d.reset();
+  d.type("hello");
+  d.press("Enter");
+  d.type("- ");
+  d.press("Backspace");
+  r.check("Backspace after a bullet typed under a paragraph deletes one character",
+    "hello\n\n-", d.text(), "hello ⏎ '- ' ⌫");
+
   // A second Enter adds **one** line, not another paragraph break.
   //
   // ⏎ from a line with text writes `\n\n`; ⏎ from a line that is already blank writes one `\n`.
