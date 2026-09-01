@@ -117,6 +117,7 @@ final class PaneController: NSObject {
     private let autoSizeBadge = AutoSizeBadge()
     private var mouseMonitors: [Any] = []
     private var isHovered = false
+    private var isCloseHovered = false
     private var switcherIsOpen = false
     private var actionsIsOpen = false
     private var actionsPaneHeight: CGFloat = 0
@@ -238,6 +239,7 @@ final class PaneController: NSObject {
         // sit dimmed until the mouse moved. Only Swift knows the new frame and the pointer at once.
         isHovered = frame.contains(NSEvent.mouseLocation)
         editor.call("setHover", [isHovered])
+        refreshCloseHover()
         // The height the note wanted may have moved while the pane was away — an external edit, or a
         // note switched from the menu bar. Reconciling here rather than waiting for the web layer's
         // next report keeps the first frame the user sees the right size.
@@ -1111,8 +1113,11 @@ extension PaneController: EditorWebViewDelegate {
                 }
             }
 
-        case .dragRegions(let titleBar, let exclusions):
-            editor.setDragRegions(titleBar: titleBar, exclusions: exclusions)
+        case .dragRegions(let titleBar, let exclusions, let close):
+            editor.setDragRegions(titleBar: titleBar, exclusions: exclusions, close: close)
+            // The dot may have moved under a stationary pointer — the pin entering the bar, the
+            // pane resizing. Same reason `summon` seeds hover rather than waiting for an event.
+            refreshCloseHover()
 
         case .headingMenu(let button, let level):
             showHeadingMenu(below: button, current: level)
@@ -1254,9 +1259,31 @@ extension PaneController: NSWindowDelegate {
     private func refreshHover() {
         guard panel.isSummoned else { return }
         let inside = panel.frame.contains(NSEvent.mouseLocation)
-        guard inside != isHovered else { return }
-        isHovered = inside
-        editor.call("setHover", [inside])
+        if inside != isHovered {
+            isHovered = inside
+            editor.call("setHover", [inside])
+        }
+        // Outside the guard on purpose: the pointer moving *within* an already-hovered pane is
+        // precisely the movement that takes it onto the dot, and an early return here would mean the
+        // dot only ever lit on the stroke that entered the window.
+        refreshCloseHover()
+    }
+
+    /// Decision 107: the close dot lights when the pointer is on it.
+    ///
+    /// Same read as `refreshHover`, one control down. `:hover` cannot do this — measured on
+    /// 2026-09-01: with the pane in its real configuration (an accessory app's non-activating panel,
+    /// not key, another app frontmost) the page received **zero** `mousemove` events with the cursor
+    /// parked on the dot, and `:hover` matched nothing. The same probe with an ordinary key, active
+    /// window saw 22 moves and eight `:hover` matches, so that is the app's situation rather than
+    /// the apparatus. It is decision 41's finding exactly, which is why the plumbing was already here.
+    private func refreshCloseHover() {
+        let inside = isHovered
+            && panel.isSummoned
+            && (editor.closeButtonScreenRect()?.contains(NSEvent.mouseLocation) ?? false)
+        guard inside != isCloseHovered else { return }
+        isCloseHovered = inside
+        editor.call("setCloseHover", [inside])
     }
 
     private func refreshAutoSizeBadge() {

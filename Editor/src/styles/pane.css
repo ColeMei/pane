@@ -103,6 +103,35 @@ body {
   border: none;
 }
 
+/* Decision 107: the dot answers the pointer, like every other control in the pane did already.
+ *
+ * Hover is `[data-close-hover]` from Swift, not `:hover` — measured, and it is the same finding
+ * decision 41 already rests on: with the pane over another app its window is not key, and a
+ * WKWebView in a window that is not key receives no mouse events at all. With the cursor parked on
+ * the dot the page saw zero `mousemove`s and `:hover` matched nothing. Swift's pointer monitors see
+ * it regardless of which app is active, and the dot's rect already travels to Swift in
+ * `dragRegions` for the drag exclusions, so this needed no new measurement — only a second reader.
+ *
+ * **The fill is the whole treatment.** A × inside the dot was tried and taken out: at 12px it is a
+ * smudge rather than a glyph, and the system only draws one because it has three identical dots to
+ * tell apart. One dot needs no legend. Nothing here may change the dot's box either way — decision
+ * 41's rule, since the bar's height feeds `reportContentHeight` and its rects feed the exclusions.
+ *
+ * These sit after `:not([data-hover])` deliberately. `.pane[data-close-hover] .pane__close` and
+ * `.pane:not([data-hover]) .pane__close` are both (0,3,0), so source order decides — and putting
+ * this first is exactly the silent loss that cost a release once already. The two states cannot
+ * disagree in practice (both come from one `NSEvent.mouseLocation` read), but "cannot disagree" is
+ * not a thing to leave resting on a stylesheet's ordering. */
+.pane[data-close-hover] .pane__close {
+  background: var(--close-dot-hover);
+}
+
+/* Press is CSS rather than Swift: the click that closes the pane is delivered to the page — that is
+ * how `#close` works at all — so `:active` is reached even where `:hover` is not. */
+.pane[data-close-hover] .pane__close:active {
+  background: var(--close-dot-pressed);
+}
+
 /* Buttons fade rather than leave: clicking one would have to focus the pane first anyway, so they
    are noise over somebody else's work — but their boxes stay, so nothing reflows. */
 .pane:not([data-hover]) #open-actions,

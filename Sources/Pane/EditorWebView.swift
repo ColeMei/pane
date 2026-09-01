@@ -51,7 +51,12 @@ enum PaneMessage {
     case navigate(back: Bool)
     /// Where the window may be dragged from, in CSS pixels with a top-left origin. Sent by the web
     /// layer because only it knows where its own buttons ended up.
-    case dragRegions(titleBar: CGRect, exclusions: [CGRect])
+    ///
+    /// `close` is the close dot on its own, named rather than indexed out of `exclusions` — it is in
+    /// that list too, but reading it back by document order would break the first time the pin
+    /// enters the bar. Decision 107 needs it to light the dot from Swift, because a WKWebView in a
+    /// window that is not key never sees the pointer.
+    case dragRegions(titleBar: CGRect, exclusions: [CGRect], close: CGRect)
     /// The format bar's heading button was pressed. Carries the button's rect (CSS pixels, top-left
     /// origin) and the caret's current heading level, so the menu can tick it.
     case headingMenu(button: CGRect, level: Int?)
@@ -122,7 +127,8 @@ enum PaneMessage {
         case "dragRegions":
             self = .dragRegions(
                 titleBar: Self.rect(dict["titleBar"]),
-                exclusions: (dict["exclusions"] as? [Any] ?? []).map(Self.rect)
+                exclusions: (dict["exclusions"] as? [Any] ?? []).map(Self.rect),
+                close: Self.rect(dict["close"])
             )
         case "headingMenu":
             self = .headingMenu(
@@ -163,6 +169,13 @@ final class EditorWebView: NSView {
     let webView: WKWebView
     private let material = NSVisualEffectView()
     private let dragOverlay = DragOverlayView()
+
+    /// The close dot, **top-left origin in CSS pixels**, exactly as the web layer measured it.
+    ///
+    /// Kept unflipped for the same reason `DragOverlayView` keeps its regions unflipped: the message
+    /// is delivered asynchronously, so a pane that resized between the web layer measuring and Swift
+    /// applying would flip against the wrong height. Flip at read time, against the bounds in force.
+    private var closeButtonTopLeft: CGRect = .zero
     private let bridge = MessageBridge()
 
     /// Calls queued before the web layer said `ready`. The bundle loads in a few milliseconds, but
@@ -343,8 +356,24 @@ final class EditorWebView: NSView {
 
     // MARK: - Dragging
 
-    func setDragRegions(titleBar: CGRect, exclusions: [CGRect]) {
+    func setDragRegions(titleBar: CGRect, exclusions: [CGRect], close: CGRect) {
         dragOverlay.setRegions(titleBar: titleBar, exclusions: exclusions, viewHeight: bounds.height)
+        closeButtonTopLeft = close
+    }
+
+    /// The close dot in screen coordinates, for decision 107's hover.
+    ///
+    /// Nil until the web layer has reported one, which is a real state: `reportDragRegions` runs
+    /// after the first layout, and a hover read before then must simply not light the dot.
+    func closeButtonScreenRect() -> CGRect? {
+        guard !closeButtonTopLeft.isEmpty, let window else { return nil }
+        let flipped = CGRect(
+            x: closeButtonTopLeft.minX,
+            y: bounds.height - closeButtonTopLeft.maxY,
+            width: closeButtonTopLeft.width,
+            height: closeButtonTopLeft.height
+        )
+        return window.convertToScreen(convert(flipped, to: nil))
     }
 }
 

@@ -81,7 +81,7 @@ type OutboundMessage =
   | { type: "forgetDeleted"; storedName: string }
   | { type: "textSize"; action: "in" | "out" | "reset" }
   | { type: "navigate"; back: boolean }
-  | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[] }
+  | { type: "dragRegions"; titleBar: Rect; exclusions: Rect[]; close: Rect }
   | { type: "headingMenu"; button: Rect; level: number | null };
 
 interface Rect {
@@ -110,6 +110,7 @@ function send(message: OutboundMessage): void {
 
 const paneEl = document.getElementById("pane") as HTMLElement;
 const titleBarEl = document.getElementById("titlebar") as HTMLElement;
+const closeEl = document.getElementById("close") as HTMLElement;
 const paneTitleEl = document.getElementById("pane-title") as HTMLElement;
 const wordCountEl = document.getElementById("word-count") as HTMLElement;
 const editorHost = document.getElementById("editor-host") as HTMLElement;
@@ -249,16 +250,21 @@ function reportContentHeight(): void {
  * hard-coding a single button position into Swift.
  */
 function reportDragRegions(): void {
-  const bar = titleBarEl.getBoundingClientRect();
-  const exclusions = Array.from(titleBarEl.querySelectorAll("button")).map((el) => {
+  const box = (el: Element): Rect => {
     const r = el.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height };
-  });
+  };
+  const bar = box(titleBarEl);
+  const exclusions = Array.from(titleBarEl.querySelectorAll("button")).map(box);
 
   send({
     type: "dragRegions",
-    titleBar: { x: bar.x, y: bar.y, width: bar.width, height: bar.height },
+    titleBar: bar,
     exclusions,
+    // Named rather than picked out of `exclusions` by index (decision 107). The dot is already in
+    // that list — it is a button in the bar — but reading it back out means depending on document
+    // order, and the pin comes and goes from this bar with the pinned state.
+    close: box(closeEl),
   });
 }
 
@@ -949,7 +955,7 @@ function toggleFormatBar(): void {
 }
 
 document.getElementById("format-toggle")!.addEventListener("click", toggleFormatBar);
-document.getElementById("close")!.addEventListener("click", () => send({ type: "close" }));
+closeEl.addEventListener("click", () => send({ type: "close" }));
 document.getElementById("new-note")!.addEventListener("click", () =>
   send({ type: "createNote", title: "" })
 );
@@ -1358,8 +1364,23 @@ const host = {
    * so, and would sit there dimmed until the mouse twitched. Swift knows where the pointer is
    * relative to the new frame; the web layer cannot.
    */
+  /**
+   * The close dot alone (decision 107), from the same `NSEvent.mouseLocation` read as `setHover`.
+   *
+   * `:hover` cannot do this. Measured: with the pane over another app its window is not key, and a
+   * WKWebView in a window that is not key gets no mouse events at all — the cursor sat on the dot
+   * and the page saw zero `mousemove`s while `:hover` matched nothing. That is the same finding
+   * `setHover` exists for, applied one control down.
+   */
+  setCloseHover(inside: boolean): void {
+    paneEl.toggleAttribute("data-close-hover", inside);
+  },
+
   setHover(inside: boolean): void {
     paneEl.toggleAttribute("data-hover", inside);
+    // The dot cannot be hovered when the pane is not: both come from one pointer read, and leaving
+    // the pane behind a stale `data-close-hover` would strand a lit dot on a dimmed bar.
+    if (!inside) paneEl.removeAttribute("data-close-hover");
     // The pointer can leave a *window* without the page seeing a leave event, and the chrome it was
     // over is about to fade out from under any tooltip naming it.
     if (!inside) hideTooltip();

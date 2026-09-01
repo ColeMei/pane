@@ -96,6 +96,10 @@
   --close-dot-border: 0.5px solid rgba(0, 0, 0, 0.15);
   /* Unfocused panes drop the red dot to neutral (design frame 1e). */
   --close-dot-inactive: #d0d0d4;
+  /* Decision 107. The fill is the whole treatment: it darkens under the pointer and again on press.
+   * No glyph — a × at 12px is a smudge, and the system only draws one to tell three dots apart. */
+  --close-dot-hover: #ec4b43;
+  --close-dot-pressed: #c8352e;
 
   --checkbox-border: #b6b6bb;
 
@@ -230,6 +234,8 @@
 
     --close-dot-border: none;
     --close-dot-inactive: #4a4a4f;
+    --close-dot-hover: #ff7b74;
+    --close-dot-pressed: #d8453d;
     --checkbox-border: #5a5a60;
 
     --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.55);
@@ -268,6 +274,8 @@
 
   --close-dot-border: none;
   --close-dot-inactive: #4a4a4f;
+  --close-dot-hover: #ff7b74;
+  --close-dot-pressed: #d8453d;
   --checkbox-border: #5a5a60;
 
   --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.55);
