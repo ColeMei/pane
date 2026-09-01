@@ -23,6 +23,7 @@ import {
   markdown,
   markdownLanguage,
 } from "@codemirror/lang-markdown";
+import { html } from "@codemirror/lang-html";
 import { syntaxTree } from "@codemirror/language";
 import {
   Compartment,
@@ -1053,7 +1054,20 @@ function baseExtensions(): Extension[] {
 
     // `addKeymap: false` because the default Enter binding is wrong for a notes app — see the
     // high-precedence keymap below.
-    markdown({ base: markdownLanguage, addKeymap: false }),
+    // `addKeymap: false` above; `autoCloseTags: false` here, and both are about the same thing —
+    // a key doing something nobody asked a notes app for.
+    //
+    // Markdown embeds HTML, so `markdown()` brings the HTML support in with it, and that support
+    // auto-closes tags. Typing `<div class="x">body</div>` came out as `…</div></div>`: the `>`
+    // inserted a closing tag and the one the writer then typed did not type over it. In an HTML
+    // editor that trade is worth it. Here it breaks decision 5's promise outright — the file did
+    // not hold what was typed — and the only tag Pane cares about is decision 61's `<u>`, which
+    // ⌘U writes both halves of.
+    markdown({
+      base: markdownLanguage,
+      addKeymap: false,
+      htmlTagLanguage: html({ matchClosingTags: false, autoCloseTags: false }),
+    }),
 
     // Auto-close only the three that help in prose. The CodeMirror default also closes `'` and `"`,
     // which in a document made of sentences is a liability rather than a feature — an apostrophe is
