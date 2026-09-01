@@ -112,8 +112,25 @@ duplicate copies in iCloud Drive and Syncthing. Caret positions, pins and window
 a rebindable table for every in-pane shortcut.
 
 It's all plain JSON in `settings.json`, which Pane watches and re-reads live — so editing it by
-hand, over SSH, or from a dotfiles repo works immediately. A **markdown theme is just a CSS file**:
-drop one in the themes folder and it appears in Appearance.
+hand, over SSH, or from a dotfiles repo works immediately.
+
+## Themes
+
+A **theme is just a CSS file**. Drop one in `~/Library/Application Support/Pane/Themes` and it
+appears in the Appearance tab. A few of Pane's own variables cover most of what people want to
+change, so a usable theme can be four lines:
+
+```css
+:root {
+  --font-ui: "iA Writer Quattro", Georgia, serif;  /* the note's text */
+  --font-mono: "JetBrains Mono", monospace;        /* code and fences */
+  --text-size: 16px;                               /* also on ⌘= / ⌘− / ⌘0 */
+  --accent: #4a7fb5;                               /* markers, links, the caret */
+}
+```
+
+Anything else in the file is ordinary CSS against the editor's own classes, and it wins — a theme's
+`body` rule overrides Pane's. Themes live outside your notes folder, so they never sync with it.
 
 ## Privacy
 
