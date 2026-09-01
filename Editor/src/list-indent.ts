@@ -162,12 +162,22 @@ export function outdentListItem(view: EditorView): boolean {
  * The Tab binding: a list item first, CodeMirror's own indentation everywhere else.
  *
  * Tab outside a list still indents by `indentUnit`, which is what it means in a code block and does
- * no harm in prose.
+ * no harm in prose. **Inside one it never falls through**, and that distinction is the whole rule:
+ * `indentListItem` declining means "this item may not move", not "nobody handled the key", so
+ * handing Tab on to `indentMore` put two spaces in front of a first item's marker and four in front
+ * of it on the second press — which pandoc reads as an indented code block rather than a list.
+ * A refusal has to consume the key.
  */
 export const listAwareTab = {
   key: "Tab",
-  run: (view: EditorView) => indentListItem(view) || indentMore(view),
-  shift: (view: EditorView) => outdentListItem(view) || indentLess(view),
+  run: (view: EditorView) => {
+    if (itemAt(view.state, view.state.selection.main.head)) return indentListItem(view) || true;
+    return indentMore(view);
+  },
+  shift: (view: EditorView) => {
+    if (itemAt(view.state, view.state.selection.main.head)) return outdentListItem(view) || true;
+    return indentLess(view);
+  },
 };
 
 /** Where an item's text starts, for anything that needs to line a new line up under it. */

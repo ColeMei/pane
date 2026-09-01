@@ -357,6 +357,35 @@ export function runTypedLists(view, doc) {
   r.check("Tab with the caret inside the text still indents the item", "- alpha\n  - bravo",
     d.text(), "caret mid-word, ⇥");
 
+  // The first item of a list has nothing to be a child of. Pressing Tab there used to fall through
+  // to CodeMirror's generic `indentMore`, which put two spaces in front of the marker and then four
+  // — and four spaces under a blank line is an indented code block to pandoc, not a list at all.
+  // Refusing has to mean the key is *consumed*, not handed on.
+  d.reset();
+  d.type("- one");
+  d.press("Tab");
+  r.check("Tab on the first item of a list does nothing", "- one", d.text(), "- one ⇥");
+
+  d.reset();
+  d.type("- one");
+  d.press("Tab");
+  d.press("Tab");
+  r.check("Tab on the first item does nothing twice either", "- one", d.text(), "- one ⇥ ⇥");
+
+  d.reset();
+  d.type("1. one");
+  d.press("Tab");
+  r.check("Tab on the first item of a numbered list does nothing", "1. one", d.text(), "1. one ⇥");
+
+  // The same guard on the second level: an item that is already the first child of its parent has
+  // no sibling above it to nest under either.
+  d.reset();
+  d.type("- one");
+  d.press("Enter"); d.press("Tab"); d.type("two");
+  d.press("Tab");
+  r.check("Tab on the first item of a nested list does nothing", "- one\n  - two", d.text(),
+    "- one ⏎ ⇥ two ⇥");
+
   // --- coming back up: Shift-Tab -----------------------------------------------------------------
 
   d.reset();
