@@ -313,7 +313,8 @@ final class PaneController: NSObject {
             return
         }
         // Nothing remembered: take whatever the vault has, most recent first.
-        vault.rows(query: "", state: state.value, current: nil) { [weak self] snapshot in
+        vault.rows(query: "", state: state.value, current: nil, order: settings.value.noteOrder) {
+            [weak self] snapshot in
             guard let self else { return }
             if let first = snapshot.rows.first {
                 self.open(first.filename)
@@ -743,7 +744,12 @@ final class PaneController: NSObject {
 
     private func sendRows(query: String) {
         lastQuery = query
-        vault.rows(query: query, state: state.value, current: currentFilename) { [weak self] snapshot in
+        vault.rows(
+            query: query,
+            state: state.value,
+            current: currentFilename,
+            order: settings.value.noteOrder
+        ) { [weak self] snapshot in
             guard let self else { return }
             self.editor.callJSON(
                 "showNotes",
@@ -892,6 +898,11 @@ final class PaneController: NSObject {
                 "themeCSS": loadThemeCSS(),
             ]]
         )
+
+        // `settings.json` reloads live (decision 32), and the switcher is the one surface whose
+        // *content* a setting changes. An open list would otherwise keep the old order until it was
+        // closed and reopened, which reads as the setting not having taken.
+        if switcherIsOpen { sendRows(query: lastQuery) }
     }
 
     // MARK: - Hide from Screen Capture

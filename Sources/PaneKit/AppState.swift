@@ -80,8 +80,10 @@ public struct NoteState: Codable, Equatable, Sendable {
     /// First visible line, so a long note reopens where it was rather than scrolled to the top.
     public var scrollLine: Int
 
-    /// When Pane last opened this note. Combined with the file's own modification date to order the
-    /// switcher — see `lastActivity(modified:)`.
+    /// When Pane last opened this note.
+    ///
+    /// Only the `.opened` switcher order reads it (decision 104), and it is no longer the default:
+    /// every open stamps this, launch included, so ordering by it moved notes nobody had edited.
     public var lastOpened: Date?
 
     /// Pinned notes sort into the switcher's Pinned group, appear in the menu bar, and make the pane
@@ -111,15 +113,6 @@ public struct NoteState: Codable, Equatable, Sendable {
         isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 
-    /// The timestamp the switcher both sorts and *displays* — the later of the file's modification
-    /// date and the last time Pane opened it.
-    ///
-    /// One value for both jobs on purpose. Sorting by one and showing the other produces rows that
-    /// contradict themselves: a note sitting under "Today" with "Jul 30" beside it.
-    public func lastActivity(modified: Date) -> Date {
-        guard let lastOpened else { return modified }
-        return max(modified, lastOpened)
-    }
 }
 
 // MARK: - Panes

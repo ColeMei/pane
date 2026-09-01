@@ -182,13 +182,15 @@ public final class NoteIndex {
     ///
     /// - Parameters:
     ///   - query: what is in the search field. Empty means "everything, by recency".
-    ///   - state: supplies pins and `lastOpened`, which combine with the file's mtime into the one
-    ///     timestamp that is both sorted and displayed (`NoteState.lastActivity`).
+    ///   - state: supplies pins and `lastOpened`.
     ///   - current: the note open in this pane, badged rather than hidden.
+    ///   - order: which clock counts as "recent" (decision 104). Whichever it picks is the one value
+    ///     the rows are sorted by, banded by and labelled with — see `NoteOrdering.activity`.
     public func rows(
         query: String,
         state: AppState,
         current: String?,
+        order: Settings.NoteOrder = .modified,
         now: Date = Date(),
         calendar: Calendar = .current,
         locale: Locale = .current
@@ -201,7 +203,12 @@ public final class NoteIndex {
                 let noteState = state.note(record.filename)
                 return (
                     record,
-                    noteState.lastActivity(modified: record.modified),
+                    NoteOrdering.activity(
+                        order,
+                        filename: record.filename,
+                        modified: record.modified,
+                        lastOpened: noteState.lastOpened
+                    ),
                     noteState.isPinned,
                     nil,
                     0
@@ -213,7 +220,12 @@ public final class NoteIndex {
                 let noteState = state.note(record.filename)
                 return (
                     record,
-                    noteState.lastActivity(modified: record.modified),
+                    NoteOrdering.activity(
+                        order,
+                        filename: record.filename,
+                        modified: record.modified,
+                        lastOpened: noteState.lastOpened
+                    ),
                     noteState.isPinned,
                     hit.snippet,
                     hit.score

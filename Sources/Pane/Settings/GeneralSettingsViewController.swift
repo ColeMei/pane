@@ -15,6 +15,7 @@ final class GeneralSettingsViewController: NSViewController {
 
     private let settings: SettingsStore
     private var recorder: HotkeyRecorderView!
+    private var noteOrder: NSPopUpButton!
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -71,6 +72,15 @@ final class GeneralSettingsViewController: NSViewController {
         spaces.state = current.showOnEverySpace ? .on : .off
         form.row("Spaces", spaces)
 
+        // ---- switcher order ----------------------------------------------------------------
+        // Behaviour, not appearance, so it is here rather than in Appearance: it changes which note
+        // ⌘P puts under your finger, which is the same kind of question as how the pane is dismissed.
+        noteOrder = SettingsForm.popUp(
+            Settings.NoteOrder.allCases.map(\.label), target: self, action: #selector(noteOrderChanged)
+        )
+        noteOrder.selectItem(at: Settings.NoteOrder.allCases.firstIndex(of: current.noteOrder) ?? 0)
+        form.row("Sort notes", noteOrder)
+
         // ---- dock --------------------------------------------------------------------------
         let dock = SettingsForm.checkbox(
             "Show Dock icon", target: self, action: #selector(showDockIconChanged)
@@ -81,6 +91,12 @@ final class GeneralSettingsViewController: NSViewController {
         view = form.makeContentView()
     }
 
+    @objc private func noteOrderChanged(_ sender: NSPopUpButton) {
+        let cases = Settings.NoteOrder.allCases
+        guard sender.indexOfSelectedItem >= 0, sender.indexOfSelectedItem < cases.count else { return }
+        settings.update { $0.noteOrder = cases[sender.indexOfSelectedItem] }
+    }
+
     @objc private func showOnEverySpaceChanged(_ sender: NSButton) {
         settings.update { $0.showOnEverySpace = sender.state == .on }
     }
@@ -89,6 +105,9 @@ final class GeneralSettingsViewController: NSViewController {
     /// `settings.json` while this window is open, or Restore Defaults on the Shortcuts tab.
     func settingsChanged(_ new: Settings) {
         recorder?.setHotkey(new.summonHotkey)
+        if let index = Settings.NoteOrder.allCases.firstIndex(of: new.noteOrder) {
+            noteOrder?.selectItem(at: index)
+        }
     }
 
     // MARK: - Actions

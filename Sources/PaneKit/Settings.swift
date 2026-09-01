@@ -214,6 +214,33 @@ public struct Settings: Codable, Equatable, Sendable {
         ("Amber", "#c98a1f"), ("Indigo", "#5b67d8"), ("Teal", "#2f9e8f"), ("Graphite", "#6e7480"),
     ]
 
+    /// What "recent" means in the ⌘P switcher (decision 104).
+    ///
+    /// Three answers because there are three honest ones, and the one Pane shipped with was the
+    /// least defensible of them: `max(mtime, lastOpened)`, which every open stamped — including the
+    /// open at launch — so notes you had only *looked* at climbed to the top and read as today's.
+    public enum NoteOrder: String, Codable, Equatable, Sendable, CaseIterable {
+        /// The file's own modification date. The default: it is the only one of the three that means
+        /// the same thing on every machine the vault reaches, and it survives sync intact.
+        case modified
+        /// The later of the mtime and the last time Pane opened the note — what shipped through
+        /// v0.6.2, kept because "the notes I have been in" is a real way to work.
+        case opened
+        /// The creation time frozen into the filename by decision 2. Free, and immune to a sync
+        /// daemon rewriting either timestamp.
+        case created
+
+        public var label: String {
+            switch self {
+            case .modified: return "Recently modified"
+            case .opened: return "Recently opened"
+            case .created: return "Date created"
+            }
+        }
+    }
+
+    public var noteOrder: NoteOrder
+
     /// Filename of the markdown theme CSS in the themes folder, or empty for Pane's own.
     ///
     /// Decision 19: a theme *is* a CSS file in a folder, so this is a filename rather than an enum —
@@ -264,6 +291,7 @@ public struct Settings: Codable, Equatable, Sendable {
         appearance: Appearance = .system,
         accent: String = "#c98a1f",
         markdownTheme: String = "",
+        noteOrder: NoteOrder = .modified,
         textSize: Double = 15,
         translucentPanes: Bool = true,
         hideFromScreenCapture: Bool = false,
@@ -281,6 +309,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.appearance = appearance
         self.accent = accent
         self.markdownTheme = markdownTheme
+        self.noteOrder = noteOrder
         self.textSize = textSize
         self.translucentPanes = translucentPanes
         self.hideFromScreenCapture = hideFromScreenCapture
@@ -311,6 +340,11 @@ public struct Settings: Codable, Equatable, Sendable {
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
         accent = try c.decodeIfPresent(String.self, forKey: .accent) ?? d.accent
         markdownTheme = try c.decodeIfPresent(String.self, forKey: .markdownTheme) ?? d.markdownTheme
+        // Decoded as a *string* and mapped, not as the enum: `decodeIfPresent(NoteOrder.self,…)`
+        // throws on an unknown case, and this initialiser throwing costs the whole file its values,
+        // not just this key. An order nobody recognises should clamp to the default and no more.
+        noteOrder = NoteOrder(rawValue: try c.decodeIfPresent(String.self, forKey: .noteOrder) ?? "")
+            ?? d.noteOrder
         textSize = try c.decodeIfPresent(Double.self, forKey: .textSize) ?? d.textSize
         translucentPanes = try c.decodeIfPresent(Bool.self, forKey: .translucentPanes) ?? d.translucentPanes
         hideFromScreenCapture =

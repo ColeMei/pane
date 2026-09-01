@@ -11,6 +11,35 @@ public enum NoteOrdering {
     /// recency-ordered list — headers over a four-row list are chrome pretending to be structure.
     public static let groupingThreshold = 8
 
+    // MARK: - What "recent" means
+
+    /// The one timestamp a switcher row is sorted by, banded by, and labelled with.
+    ///
+    /// Decision 104. The mode picks *which* clock, and then that clock does all three jobs — which
+    /// is decision 45's rule ("one value for sorting and display") holding per mode rather than
+    /// being given up: sorting by one value and printing another is what produces a row sitting
+    /// under "Today" with "Jul 30" beside it.
+    ///
+    /// `.created` falls back to the mtime for a file the user named by hand, because such a file has
+    /// no creation time Pane can read without trusting `.creationDate` through a sync round trip.
+    public static func activity(
+        _ order: Settings.NoteOrder,
+        filename: String,
+        modified: Date,
+        lastOpened: Date?,
+        timeZone: TimeZone = .current
+    ) -> Date {
+        switch order {
+        case .modified:
+            return modified
+        case .opened:
+            guard let lastOpened else { return modified }
+            return max(modified, lastOpened)
+        case .created:
+            return NoteFilename.creationDate(from: filename, timeZone: timeZone) ?? modified
+        }
+    }
+
     // MARK: - Bands
 
     public enum Band: Equatable, Hashable, Sendable {

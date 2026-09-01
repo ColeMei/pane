@@ -160,6 +160,58 @@ func runNoteFilenameTests() {
             Check.expect(NoteFilename.isNoteFile(name), "conflict sibling must show in the switcher")
         }
 
+        // ---- decision 104's free creation date ------------------------------------------
+
+        Check.test("the creation date comes back out of the name it was frozen into") {
+            var c = Calendar(identifier: .gregorian)
+            c.timeZone = utc
+            let expected = c.date(
+                from: DateComponents(year: 2026, month: 8, day: 11, hour: 14, minute: 53)
+            )!
+            Check.equal(
+                NoteFilename.creationDate(from: "2026-08-11-1453-standup.md", timeZone: utc), expected
+            )
+            // Round trip against the writer, which is the only thing that makes this parser correct.
+            let written = NoteFilename.candidate(title: "Standup", date: expected, timeZone: utc)
+            Check.equal(NoteFilename.creationDate(from: written, timeZone: utc), expected)
+        }
+
+        Check.test("parses by counting, so a slug full of hyphens and digits cannot confuse it") {
+            var c = Calendar(identifier: .gregorian)
+            c.timeZone = utc
+            let expected = c.date(
+                from: DateComponents(year: 2026, month: 8, day: 11, hour: 14, minute: 53)
+            )!
+            // Decision 35's rule: decision 2's names are all hyphens, so splitting on one is wrong.
+            Check.equal(
+                NoteFilename.creationDate(from: "2026-08-11-1453-2025-07-04-fireworks.md", timeZone: utc),
+                expected
+            )
+            // The uniquing suffix from `unique` sits at the far end and changes nothing.
+            Check.equal(
+                NoteFilename.creationDate(from: "2026-08-11-1453-standup-2.md", timeZone: utc), expected
+            )
+            // A CJK slug is bytes past the prefix, and the prefix is all this reads.
+            Check.equal(
+                NoteFilename.creationDate(from: "2026-08-11-1453-\u{4f1a}\u{8bae}\u{7eaa}\u{8981}.md", timeZone: utc),
+                expected
+            )
+            // The timestamp alone is still one of ours.
+            Check.equal(NoteFilename.creationDate(from: "2026-08-11-1453.md", timeZone: utc), expected)
+        }
+
+        Check.test("a hand-named file has no creation date here, and that is not an error") {
+            Check.equal(NoteFilename.creationDate(from: "shopping.md", timeZone: utc), nil)
+            Check.equal(NoteFilename.creationDate(from: "2026-08-11.md", timeZone: utc), nil)
+            // Fifteen characters that are not a date.
+            Check.equal(NoteFilename.creationDate(from: "meeting-notes-x-and-more.md", timeZone: utc), nil)
+            // Right shape, wrong separator in the sixteenth position.
+            Check.equal(NoteFilename.creationDate(from: "2026-08-11-1453x-standup.md", timeZone: utc), nil)
+            // Right shape, impossible date.
+            Check.equal(NoteFilename.creationDate(from: "2026-13-40-1453-standup.md", timeZone: utc), nil)
+            Check.equal(NoteFilename.creationDate(from: "", timeZone: utc), nil)
+        }
+
         Check.test("skips dot-files, which keeps iCloud placeholder stubs out of the listing") {
             Check.expect(NoteFilename.isNoteFile("2026-08-11-1453-standup.md"))
             Check.expect(!NoteFilename.isNoteFile(".2026-08-11-1453-standup.md.icloud"))

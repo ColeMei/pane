@@ -135,6 +135,68 @@ public enum NoteFilename {
         return ext.isEmpty ? "\(stem)-\(suffix)" : "\(stem)-\(suffix).\(ext)"
     }
 
+    /// The creation time frozen into the name at `candidate`, or nil if this name did not come from
+    /// there.
+    ///
+    /// Decision 104's "Date created" mode is free because of decision 2: the creation timestamp is
+    /// already in the filename and never changes, so it needs no new state in `state.json` and no
+    /// reliance on `.creationDate` surviving a trip through iCloud Drive or a restore from backup.
+    ///
+    /// **Parsed by counting**, which is decision 35's rule and for its reason: decision 2's names are
+    /// all hyphens, so splitting on one gets a slug's words confused with the date's fields the
+    /// moment a title contains a number. `RecentlyDeleted.parse` does the same for the same reason.
+    ///
+    /// Returns nil for a file the user named by hand, which the caller is expected to fall back to
+    /// the mtime for rather than treat as an error — a vault is allowed to contain such files.
+    public static func creationDate(
+        from filename: String,
+        timeZone: TimeZone = .current
+    ) -> Date? {
+        let stem = (filename as NSString).deletingPathExtension
+        let chars = Array(stem)
+        // "2026-08-11-1453" — four, two, two, four, with three hyphens between them.
+        guard chars.count >= timestampWidth else { return nil }
+        // A slug follows, or the name is the timestamp and nothing else. Anything else in that
+        // position means these fifteen characters happened to look like a date.
+        if chars.count > timestampWidth, chars[timestampWidth] != "-" { return nil }
+
+        for (index, character) in chars.prefix(timestampWidth).enumerated() {
+            let wantsHyphen = index == 4 || index == 7 || index == 10
+            if wantsHyphen {
+                guard character == "-" else { return nil }
+            } else {
+                guard character.isASCII, character.isNumber else { return nil }
+            }
+        }
+
+        func number(_ range: Range<Int>) -> Int? { Int(String(chars[range])) }
+        guard let year = number(0..<4), let month = number(5..<7), let day = number(8..<10),
+              let hour = number(11..<13), let minute = number(13..<15)
+        else { return nil }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        guard let date = calendar.date(from: components) else { return nil }
+
+        // `date(from:)` *rolls over* rather than refusing: it turns 2026-13-40 into 9 February 2027
+        // and hands it back as if nothing happened. So the only way to tell a date from a string that
+        // merely has a date's shape is to read the components back and require them to match.
+        let round = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        guard round.year == year, round.month == month, round.day == day,
+              round.hour == hour, round.minute == minute
+        else { return nil }
+        return date
+    }
+
+    /// Characters in the timestamp half — `2026-08-11-1453`. Counted, never split (see above).
+    public static let timestampWidth = 15
+
     /// Whether a filename is one Pane will show in the switcher.
     ///
     /// Dot-files are skipped, which also skips the `.filename.md.icloud` placeholder stubs that

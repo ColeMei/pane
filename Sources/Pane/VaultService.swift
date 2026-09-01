@@ -56,12 +56,13 @@ final class VaultService: @unchecked Sendable {
         query: String,
         state: AppState,
         current: String?,
+        order: Settings.NoteOrder = .modified,
         refresh: Bool = true,
         completion: @escaping @MainActor (Snapshot) -> Void
     ) {
         queue.async {
             if refresh { _ = try? self.index.refresh(vault: self.vaultURL) }
-            let rows = self.index.rows(query: query, state: state, current: current)
+            let rows = self.index.rows(query: query, state: state, current: current, order: order)
             let total = self.index.filenames.count
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { completion(Snapshot(rows: rows, total: total, query: query)) }

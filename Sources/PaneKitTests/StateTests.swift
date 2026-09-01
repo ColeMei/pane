@@ -196,8 +196,15 @@ func runStateTests() {
             let edited = at("2026-08-14T15:00:00Z")
             var s = AppState()
             s.recordOpen("a.md", at: opened)
-            Check.equal(s.note("a.md").lastActivity(modified: edited), edited)
-            Check.equal(s.note("a.md").lastActivity(modified: at("2026-08-01T00:00:00Z")), opened)
+            // `.opened` is where `lastOpened` is read now — one implementation, in NoteOrdering.
+            let activity = { (modified: Date) in
+                NoteOrdering.activity(
+                    .opened, filename: "a.md", modified: modified,
+                    lastOpened: s.note("a.md").lastOpened
+                )
+            }
+            Check.equal(activity(edited), edited)
+            Check.equal(activity(at("2026-08-01T00:00:00Z")), opened)
         }
 
         Check.test("forgetting deleted notes also clears panes pointing at them") {

@@ -61,4 +61,38 @@ func runSettingsTests() {
             }
         }
     }
+
+    Check.suite("Switcher order setting") {
+
+        func decode(_ json: String) -> Settings? {
+            try? JSONDecoder().decode(Settings.self, from: Data(json.utf8))
+        }
+
+        Check.test("round-trips through the file") {
+            for order in Settings.NoteOrder.allCases {
+                var settings = Settings()
+                settings.noteOrder = order
+                let data = try! JSONEncoder().encode(settings)
+                Check.equal(try! JSONDecoder().decode(Settings.self, from: data).noteOrder, order)
+            }
+        }
+
+        Check.test("an unknown order costs that field, not the file") {
+            // Decoded as a string and mapped for exactly this: `decodeIfPresent(NoteOrder.self,…)`
+            // throws, and a throw here takes every other setting in the file down with it.
+            let s = decode(#"{"noteOrder": "byVibes", "textSize": 21}"#)
+            Check.equal(s?.noteOrder, .modified)
+            Check.equal(s?.textSize, 21)
+        }
+
+        Check.test("a file written before this setting existed reads as the default") {
+            Check.equal(decode(#"{"textSize": 15}"#)?.noteOrder, .modified)
+        }
+
+        Check.test("every mode has a label, and they are distinct") {
+            let labels = Settings.NoteOrder.allCases.map(\.label)
+            Check.equal(labels.allSatisfy { !$0.isEmpty }, true)
+            Check.equal(Set(labels).count, labels.count)
+        }
+    }
 }
