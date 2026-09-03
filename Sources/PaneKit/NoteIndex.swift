@@ -102,9 +102,17 @@ public final class NoteIndex {
     ///
     /// Never throws for a single unreadable note: one bad file must not empty the switcher. An
     /// evicted note keeps its row — it has a name, a date, and a title from the last time it was
-    /// readable — it simply drops out of full-text search until it is downloaded.
+    /// readable, or from its filename if it has never been readable here — it simply drops out of
+    /// full-text search until it is downloaded.
+    ///
+    /// - Parameter availabilityOf: how a note's availability is decided. A seam, and one the bug
+    ///   below justifies: eviction cannot be staged in a temporary directory, so without it the one
+    ///   transition this method has to get right is the one transition no test can reach.
     @discardableResult
-    public func refresh(vault: URL) throws -> Set<String> {
+    public func refresh(
+        vault: URL,
+        availabilityOf: (URL) -> NoteAvailability = VaultIO.availability(of:)
+    ) throws -> Set<String> {
         let urls = try VaultIO.listNotes(in: vault)
         var present = Set<String>()
 
@@ -116,13 +124,24 @@ public final class NoteIndex {
             let size = values?.fileSize ?? 0
             let modified = values?.contentModificationDate ?? Date.distantPast
 
+            // Availability belongs in the cache key, and leaving it out was a bug that survived a
+            // release. A dataless file reports its **real** size and its **real** mtime — that is
+            // the whole point of `VaultIO.availability`, and it means iCloud materialising a note
+            // moves neither half of a size-and-mtime key. So a note indexed while it was still
+            // downloading stayed indexed as evicted: no title, no body, for the life of the process.
+            // On a mac syncing the vault for the first time that is most of the switcher, and the
+            // only cure was quitting the app. The extra cost is one `stat` per note per refresh,
+            // which is what `availability(of:)` is — it performs no data read and so can never
+            // itself trigger the download it is asking about.
+            let availability = availabilityOf(url)
+
             if let existing = entries[filename],
                existing.size == size,
-               existing.modified == modified {
+               existing.modified == modified,
+               existing.record.availability == availability {
                 continue
             }
 
-            let availability = VaultIO.availability(of: url)
             var text: String?
             if availability == .available {
                 text = try? VaultIO.loadText(url).text
@@ -132,7 +151,10 @@ public final class NoteIndex {
                 text = cached
             }
 
-            let summary = text.map(MarkdownDocument.summary(of:)) ?? (title: "", preview: "")
+            // A note we have never been able to read falls back to the phrase in its own filename.
+            // Not a title anyone typed, but the row is a landmark rather than a blank.
+            let summary = text.map(MarkdownDocument.summary(of:))
+                ?? (title: NoteFilename.title(from: filename) ?? "", preview: "")
             entries[filename] = Entry(
                 record: NoteRecord(
                     filename: filename,
