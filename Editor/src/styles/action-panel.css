@@ -125,24 +125,28 @@
    * the cap does nothing. */
   min-height: 0;
 
-  /* There is deliberately no `max-height` literal here, and there must not be one.
+  /* Capped and scrolled, the same as the switcher's list and by the same token.
    *
-   * This list is a *bounded* list — every row is one of a fixed set, and every one of them has to be
-   * reachable. That makes it unlike the switcher's, which is a note list of unknown length and is
-   * rightly capped and scrolled. A literal here caps a list that already knows exactly how tall it
-   * wants to be.
+   * This is a reversal, and the note it replaces is worth keeping in mind: the cap used to be a
+   * literal `420px`, it was removed, and the removal was right at the time. Fourteen rows need ~467
+   * (14 × 30px, four group paddings, three hairlines), so a 420px cap put Delete Note below the fold
+   * on every open — and reopening without re-summoning left the list scrolled with New Note, *the
+   * selected row*, above it, so ⏎ ran an action nobody could see. A row you cannot get to is not a
+   * row. With no cap, `desiredHeight()` falls to `list.scrollHeight` and the pane grows to hold
+   * every one of them.
    *
-   * It was `420px`, sized against the design's thirteen rows. Fourteen rows need ~455 (14 × 30px, four
-   * group paddings, three hairlines), so `desiredHeight()` — which takes `min(scrollHeight, thisCap)`
-   * — asked Swift for 54 + 467 + 16 = 537px and the pane stopped there on a screen with 300px to
-   * spare. Delete Note was below the fold on every open, and reopening without re-summoning left the
-   * list scrolled with New Note, *the selected row*, above it: ⏎ ran an action nobody could see.
-   * Decision 45 says the cap "only bites when the screen has run out"; this one bit unconditionally.
+   * What changed is that "below the fold" no longer means "out of reach". `open()` resets the scroll
+   * and the selection together, the arrow keys scroll the row they select into view, and they stop
+   * at the ends instead of wrapping — so every row is a held-down ArrowDown away, which is how
+   * Raycast runs a list of twenty-six actions in a 302px viewport.
    *
-   * With no literal, `getComputedStyle().maxHeight` is `none`, `desiredHeight()` falls to
-   * `list.scrollHeight`, and the pane grows to hold every row. `.actions`' own
-   * `max-height: calc(100% - 54px - 16px)` above is the real cap — pane-relative, so it engages only
-   * when the screen genuinely runs out, and then this list scrolls, which is the intended fallback. */
+   * What it buys is the pane. Growing to hold all fourteen rows asked Swift for 54 + 467 + 16 =
+   * 537px whatever was in the note, which is a lot of window to open a menu in, and it made ⌘K and
+   * ⌘P grow the pane to two different heights for no reason a reader could see.
+   *
+   * `.actions`' own `max-height: calc(100% - 54px - 16px)` above is still the pane-relative cap
+   * underneath this one, for when the screen itself runs out. */
+  max-height: var(--overlay-list-max-height);
 }
 
 .actions__group {

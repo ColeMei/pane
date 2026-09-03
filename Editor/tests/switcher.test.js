@@ -10,6 +10,10 @@
  *
  * So every assertion here is a rectangle, compared against the rectangle of the thing that must not
  * cover it.
+ *
+ * ⌘K is measured here too rather than in a file of its own. The two panels are one component in two
+ * modes (decision 46), they are placed by one calculation and now capped by one token, and the way
+ * that arrangement breaks is a row of one of them ending up somewhere no key can reach.
  */
 
 const BANDS = ["Yesterday", "This week", "August", "July", "June"];
@@ -206,6 +210,58 @@ export function run(view, bar, doc) {
       "one row height throughout the list",
       [...heights].map((h) => h / 10).join(", "),
       heights.size === 1
+    );
+  }
+
+  // ---- Both lists are capped by the same token, and both scroll ---------------------------------
+  //
+  // The pane grows to hold whichever panel is open (decision 45), so an uncapped list is a pane
+  // stretched to fit it. ⌘K had no cap at all and grew the pane past 600pt to show sixteen rows of
+  // menu; the switcher was capped 130px taller than it is now. One token caps both.
+  openWith(30);
+  const switcherViewport = list.clientHeight;
+
+  press("Escape");
+  doc.getElementById("open-actions").click();
+  const actionsList = doc.getElementById("actions-list");
+  const actionsSearch = doc.getElementById("actions-search");
+  const actionRows = actionsList.querySelectorAll(".actions__row").length;
+
+  check(
+    "both overlay lists are the same height",
+    `⌘K list ${switcherViewport}px, matching ⌘P`,
+    `⌘K list ${actionsList.clientHeight}px, ⌘P list ${switcherViewport}px`,
+    actionsList.clientHeight === switcherViewport
+  );
+  check(
+    "the action list scrolls rather than growing the pane to hold every row",
+    `content taller than the ${switcherViewport}px viewport`,
+    `content ${actionsList.scrollHeight}px in a ${actionsList.clientHeight}px viewport`,
+    actionsList.scrollHeight > actionsList.clientHeight + 1
+  );
+
+  // ---- and the rows below the fold are still reachable ------------------------------------------
+  //
+  // This is the assertion the cap has to earn. It was removed once precisely because a capped list
+  // put Delete Note below the fold with no way to get to it; it is back because the arrow keys now
+  // carry the selection there and scroll it into view.
+  {
+    for (let i = 0; i < actionRows + 5; i++)
+      actionsSearch.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true })
+      );
+    const sel = actionsList.querySelector('[aria-selected="true"]');
+    const lb = actionsList.getBoundingClientRect();
+    const sb = sel.getBoundingClientRect();
+    const label = sel.querySelector(".actions__label")?.textContent ?? "?";
+    check(
+      "the last action is reachable by keyboard and on screen when it is",
+      "the last row selected, fully inside the viewport",
+      `"${label}" at [${Math.round(sb.top - lb.top)}, ${Math.round(sb.bottom - lb.top)}]` +
+        ` of 0..${actionsList.clientHeight}`,
+      sel === actionsList.querySelectorAll(".actions__row")[actionRows - 1] &&
+        sb.top - lb.top >= -1 &&
+        sb.bottom - lb.top <= actionsList.clientHeight + 1
     );
   }
 

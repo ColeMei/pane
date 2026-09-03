@@ -31,7 +31,7 @@
 
   /* Never taller than the pane it is drawn inside.
    *
-   * The list's own `--switcher-max-height` is an absolute cap and says nothing about the window it
+   * The list's own `--overlay-list-max-height` is an absolute cap and says nothing about the window it
    * has to fit in, so on a short pane the panel simply ran off the bottom edge — the last row cut in
    * half by the pane's own rounded corner. The pane grows to make room (decision 40), but it cannot
    * grow past the screen, and it was never obliged to grow this far in the first place. The tokens
@@ -85,7 +85,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  max-height: var(--switcher-max-height);
+  max-height: var(--overlay-list-max-height);
   overflow-y: auto;
   overscroll-behavior: contain;
 
