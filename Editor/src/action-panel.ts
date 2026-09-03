@@ -267,9 +267,10 @@ export function mountActionPanel(options: ActionPanelOptions) {
     list.innerHTML = html;
   }
 
+  /** Stops at the ends rather than wrapping, for the reason spelled out on the switcher's `move`. */
   function move(delta: number): void {
     if (visible.length === 0) return;
-    select((selected + delta + visible.length) % visible.length, { scroll: true });
+    select(Math.min(visible.length - 1, Math.max(0, selected + delta)), { scroll: true });
   }
 
   /**

@@ -159,6 +159,40 @@ export function run(view, bar, doc) {
     );
   }
 
+  // ---- The arrow keys stop at the ends -----------------------------------------------------------
+  //
+  // Measured against Raycast Notes, the reference this panel is built to: ArrowDown on its last row
+  // moves neither the selection nor the scroll offset, and ArrowUp on its first does the same. The
+  // switcher used to wrap, which read as the list jumping back to the top of its own accord.
+  openWith(30);
+  {
+    for (let i = 0; i < 40; i++) press("ArrowDown");
+    const atEnd = Number(list.querySelector('[aria-selected="true"]').dataset.index);
+    const scrollAtEnd = list.scrollTop;
+    press("ArrowDown");
+    check(
+      "ArrowDown stops on the last row instead of wrapping",
+      "row 29, and the list does not move",
+      `row ${Number(list.querySelector('[aria-selected="true"]').dataset.index)}, scrollTop ` +
+        `${Math.round(list.scrollTop)} (was ${Math.round(scrollAtEnd)})`,
+      atEnd === 29 &&
+        Number(list.querySelector('[aria-selected="true"]').dataset.index) === 29 &&
+        Math.abs(list.scrollTop - scrollAtEnd) <= 1
+    );
+
+    for (let i = 0; i < 40; i++) press("ArrowUp");
+    const scrollAtTop = list.scrollTop;
+    press("ArrowUp");
+    check(
+      "ArrowUp stops on the first row instead of wrapping",
+      "row 0, and the list does not move",
+      `row ${Number(list.querySelector('[aria-selected="true"]').dataset.index)}, scrollTop ` +
+        `${Math.round(list.scrollTop)} (was ${Math.round(scrollAtTop)})`,
+      Number(list.querySelector('[aria-selected="true"]').dataset.index) === 0 &&
+        Math.abs(list.scrollTop - scrollAtTop) <= 1
+    );
+  }
+
   // ---- Selecting a row must not change its height ----------------------------------------------
   //
   // The row's buttons are `visibility: hidden` rather than absent precisely so that the list does

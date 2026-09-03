@@ -366,9 +366,20 @@ export function mountSwitcher(options: SwitcherOptions) {
       ?.scrollIntoView({ block: "nearest" });
   }
 
+  /**
+   * Arrow keys stop at the ends. They do not wrap.
+   *
+   * Measured against Raycast Notes, which is the reference this panel is built to: ArrowDown on its
+   * last row moves nothing at all — not the selection, not the scroll offset — and ArrowUp on its
+   * first behaves the same. Fourteen notes, four presses past the end, and every reading identical.
+   *
+   * The modulo that used to be here made the list a carousel, and a carousel is a surprise in a list
+   * you are reading top to bottom: the one keystroke that should do nothing threw you back to the
+   * first note instead, which reads as the panel having jumped rather than as having stopped.
+   */
   function move(delta: number): void {
     if (rows.length === 0) return;
-    select((selected + delta + rows.length) % rows.length, { scroll: true });
+    select(Math.min(rows.length - 1, Math.max(0, selected + delta)), { scroll: true });
   }
 
   /** One selected row, and the pointer moves it — see the note on `select` in action-panel.ts. */
