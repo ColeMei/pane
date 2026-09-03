@@ -29,14 +29,18 @@
   flex-direction: column;
   width: min(var(--overlay-width), 100% - 2 * var(--overlay-margin-x));
 
-  /* Never taller than the pane it is drawn inside.
+  /* Two ceilings, and the lower wins.
    *
-   * The list's own `--overlay-list-max-height` is an absolute cap and says nothing about the window it
-   * has to fit in, so on a short pane the panel simply ran off the bottom edge — the last row cut in
-   * half by the pane's own rounded corner. The pane grows to make room (decision 40), but it cannot
-   * grow past the screen, and it was never obliged to grow this far in the first place. The tokens
-   * are the same two the placement uses: the minimum offset from the top, and the room under it. */
-  max-height: calc(100% - var(--overlay-top-min) - var(--overlay-gap-bottom));
+   * `--overlay-panel-height` is the design one, shared with ⌘K so the two are the same rectangle.
+   * The other is the pane: an absolute cap says nothing about the window it has to fit in, so on a
+   * short pane the panel simply ran off the bottom edge — the last row cut in half by the pane's own
+   * rounded corner. The pane grows to make room (decision 40), but it cannot grow past the screen,
+   * and then this is what keeps the panel inside it. Its two tokens are the ones the placement
+   * uses: the minimum offset from the top, and the room left under it. */
+  max-height: min(
+    var(--overlay-panel-height),
+    calc(100% - var(--overlay-top-min) - var(--overlay-gap-bottom))
+  );
 
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--overlay-blur);
@@ -84,8 +88,9 @@
 .switcher__list {
   position: relative;
   flex: 1;
+  /* No `max-height` of its own: the panel is capped and this takes what is left inside it, which is
+   * how the footer's height comes out of the list rather than out of the panel. */
   min-height: 0;
-  max-height: var(--overlay-list-max-height);
   overflow-y: auto;
   overscroll-behavior: contain;
 

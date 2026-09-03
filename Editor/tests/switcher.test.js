@@ -213,32 +213,76 @@ export function run(view, bar, doc) {
     );
   }
 
-  // ---- Both lists are capped by the same token, and both scroll ---------------------------------
+  // ---- The two overlays are one rectangle ---------------------------------------------------------
   //
-  // The pane grows to hold whichever panel is open (decision 45), so an uncapped list is a pane
-  // stretched to fit it. ⌘K had no cap at all and grew the pane past 600pt to show sixteen rows of
-  // menu; the switcher was capped 130px taller than it is now. One token caps both.
+  // The pane grows to hold whichever panel is open (decision 45), so a panel's height is a window
+  // size. ⌘K had no ceiling at all and asked the pane for 744pt to show sixteen rows of menu, while
+  // ⌘P asked for 676 — two different windows for the same slot. The ceiling is on the panels rather
+  // than on the lists inside them precisely so that this assertion can exist: the switcher carries a
+  // footer ⌘K does not, so equal lists would mean unequal panels.
+  const CEILING = Number.parseFloat(
+    getComputedStyle(doc.documentElement).getPropertyValue("--overlay-panel-height")
+  );
+
   openWith(30);
+  const switcherPanel = Math.round(root.offsetHeight);
   const switcherViewport = list.clientHeight;
 
   press("Escape");
   doc.getElementById("open-actions").click();
+  const actions = doc.getElementById("actions");
   const actionsList = doc.getElementById("actions-list");
   const actionsSearch = doc.getElementById("actions-search");
   const actionRows = actionsList.querySelectorAll(".actions__row").length;
+  const actionsPanel = Math.round(actions.offsetHeight);
 
   check(
-    "both overlay lists are the same height",
-    `⌘K list ${switcherViewport}px, matching ⌘P`,
-    `⌘K list ${actionsList.clientHeight}px, ⌘P list ${switcherViewport}px`,
-    actionsList.clientHeight === switcherViewport
+    "a full ⌘P and a full ⌘K are the same height",
+    `both ${CEILING}pt`,
+    `⌘P ${switcherPanel}pt, ⌘K ${actionsPanel}pt`,
+    switcherPanel === actionsPanel && switcherPanel === CEILING
   );
   check(
-    "the action list scrolls rather than growing the pane to hold every row",
-    `content taller than the ${switcherViewport}px viewport`,
+    "the action list scrolls rather than growing the panel to hold every row",
+    `content taller than the ${actionsList.clientHeight}px viewport`,
     `content ${actionsList.scrollHeight}px in a ${actionsList.clientHeight}px viewport`,
     actionsList.scrollHeight > actionsList.clientHeight + 1
   );
+  check(
+    "the switcher's footer comes out of its list, not out of its panel",
+    "a ⌘K list taller than the switcher's by the footer's height",
+    `⌘P list ${switcherViewport}px, ⌘K list ${actionsList.clientHeight}px`,
+    actionsList.clientHeight > switcherViewport
+  );
+
+  // ---- The ceiling is a ceiling, not a height ------------------------------------------------------
+  //
+  // A pane must not grow for rows that are not there. Four notes get a four-note switcher, and a ⌘K
+  // filtered down to a couple of rows is a couple of rows tall.
+  {
+    actionsSearch.value = "note";
+    actionsSearch.dispatchEvent(new Event("input", { bubbles: true }));
+    const filtered = Math.round(actions.offsetHeight);
+    check(
+      "a filtered ⌘K shrinks to what it is showing",
+      `shorter than the ${CEILING}pt ceiling`,
+      `${filtered}pt`,
+      filtered < CEILING && filtered > 0
+    );
+
+    actionsSearch.value = "";
+    actionsSearch.dispatchEvent(new Event("input", { bubbles: true }));
+    openWith(3);
+    const small = Math.round(root.offsetHeight);
+    check(
+      "a three-note switcher shrinks to what it is showing",
+      `shorter than the ${CEILING}pt ceiling`,
+      `${small}pt`,
+      small < CEILING && small > 0
+    );
+    press("Escape");
+    doc.getElementById("open-actions").click();
+  }
 
   // ---- and the rows below the fold are still reachable ------------------------------------------
   //

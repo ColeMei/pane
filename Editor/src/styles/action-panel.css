@@ -26,10 +26,14 @@
    * margins when it did. */
   width: min(var(--overlay-width), 100% - 2 * var(--overlay-margin-x));
 
-  /* Never taller than the pane — same reasoning as the switcher's, and the same tokens. Without it
-   * a fourteen-row panel on a short pane runs off the bottom edge and the last rows are simply
-   * unreachable. */
-  max-height: calc(100% - var(--overlay-top-min) - var(--overlay-gap-bottom));
+  /* The design ceiling and the pane's, lower wins — the switcher's rule, the switcher's tokens, and
+   * `--overlay-panel-height` shared with it so the two overlays are the same rectangle. Without the
+   * pane-relative half, a sixteen-row panel on a short pane runs off the bottom edge and the last
+   * rows are simply unreachable. */
+  max-height: min(
+    var(--overlay-panel-height),
+    calc(100% - var(--overlay-top-min) - var(--overlay-gap-bottom))
+  );
 
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--overlay-blur);
@@ -144,9 +148,9 @@
    * 537px whatever was in the note, which is a lot of window to open a menu in, and it made ⌘K and
    * ⌘P grow the pane to two different heights for no reason a reader could see.
    *
-   * `.actions`' own `max-height: calc(100% - 54px - 16px)` above is still the pane-relative cap
-   * underneath this one, for when the screen itself runs out. */
-  max-height: var(--overlay-list-max-height);
+   * The cap itself sits on `.actions` above rather than here, so that this list gets exactly the
+   * room the panel has left over — which is more than the switcher's, by the height of the footer
+   * the switcher has and this does not. */
 }
 
 .actions__group {

@@ -23,6 +23,19 @@ export const OVERLAY_GAP_BOTTOM =
   Number.parseFloat(root.getPropertyValue("--overlay-gap-bottom")) || 16;
 
 /**
+ * The design ceiling on either panel — the same number for both, which is what makes them one
+ * rectangle in two modes.
+ *
+ * Read from the token rather than off the element, and that distinction is the whole reason this
+ * constant exists. The stylesheets cap each panel at `min(this, the pane's own height)`, so on a
+ * pane that has not grown yet `getComputedStyle(panel).maxHeight` reports the *pane's* limit — the
+ * panel would report that it already fits, the pane would never grow, and the panel would stay
+ * clipped at whatever height it opened in.
+ */
+export const OVERLAY_PANEL_HEIGHT =
+  Number.parseFloat(root.getPropertyValue("--overlay-panel-height")) || 380;
+
+/**
  * Where the top edge goes, as a fraction of the pane's height.
  *
  * Measured off the reference at two window sizes: 120/800 and 158/981, so 15–16% either way rather
@@ -60,13 +73,19 @@ export function placeOverlay(panel: HTMLElement, pane: HTMLElement): void {
  * still has to grow to hold the panel (decision 45); the CSS cap exists for when it *cannot*,
  * because the screen ran out, and a clipped panel is then the lesser of two evils.
  *
- * So: what the panel is now, minus what its list is showing, plus what that list would show.
+ * So: the panel's chrome — its search field, its footer if it has one, its borders — plus everything
+ * its list would show, and then the design ceiling, which is the number both panels share.
+ *
+ * The chrome is measured as `offsetHeight - list.clientHeight` and survives the panel being clipped,
+ * because clipping takes its points out of the list and the subtraction takes them back.
+ *
+ * This is a ceiling and not a height: a ⌘K filtered to two rows asks for two rows, and the pane it
+ * is drawn in does not grow for the two it is not showing.
  *
  * Lives here because the switcher and ⌘K are one component in two modes (decision 46) and this is
  * the last thing they did differently — ⌘K measured itself and ⌘P was a constant in Swift.
  */
 export function desiredOverlayHeight(panel: HTMLElement, list: HTMLElement): number {
-  const cap = Number.parseFloat(getComputedStyle(list).maxHeight);
-  const wanted = Math.min(list.scrollHeight, Number.isFinite(cap) ? cap : Infinity);
-  return panel.offsetHeight - list.clientHeight + wanted;
+  const chrome = panel.offsetHeight - list.clientHeight;
+  return Math.min(chrome + list.scrollHeight, OVERLAY_PANEL_HEIGHT);
 }

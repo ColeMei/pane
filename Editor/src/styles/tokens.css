@@ -157,18 +157,24 @@
    * removed: this is an *unbounded* list of however many notes exist, so capping and scrolling it is
    * the intended behaviour rather than a bug. Note the number is also spelled in Swift, as
    * `PaneController.switcherPaneHeight = 54 + 430 + 16`; the two have to move together. */
-  /* How tall either overlay's list is allowed to be before it scrolls.
+  /* How tall either overlay is allowed to get before its list starts scrolling.
    *
-   * One token for both, because ⌘P and ⌘K are one component in two modes (decision 46) and their
-   * lists are the last thing that was sized differently — the switcher was capped at 430px and ⌘K
-   * was not capped at all, so opening the two grew the pane to two different heights, neither of
-   * them small.
+   * On the panel, not on the list inside it, and that is the point: ⌘P and ⌘K are one component in
+   * two modes (decision 46) and they should be one rectangle, but they do not hold the same chrome —
+   * the switcher carries a footer of hints and ⌘K does not. Capping the two *lists* at one number
+   * therefore produced two panels 30pt apart, which is the difference showing up in the one place a
+   * reader can see it. Capping the two *panels* puts the difference where it belongs: inside, in how
+   * much list each one has room for.
    *
-   * 300px is measured off Raycast Notes, which caps both of its lists and scrolls them: its note
-   * list runs in a 249px viewport and its action list — twenty-six rows, 727px of content — in a
-   * 302px one, with the window staying about 475pt tall either way. Roughly five and a half note
-   * rows here, ten action rows, and everything below the fold is an arrow key away. */
-  --overlay-list-max-height: 300px;
+   * A ceiling, never a height. A ⌘K filtered down to two rows is two rows tall, and a four-note
+   * vault gets a four-note switcher; this only bites when there is more content than fits, which is
+   * exactly when the pane has to grow to hold it.
+   *
+   * 380 is measured off Raycast Notes, which caps both of its lists and scrolls them: its note list
+   * runs in a 249px viewport (a plan banner eating ~50 of it) and its action list — twenty-six rows,
+   * 727px of content — in a 302px one, with the window at ~475pt either way. Here it leaves the
+   * switcher ~300px of list, five and a half rows, and ⌘K ~334px, eleven. */
+  --overlay-panel-height: 380px;
   --switcher-row-padding: 7px 16px;
   --switcher-fade-height: 28px;
   /* A recency band header, measured: 10px + 4px padding around an 11px line. The keyboard scroll
