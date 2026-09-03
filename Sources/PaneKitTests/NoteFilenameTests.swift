@@ -212,6 +212,32 @@ func runNoteFilenameTests() {
             Check.equal(NoteFilename.creationDate(from: "", timeZone: utc), nil)
         }
 
+        Check.test("a filename offers a title for a note whose text cannot be read") {
+            Check.equal(NoteFilename.title(from: "2026-09-02-1432-slides-revised.md"), "Slides revised")
+            // Sentence case, not Title Case: the slug is lowercased on the way in, so per-word
+            // capitals would be invented rather than restored.
+            Check.equal(NoteFilename.title(from: "2026-08-11-1453-standup-with-marta.md"), "Standup with marta")
+            // A hand-named file has no timestamp to drop.
+            Check.equal(NoteFilename.title(from: "shopping-list.md"), "Shopping list")
+            // A CJK slug has no case to change, and must not be mangled trying.
+            Check.equal(
+                NoteFilename.title(from: "2026-08-11-1453-\u{4f1a}\u{8bae}\u{7eaa}\u{8981}.md"),
+                "\u{4f1a}\u{8bae}\u{7eaa}\u{8981}"
+            )
+            // The uniquing suffix stays: it is part of the name the user will see in Finder.
+            Check.equal(NoteFilename.title(from: "2026-08-11-1453-standup-2.md"), "Standup 2")
+        }
+
+        Check.test("a filename with no phrase in it offers nothing, and says so") {
+            // Both of these already render as "Untitled". Echoing the fallback slug back as a title
+            // would dress a blank up as a name.
+            Check.equal(NoteFilename.title(from: "2026-08-11-1453-untitled.md"), nil)
+            Check.equal(NoteFilename.title(from: "2026-08-11-1453.md"), nil)
+            Check.equal(NoteFilename.title(from: ""), nil)
+            // But a slug that merely begins with the fallback word is a real title.
+            Check.equal(NoteFilename.title(from: "2026-08-11-1453-untitled-draft.md"), "Untitled draft")
+        }
+
         Check.test("skips dot-files, which keeps iCloud placeholder stubs out of the listing") {
             Check.expect(NoteFilename.isNoteFile("2026-08-11-1453-standup.md"))
             Check.expect(!NoteFilename.isNoteFile(".2026-08-11-1453-standup.md.icloud"))

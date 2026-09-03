@@ -206,6 +206,40 @@ public enum NoteFilename {
         return date
     }
 
+    /// The best title a filename alone can offer, for a note whose text cannot be read.
+    ///
+    /// `slug(from:)` is lossy and this does not pretend otherwise — case, punctuation and every word
+    /// past the sixth are gone for good. It exists because the alternative is worse: an evicted note
+    /// has no readable first line, so the switcher called it "Untitled" and showed nothing else, and
+    /// a mac syncing a vault for the first time is a column of identical Untitled rows. The slug is
+    /// a real, human-chosen phrase — `slides-revised` — and reading it beats reading nothing.
+    ///
+    /// Sentence case rather than Title Case: the slug is lowercased on the way in, so per-word
+    /// capitals would be invented rather than restored. Capitalising the first character is enough
+    /// to read as a title without claiming to be the one that was typed.
+    ///
+    /// Returns nil when the name carries no phrase to show — a bare timestamp, or the `untitled`
+    /// slug a nameless note takes, both of which the caller already renders as "Untitled".
+    public static func title(from filename: String) -> String? {
+        var stem = (filename as NSString).deletingPathExtension
+
+        // Drop the timestamp half only when it really is one, using the same counting parse as
+        // `creationDate(from:)` rather than a second, looser rule (decision 35).
+        if creationDate(from: filename) != nil {
+            stem = String(stem.dropFirst(timestampWidth))
+            if stem.first == "-" { stem = String(stem.dropFirst()) }
+        }
+
+        let words = stem.split(separator: "-").map(String.init)
+        guard !words.isEmpty else { return nil }
+        // A one-word `untitled` is the fallback slug, not a title. `untitled-draft` is a title.
+        if words.count == 1, words[0] == fallbackSlug { return nil }
+
+        let phrase = words.joined(separator: " ")
+        guard let first = phrase.first else { return nil }
+        return first.uppercased() + phrase.dropFirst()
+    }
+
     /// Characters in the timestamp half — `2026-08-11-1453`. Counted, never split (see above).
     public static let timestampWidth = 15
 
