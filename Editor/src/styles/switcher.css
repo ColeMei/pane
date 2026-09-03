@@ -88,6 +88,17 @@
   max-height: var(--switcher-max-height);
   overflow-y: auto;
   overscroll-behavior: contain;
+
+  /* The region an arrow key is allowed to scroll a row into, which is not the whole viewport.
+   *
+   * `scrollIntoView({ block: "nearest" })` parks the row it is given flush against the edge it came
+   * from, and both edges have something over them: the fade below, and above, the band header that
+   * says which recency group the row belongs to. So arrowing down left the selected row washed out
+   * under the gradient, and arrowing up onto a band's first note scrolled the header out of sight.
+   * These two paddings are what `scrollIntoView` calls the optimal viewing region, and moving them
+   * in by the height of each obstruction fixes both without the script needing to know either. */
+  scroll-padding-top: var(--switcher-group-height);
+  scroll-padding-bottom: var(--switcher-fade-height);
 }
 
 /* A 5px thumb and no track — the design draws the thumb alone, floating 3px from the edge. */
@@ -243,16 +254,31 @@
   color: var(--text-primary);
 }
 
+/* Pinned to the bottom edge of the list — `sticky`, not `absolute`.
+ *
+ * `position: absolute` inside a scroll container resolves `bottom: 0` against the padding box and
+ * then *scrolls with the content*, so the fade only sat at the bottom edge while the list was at the
+ * top. One flick down and it rode up into the middle: a grey gradient band drifting through the
+ * rows, washing out whichever one it landed on, exactly 1:1 with `scrollTop`. Measured — at
+ * `scrollTop: 100` the fade painted across rows 302–330px into a 430px viewport.
+ *
+ * Sticky keeps it in flow, so it stays pinned to the bottom of the scrollport instead. The negative
+ * margin cancels the height it would otherwise add to the content — the fade is an overlay, and it
+ * must not make the list scroll 28px further than it has rows for. */
 .switcher__fade {
-  position: absolute;
-  inset: auto 0 0 0;
+  position: sticky;
+  bottom: 0;
   height: var(--switcher-fade-height);
+  margin-top: calc(-1 * var(--switcher-fade-height));
   background: linear-gradient(var(--fade-from), var(--fade-to));
   pointer-events: none;
 }
 
-/* Only when the list actually scrolls — see the note where `data-overflows` is set. */
-.switcher:not([data-overflows]) .switcher__fade {
+/* Only when the list actually scrolls — see the note where `data-overflows` is set — and only while
+ * there is something left below. Pinned, it would otherwise sit over the last row forever, which is
+ * the fade saying "more below" at the one place there is none. */
+.switcher:not([data-overflows]) .switcher__fade,
+.switcher[data-at-end] .switcher__fade {
   display: none;
 }
 

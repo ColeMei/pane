@@ -160,6 +160,10 @@
   --switcher-max-height: 430px;
   --switcher-row-padding: 7px 16px;
   --switcher-fade-height: 28px;
+  /* A recency band header, measured: 10px + 4px padding around an 11px line. The keyboard scroll
+   * reserves this much room above a row so a band's first note arrives with the label that names
+   * it — a landmark you never see is not a landmark. */
+  --switcher-group-height: 27px;
 
   /* ---- Type ---------------------------------------------------------------------------------- */
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;

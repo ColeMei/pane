@@ -324,10 +324,7 @@ export function mountSwitcher(options: SwitcherOptions) {
 
     list.innerHTML = html + `<div class="switcher__fade" aria-hidden="true"></div>`;
 
-    // The fade says "there is more below". With a short list there is not, and it was washing out
-    // the last row's preview instead — visible with as few as three notes, and reading as a
-    // rendering fault rather than an affordance.
-    root.toggleAttribute("data-overflows", list.scrollHeight > list.clientHeight + 1);
+    updateFade();
 
     footer.style.display = "";
     const hints =
@@ -342,6 +339,25 @@ export function mountSwitcher(options: SwitcherOptions) {
 
     scrollSelectedIntoView();
     reportHeight();
+  }
+
+  /**
+   * Whether the fade is drawn, and whether there is still anything under it.
+   *
+   * The fade says "there is more below". With a short list there is not, and it was washing out the
+   * last row's preview instead — visible with as few as three notes, and reading as a rendering
+   * fault rather than an affordance. The same is true at the end of a long list, which the old
+   * absolutely-positioned fade hid by accident: it scrolled away with the content. Now that it is
+   * pinned it would sit over the last row forever, so the end of the scroll has to be watched.
+   */
+  function updateFade(): void {
+    const overflows = list.scrollHeight > list.clientHeight + 1;
+    root.toggleAttribute("data-overflows", overflows);
+    // A pixel of slack: fractional layout means `scrollTop` can stop a hair short of the arithmetic.
+    root.toggleAttribute(
+      "data-at-end",
+      overflows && list.scrollTop + list.clientHeight >= list.scrollHeight - 1
+    );
   }
 
   function scrollSelectedIntoView(): void {
@@ -424,6 +440,9 @@ export function mountSwitcher(options: SwitcherOptions) {
         break;
     }
   });
+
+  // Programmatic scrolls fire this too, so the arrow keys are covered by the same line as the wheel.
+  list.addEventListener("scroll", updateFade);
 
   list.addEventListener("mousemove", (event) => {
     const row = (event.target as HTMLElement).closest<HTMLElement>(".switcher__row");
