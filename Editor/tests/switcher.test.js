@@ -28,6 +28,30 @@ function notes(count) {
   }));
 }
 
+/*
+ * The same notes, banded the way a real vault bands them: a couple today, a couple yesterday, then
+ * longer runs. `notes()` puts six in every band, which is the flattering case — the fewer notes a
+ * band holds, the more 27px headers there are between the rows, and it is headers that eat the list.
+ * The regression this file's newest assertion exists for showed four rows under `notes()` and three
+ * under this one, and three was what the report said.
+ */
+const BAND_PLAN = [["Today", 2], ["Yesterday", 2], ["This week", 3], ["Last week", 4], ["August", 20]];
+
+function realisticallyBandedNotes() {
+  const out = [];
+  let i = 0;
+  for (const [band, n] of BAND_PLAN)
+    for (let j = 0; j < n; j++, i++)
+      out.push({
+        filename: `2026-08-${String((i % 28) + 1).padStart(2, "0")}-1200-note-${i}.md`,
+        title: `Note number ${i}`,
+        time: "23 Aug",
+        preview: `first line of body for note ${i}`,
+        band,
+      });
+  return out;
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
@@ -254,6 +278,56 @@ export function run(view, bar, doc) {
     `⌘P list ${switcherViewport}px, ⌘K list ${actionsList.clientHeight}px`,
     actionsList.clientHeight > switcherViewport
   );
+
+  // ---- and the ceiling leaves room for enough notes to be worth scanning -------------------------
+  //
+  // The assertion this file was missing, and the reason a regression got through a green suite.
+  //
+  // Every check above reads `CEILING` out of the token, so all of them passed at 380px while ⌘P was
+  // showing three notes — they pin the two panels *to each other* and never to anything a person
+  // would notice. What a reader wants from ⌘P is not a rectangle, it is a list to scan (decision
+  // 23), and the unit of that is rows.
+  //
+  // Counted as "clear of the fade", because a row under the gradient is exactly what the fade fix at
+  // the top of this file exists to stop — half-washed-out is not shown. Swept at every scroll offset
+  // the first few keystrokes can reach, so the number is the worst case rather than the best: at
+  // 380px this read four at rest and three at `scrollTop: 39`.
+  {
+    if (!doc.querySelector(".pane").hasAttribute("data-switcher")) doc.getElementById("browse").click();
+    const banded = realisticallyBandedNotes();
+    window.paneHost.showNotes(banded, banded.length, "");
+
+    const MINIMUM = 5;
+    let worst = Infinity;
+    let worstAt = 0;
+    for (let top = 0; top < 300; top += 13) {
+      list.scrollTop = top;
+      const lb = list.getBoundingClientRect();
+      const hidden = fadeShown() ? fadeHeight() : 0;
+      const bottom = lb.top + list.clientHeight - hidden;
+      let visible = 0;
+      for (const row of doc.querySelectorAll(".switcher__row")) {
+        const b = row.getBoundingClientRect();
+        if (b.top >= lb.top - 0.5 && b.bottom <= bottom + 0.5) visible += 1;
+      }
+      if (visible < worst) {
+        worst = visible;
+        worstAt = Math.round(list.scrollTop);
+      }
+    }
+    list.scrollTop = 0;
+    check(
+      "the switcher shows enough notes to scan, at every offset and with real band sizes",
+      `at least ${MINIMUM} notes clear of the fade`,
+      `${worst} at scrollTop ${worstAt}, with the ceiling at ${CEILING}px`,
+      worst >= MINIMUM
+    );
+
+    // The two overlays are mutually exclusive (decision 45), so opening the switcher here closed
+    // ⌘K — and the block below opens by typing into its search field. Hand it back what it expects.
+    press("Escape");
+    doc.getElementById("open-actions").click();
+  }
 
   // ---- The ceiling is a ceiling, not a height ------------------------------------------------------
   //

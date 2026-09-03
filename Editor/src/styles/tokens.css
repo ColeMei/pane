@@ -152,11 +152,7 @@
 
   /* Width lives in `--overlay-width` — the switcher and ⌘K are one component in two modes
    * (decision 46), so there is deliberately no switcher-specific width token here to drift from it.
-   *
-   * The max-height stays switcher-specific and stays a literal, unlike the action panel's, which was
-   * removed: this is an *unbounded* list of however many notes exist, so capping and scrolling it is
-   * the intended behaviour rather than a bug. Note the number is also spelled in Swift, as
-   * `PaneController.switcherPaneHeight = 54 + 430 + 16`; the two have to move together. */
+   */
   /* How tall either overlay is allowed to get before its list starts scrolling.
    *
    * On the panel, not on the list inside it, and that is the point: ⌘P and ⌘K are one component in
@@ -170,11 +166,25 @@
    * vault gets a four-note switcher; this only bites when there is more content than fits, which is
    * exactly when the pane has to grow to hold it.
    *
-   * 380 is measured off Raycast Notes, which caps both of its lists and scrolls them: its note list
-   * runs in a 249px viewport (a plan banner eating ~50 of it) and its action list — twenty-six rows,
-   * 727px of content — in a 302px one, with the window at ~475pt either way. Here it leaves the
-   * switcher ~300px of list, five and a half rows, and ⌘K ~334px, eleven. */
-  --overlay-panel-height: 380px;
+   * 470, and the number this replaces is worth keeping because of how it was wrong. It was 380,
+   * reasoned off Raycast Notes: its note list runs in a 249px viewport (a plan banner eating ~50 of
+   * it) and its action list — twenty-six rows, 727px of content — in a 302px one. But a viewport is
+   * not a row count, and the two lists are not comparable that way. Raycast's is *all rows*. This
+   * one spends 27px on a band header and 28px on the fade before a single note is drawn, so 380
+   * left the switcher 303px of list and only **248px of it legible** — four rows, and three once a
+   * second band header scrolls into view. The comment here used to claim "five and a half rows",
+   * which is 303 ÷ 53 with the chrome its own stylesheet reserves left out.
+   *
+   * So the quantity to match is rows, not points. Measured across the ceiling — with bands the size
+   * a real vault has them, and counting only rows clear of the fade, because a row under the
+   * gradient is the thing the fade fix exists to stop:
+   *
+   *     380px  worst 3 notes      430px  worst 4      470px  worst 5      507px  worst 5
+   *
+   * 470 is the knee: it never drops below five, which is Raycast's ~5.3 rows in ~299px of pure
+   * list. It costs a 627pt pane against 380's 507 — still under the 676 the uncapped switcher asked
+   * for, so the reason this cap exists survives intact. ⌘K gets 13 of its 16 rows. */
+  --overlay-panel-height: 470px;
   --switcher-row-padding: 7px 16px;
   --switcher-fade-height: 28px;
   /* A recency band header, measured: 10px + 4px padding around an 11px line. The keyboard scroll
