@@ -554,10 +554,21 @@ body {
 }
 
 /* The U reads as underline only if it is underlined — the S beside it has strikethrough for the
- * same reason. */
+ * same reason.
+ *
+ * The offset is 1px rather than 2, and that came out of a report: in a run of B, I, S and U, the U
+ * was the one that looked wrong. It is not that it is a letter beside a drawing — B, I and S are
+ * letters too and they agree. It is that **U is the only glyph on the bar whose decoration grows its
+ * box**. The letters' ink is near-identical (B 8.8×9.5, I 3.5×9.5, S 8.5×10, U 9.8×9.7), and
+ * strikethrough sits at mid-height so it costs S nothing — but an underline sits below the baseline,
+ * so at 2px of offset U painted about 3px lower than everything beside it.
+ *
+ * Tightened rather than removed, and the letter is not nudged up: a shared baseline is exactly what
+ * makes B, I, S and U read as a set, and moving one off it to balance its own decoration would trade
+ * a small imbalance for a bigger one. */
 .format-bar__underline {
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 1px;
 }
 
 .format-bar button:hover {

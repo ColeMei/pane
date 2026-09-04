@@ -18,13 +18,13 @@
  * same rule the Shortcuts tab follows (decision 31).
  */
 
+import { icon } from "./format-bar";
 import { desiredOverlayHeight } from "./overlay";
 
 export interface ActionRow {
   id: string;
   label: string;
-  /** SVG path data, 14×14 viewBox, straight from the design's own `actionGroups`. */
-  d: string;
+    svg: string;
   /**
    * What to print when the action has no rebindable binding of its own — Settings…, whose ⌘, is the
    * app menu's, and Recently Deleted, which the design deliberately leaves unbound. Every other row
@@ -55,7 +55,7 @@ interface ActionPanelOptions {
 /** Grouped exactly as frame 2a groups them; the hairlines between groups are the grouping. */
 const GROUPS: ActionRow[][] = [
   [
-    { id: "newNote", label: "New Note", d: "M7 2v10M2 7h10", keys: ["⌘", "N"] },
+    { id: "newNote", label: "New Note", svg: `<path d="M5 12h14" /><path d="M12 5v14" />`, keys: ["⌘", "N"] },
     {
       id: "duplicateNote",
       label: "Duplicate Note",
@@ -63,30 +63,30 @@ const GROUPS: ActionRow[][] = [
       // its path from its neighbour, so Duplicate Note and Copy as Markdown drew the *same* icon —
       // and both are visible together every time the panel opens. The design only ever assigned
       // `M3 5h7v8H3zM5 2h7v8` to Copy as Markdown, so that one keeps it and this one gets its own.
-      d: "M2 3h4.5v8H2zM7.5 3H12v8H7.5z",
+      svg: `<rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />`,
       keys: ["⌘", "D"],
     },
-    { id: "browseNotes", label: "Browse Notes", d: "M2 3h10M2 7h10M2 11h10", keys: ["⌘", "P"] },
+    { id: "browseNotes", label: "Browse Notes", svg: `<path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" />`, keys: ["⌘", "P"] },
   ],
   [
-    { id: "pinPane", label: "Pin Pane", d: "M7 2a3 3 0 110 6 3 3 0 010-6zM7 8v5", keys: ["⇧", "⌘", "P"] },
+    { id: "pinPane", label: "Pin Pane", svg: `<path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />`, keys: ["⇧", "⌘", "P"] },
     {
       id: "findInNote",
       label: "Find in Note",
-      d: "M6 2a4 4 0 110 8 4 4 0 010-8zM9.2 9.2l3.3 3.3",
+      svg: `<path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" />`,
       keys: ["⌘", "F"],
     },
     {
       id: "copyAsMarkdown",
       label: "Copy as Markdown",
-      d: "M3 5h7v8H3zM5 2h7v8",
+      svg: `<rect width="8" height="4" x="8" y="2" rx="1" ry="1" /><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /><path d="M16 4h2a2 2 0 0 1 2 2v4" /><path d="M21 14H11" /><path d="m15 10-4 4 4 4" />`,
       keys: ["⇧", "⌘", "C"],
     },
-    { id: "revealInFinder", label: "Reveal in Finder", d: "M2 4h4l1 1.5h5V11H2z", keys: ["⌥", "⌘", "R"] },
+    { id: "revealInFinder", label: "Reveal in Finder", svg: `<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />`, keys: ["⌥", "⌘", "R"] },
     {
       id: "exportNote",
       label: "Export…",
-      d: "M7 9V2M4.5 4L7 1.5 9.5 4M3 8v4h8V8",
+      svg: `<path d="M12 3v12" /><path d="m17 8-5-5-5 5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />`,
       keys: ["⇧", "⌘", "E"],
     },
   ],
@@ -94,21 +94,21 @@ const GROUPS: ActionRow[][] = [
     {
       id: "autoSizing",
       label: "Disable Window Auto-sizing",
-      d: "M7 1v12M4.5 3.5L7 1l2.5 2.5M4.5 10.5L7 13l2.5-2.5",
+      svg: `<path d="M12 2v20" /><path d="m8 18 4 4 4-4" /><path d="m8 6 4-4 4 4" />`,
       keys: ["⇧", "⌘", "/"],
     },
-    { id: "formatBar", label: "Show Format Bar", d: "M3 3h8M7 3v9", keys: ["⌥", "⌘", ","] },
+    { id: "formatBar", label: "Show Format Bar", svg: `<path d="M12 4v16" /><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2" /><path d="M9 20h6" />`, keys: ["⌥", "⌘", ","] },
     {
       id: "spaceBehaviour",
       label: "Keep on This Space",
       // Two overlapping rectangles: one desktop behind another.
-      d: "M1.5 2.5h7v6h-7zM5.5 5.5h7v6h-7",
+      svg: `<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" />`,
       keys: ["⌥", "⌘", "S"],
     },
     {
       id: "hideFromCapture",
       label: "Hide from Screen Capture",
-      d: "M2 3.5h10v7H2zM1.5 2l11 10",
+      svg: `<path d="M12 17v4" /><path d="M17 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 1.184-1.826" /><path d="m2 2 20 20" /><path d="M8 21h8" /><path d="M8.656 3H20a2 2 0 0 1 2 2v10a2 2 0 0 1-.293 1.042" />`,
       keys: ["⇧", "⌘", "H"],
     },
   ],
@@ -116,7 +116,7 @@ const GROUPS: ActionRow[][] = [
     {
       id: "settings",
       label: "Settings…",
-      d: "M7 4.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM7 1v2M7 11v2M1 7h2M11 7h2M2.8 2.8l1.4 1.4M9.8 9.8l1.4 1.4M2.8 11.2l1.4-1.4M9.8 4.2l1.4-1.4",
+      svg: `<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" />`,
       keys: ["⌘", ","],
     },
     {
@@ -126,7 +126,7 @@ const GROUPS: ActionRow[][] = [
       // sit four rows apart in a panel where both are on screen together — the same defect Duplicate
       // Note and Copy as Markdown had, and the smoke test's own rule that two rows never share an
       // icon. Deleting is the bin; this is where things wait, so it is the one that changes.
-      d: "M7 2.2a4.8 4.8 0 1 1-4.8 4.8M7 4.4V7.2l1.9 1.1M2.2 2.2v2.8h2.8",
+      svg: `<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l4 2" />`,
       // The one row the design gives no shortcut, and it is right: this is a place you go looking
       // for, not a thing you fire off. Decision 31 keeps it out of the Shortcuts table for the
       // same reason — an unbound row there would be a blank waiting to be filled in.
@@ -137,7 +137,7 @@ const GROUPS: ActionRow[][] = [
       label: "Rename File…",
       // A tag with a hole in it: this row is about the *file's* name, not the note's title, which is
       // line one and needs no menu item.
-      d: "M7.5 1.5H12.5V6.5L7 12 1.5 6.5zM10 4h.01",
+      svg: `<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />`,
       // Unbound, and for Recently Deleted's reason exactly: decision 103 makes the name follow the
       // title on its own, so this is the escape hatch for a title improved an hour later — a place
       // you go looking for rather than something you fire off. Decision 31 keeps it out of the
@@ -147,7 +147,7 @@ const GROUPS: ActionRow[][] = [
     {
       id: "deleteNote",
       label: "Delete Note",
-      d: "M3 4h8l-.7 8.5H3.7zM2 4h10M5.5 4V2.5h3V4",
+      svg: `<path d="M10 11v6" /><path d="M14 11v6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />`,
       keys: ["⌃", "X"],
       danger: true,
     },
@@ -244,10 +244,7 @@ export function mountActionPanel(options: ActionPanelOptions) {
         html += `
           <div class="actions__row${row.danger ? " actions__row--danger" : ""}"
                role="option" data-index="${index}" aria-selected="${index === selected}">
-            <svg class="actions__icon" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true">
-              <path d="${row.d}" fill="none" stroke="currentColor" stroke-width="1.4"
-                    stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            ${icon(row.svg).replace("<svg ", '<svg class="actions__icon" ')}
             <span class="actions__label">${escapeHtml(labelFor(row))}</span>
             <span class="actions__keys">
               ${(options.keysFor(row.id) ?? row.keys)

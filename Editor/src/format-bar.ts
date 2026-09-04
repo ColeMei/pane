@@ -40,8 +40,54 @@ interface Button {
   activePair?: [string, string];
 }
 
+/**
+ * One wrapper for every drawn icon in the pane's chrome, so the grid, the stroke and the terminals
+ * are stated once instead of per icon.
+ *
+ * The icons are **Lucide** (ISC), inlined as path data rather than pulled in as a dependency — same
+ * `<svg>` strings the hand-drawn ones were, from a set that was designed against itself. What they
+ * buy is the thing hand-drawing could not: one 24-unit grid, one stroke weight, round terminals, and
+ * optical sizing already done. The set before this had seven rendered sizes across the app and four
+ * stroke weights on one bar, because every icon was authored on its own.
+ *
+ * `SIZE` is 14 and `STROKE` is 2.25 rather than Lucide's own 2, and both numbers are derived rather
+ * than picked: 14px in the 26px button leaves exactly 6px a side (13 left it on a half-pixel), and
+ * 2.25 user units on a 24-unit grid rendered at 14 is 1.31px on screen — the weight the bar was
+ * already tuned to, and close enough to the letterforms' stems that a drawing sits beside a B
+ * without reading heavier.
+ *
+ * Deliberately *not* applied to Bold, Italic, Strikethrough and Underline: those stay as type,
+ * because each one is rendered in the effect it applies. The B is bold, the I is italic, the U is
+ * underlined. No drawn glyph can do that, and it is worth more than a uniform visual language.
+ */
+const ICON_SIZE = 14;
+const ICON_STROKE = 2.25;
+
+export function icon(body: string, size = ICON_SIZE): string {
+  return (
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+    `stroke-width="${ICON_STROKE}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+    `${body}</svg>`
+  );
+}
+
 const SEPARATOR: unique symbol = Symbol("separator");
 
+/*
+ * The bar, in groups, and the groups are by **what the mark applies to** — which is the rule the
+ * separators had never actually followed.
+ *
+ *   Heading · Bold · Italic · Strikethrough · Underline · Highlight   marks on characters
+ *   Inline code · Code block · Link · Quote                           inline objects and containers
+ *   Numbered · Bulleted · Task                                        lists
+ *
+ * Underline and Highlight used to sit in the second group, which made it a catch-all of six: two
+ * character marks, two inline constructs and two block containers, sharing a run for no reason
+ * anybody had written down. They are decision 61's pair and they are the same *kind* of thing as
+ * bold and italic — a mark on a span of characters — so they belong beside them. Heading leads the
+ * run rather than standing alone because a paragraph-style control at the head of the text-format
+ * group is what every toolbar does, and it reads as "how this text looks" with the rest.
+ */
 const BUTTONS: (Button | typeof SEPARATOR)[] = [
   {
     label: "B",
@@ -58,7 +104,6 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
     wrap: "~~",
     active: ["Strikethrough"],
   },
-  SEPARATOR,
   {
     label: "U",
     title: "Underline ⌘U",
@@ -71,35 +116,39 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
     title: "Highlight ⇧⌘M",
     custom: (view: EditorView) => applyWrap(view, "=="),
     activePair: ["==", "=="],
-    svg: `<svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 9.4l4.9-4.9a1.4 1.4 0 0 1 2 0l.6.6a1.4 1.4 0 0 1 0 2L5.6 12H3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M2 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+    svg: icon(`<path d="m9 11-6 6v3h9l3-3" /><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />`),
   },
+  SEPARATOR,
   {
-    label: "</>",
+    label: "",
     title: "Inline code ⌘E",
-    className: "format-bar__code",
     wrap: "`",
     active: ["InlineCode"],
+    // The one letterform that had to go. `</>` set three characters in a 26px box and measured
+    // 20.8×12.3 — 2.4× the width of the B beside it, and the widest thing on the bar. Unlike B, I,
+    // S and U it was never a specimen of its own effect either: inline code is not spelled `</>`.
+    svg: icon(`<path d="m16 18 6-6-6-6" /><path d="m8 6-6 6 6 6" />`),
   },
   {
     label: "",
     title: "Code block ⌥⌘C",
     custom: applyCodeBlock,
     active: ["FencedCode"],
-    svg: `<svg width="14" height="14" viewBox="0 0 14 14"><rect x="1.2" y="2.5" width="11.6" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5 5.6L3.4 7 5 8.4M9 5.6L10.6 7 9 8.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    svg: icon(`<path d="m10 9-3 3 3 3" /><path d="m14 15 3-3-3-3" /><rect x="3" y="3" width="18" height="18" rx="2" />`),
   },
   {
     label: "",
     title: "Link ⌘L",
     custom: applyLink,
     active: ["Link"],
-    svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M5.8 8.2a2.6 2.6 0 0 0 3.7 0l1.9-1.9a2.6 2.6 0 0 0-3.7-3.7l-1 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8.2 5.8a2.6 2.6 0 0 0-3.7 0L2.6 7.7a2.6 2.6 0 0 0 3.7 3.7l1-1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+    svg: icon(`<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />`),
   },
   {
     label: "",
     title: "Quote ⇧⌘B",
     custom: applyQuote,
     active: ["Blockquote"],
-    svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M3 2.5v9M6 3.5h6M6 7h6M6 10.5h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+    svg: icon(`<path d="M17 5H3" /><path d="M21 12H8" /><path d="M21 19H8" /><path d="M3 12v7" />`),
   },
   SEPARATOR,
   // Numbered before bulleted, matching the reference bar. Reads as an ordering of increasing
@@ -109,7 +158,7 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
     title: "Numbered list ⇧⌘7",
     custom: applyOrderedList,
     active: ["OrderedList"],
-    svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M2 2.5h1.5M2.4 6.8h1M2 11h1.5M5.5 3H12M5.5 7H12M5.5 11H12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+    svg: icon(`<path d="M11 5h10" /><path d="M11 12h10" /><path d="M11 19h10" /><path d="M4 4h1v5" /><path d="M4 9h2" /><path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />`),
   },
   {
     label: "",
@@ -120,14 +169,14 @@ const BUTTONS: (Button | typeof SEPARATOR)[] = [
     // Task list on every checkbox, which reads as the line being two kinds of list at once. The
     // three are one control with three values, so the most specific wins.
     inactiveWith: ["Task"],
-    svg: `<svg width="13" height="13" viewBox="0 0 14 14"><path d="M2 3h1M2 7h1M2 11h1M5.5 3H12M5.5 7H12M5.5 11H12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+    svg: icon(`<path d="M3 5h.01" /><path d="M3 12h.01" /><path d="M3 19h.01" /><path d="M8 5h13" /><path d="M8 12h13" /><path d="M8 19h13" />`),
   },
   {
     label: "",
     title: "Task list ⇧⌘9",
     custom: applyTaskList,
     active: ["Task"],
-    svg: `<svg width="13" height="13" viewBox="0 0 14 14"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2.8 3.8l1 1 1.6-1.8M8 3.8h4M8 10h4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`,
+    svg: icon(`<path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" />`),
   },
 ];
 
