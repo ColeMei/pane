@@ -20,22 +20,15 @@
  * had been asked for. A pause is the whole signal — it is the difference between the pointer being
  * *somewhere* and the reader wanting to know what that something is.
  *
- * 500ms. The system's own bubble takes about a second, which the note above this file already calls
- * out as too slow to belong beside the format bar; Windows and VS Code both use 500, and it is short
- * enough that a deliberate pause never feels like waiting.
+ * 800ms, and **every** hover pays it. A warm window was built first — show one bubble and the next
+ * control is instant, which is what AppKit, Windows and Qt all do, and the argument for it is that a
+ * row of icons should not cost a wait each. It was reported as a bug within minutes of shipping,
+ * and the report was right about the thing that matters: with it, moving from ⌘P to ⌘K was
+ * indistinguishable from having no delay at all, so the feature could not be felt in the place
+ * people actually look at chrome — one control after another along a row. A delay you cannot
+ * perceive is not a gentler delay, it is the old behaviour with extra machinery.
  */
-const SHOW_DELAY_MS = 500;
-
-/**
- * ...and how long a tooltip stays "warm" after one comes down, during which the next is instant.
- *
- * Without this a delay is worse than no delay: the title bar has four buttons side by side and the
- * format bar eight, and paying 500ms at each one turns reading a row of icons into a stutter. Once
- * the reader has asked one question they are asking a series, so the delay is the price of the
- * *first* answer only. Every native toolbar behaves this way — AppKit, Windows and Qt all keep a
- * warm window — and the reason it goes unnoticed is that it is what people already expect.
- */
-const WARM_MS = 1500;
+const SHOW_DELAY_MS = 800;
 
 let tip: HTMLElement | null = null;
 let pane: HTMLElement | null = null;
@@ -45,17 +38,11 @@ let named: HTMLElement | null = null;
 /** The control the pointer is resting on, waiting out `SHOW_DELAY_MS`. */
 let pendingEl: HTMLElement | null = null;
 let pendingTimer = 0;
-/** When a *visible* bubble last came down, which is what `WARM_MS` is measured from. */
-let lastHiddenAt = 0;
 
 function cancelPending(): void {
   if (pendingTimer) window.clearTimeout(pendingTimer);
   pendingTimer = 0;
   pendingEl = null;
-}
-
-function isWarm(): boolean {
-  return lastHiddenAt > 0 && performance.now() - lastHiddenAt < WARM_MS;
 }
 
 /**
@@ -71,10 +58,6 @@ function scheduleFor(button: HTMLElement, text: string): void {
   cancelPending();
   if (!text) return;
 
-  if (isWarm()) {
-    showFor(button, text);
-    return;
-  }
   pendingEl = button;
   pendingTimer = window.setTimeout(() => {
     pendingTimer = 0;
@@ -176,9 +159,6 @@ export function mountTooltips(paneEl: HTMLElement): void {
  *  pane without the page hearing about it, because the pane is a window and not a page. */
 export function hideTooltip(): void {
   cancelPending();
-  // Only a bubble that was actually on screen starts the warm window. A pointer that crossed a
-  // button too fast to name it has not been answered, so the next control should still make it wait.
-  if (named) lastHiddenAt = performance.now();
   named = null;
   if (tip) tip.hidden = true;
 }

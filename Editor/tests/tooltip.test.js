@@ -9,8 +9,7 @@
  * crossing the title bar on the way to the text produced three of them, none of them asked for.
  */
 
-const DELAY = 500;
-const WARM = 1500;
+const DELAY = 800;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -49,13 +48,13 @@ export async function run(view, bar, doc) {
   // The take-down is a *condition* on where the pointer is rather than a leave event — see the note
   // in tooltip.ts — so a move aimed elsewhere is what actually dismisses one.
   const away = () => doc.body.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
-  const reset = async (cold) => {
+  const reset = async () => {
     away();
-    if (cold) await sleep(WARM + 150);
+    await sleep(60);
   };
 
   // ---- It does not appear immediately -----------------------------------------------------------
-  await reset(true);
+  await reset();
   enter(first);
   check("nothing appears the instant the pointer arrives", "hidden", shown() ? "shown" : "hidden", !shown());
 
@@ -76,7 +75,7 @@ export async function run(view, bar, doc) {
   //
   // The case that matters most. Before the delay this bubbled at once; with a delay but no cancel it
   // would bubble *late*, over whatever the pointer had moved on to, which is worse than the original.
-  await reset(true);
+  await reset();
   enter(second);
   await sleep(DELAY * 0.4);
   away();
@@ -88,31 +87,41 @@ export async function run(view, bar, doc) {
     !shown()
   );
 
-  // ---- The next control is instant while the answer is still warm --------------------------------
+  // ---- Every control waits, including the one you move to next --------------------------------
   //
-  // Without this a delay is a stutter: four buttons in the title bar, 500ms at each one.
-  await reset(true);
+  // Reported from the build, and the report is the reason this section replaced its opposite. The
+  // first version kept a warm window — show one bubble and the next control is instant, which is what
+  // AppKit, Windows and Qt do and which reads as correct in the abstract. In the pane it meant that
+  // moving from ⌘P to ⌘K was indistinguishable from having no delay, so the delay could not be felt
+  // in the one place people actually read chrome: along a row, one control after another.
+  //
+  // So this is the assertion that says the feature exists at all.
+  await reset();
   enter(first);
-  await sleep(DELAY + 150);
-  check("the first control still has to wait", "shown", shown() ? "shown" : "hidden", shown());
+  await sleep(DELAY + 200);
+  check("the first control is named after the delay", "shown", shown() ? "shown" : "hidden", shown());
 
   away();
   enter(second);
   check(
-    "the next control answers instantly while the first answer is warm",
-    "shown with no delay",
+    "the next control along the row waits too, rather than answering instantly",
+    "hidden immediately after arriving",
     shown() ? `shown: "${text()}"` : "hidden",
-    shown()
+    !shown()
   );
-
-  // ---- ...and goes cold again --------------------------------------------------------------------
-  await reset(true);
-  enter(first);
+  await sleep(DELAY * 0.5);
   check(
-    "and waits again once the warm window has lapsed",
+    "and is still waiting halfway through its own delay",
     "hidden",
     shown() ? "shown" : "hidden",
     !shown()
+  );
+  await sleep(DELAY * 0.8);
+  check(
+    "then it is named on its own account",
+    "shown",
+    shown() ? `shown: "${text()}"` : "hidden",
+    shown()
   );
   away();
 
