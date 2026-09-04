@@ -358,6 +358,62 @@ export function run(view, bar, doc) {
     doc.getElementById("open-actions").click();
   }
 
+  // ---- neither panel resizes the pane while you are typing in it ---------------------------------
+  //
+  // The two disagreed, and only one of them had written down a rule. The switcher reports the height
+  // it wants **once per opening** — `reportHeight`, guarded by `heightReported` — on the grounds that
+  // a window resizing on every keystroke of a search will not sit still. ⌘K re-reported on every
+  // `input`, exempted because it "has fourteen rows and settles".
+  //
+  // That exemption was sound while the action list had no cap: the pane was sized to the note, and
+  // filtering sixteen rows to two barely moved it. Decision 114 gave it a ceiling, so opening ⌘K
+  // grows the pane to 627pt and two typed characters collapsed it to the height of two rows — the
+  // whole window jumping while the reader's eyes are on a menu. Reported from the build, on ⌘K only,
+  // with ⌘P beside it doing the right thing.
+  //
+  // Asserted on the messages rather than on the DOM, because that is where the two differ: both
+  // panels shrink on screen, which is correct, and only one of them told Swift to shrink the window
+  // with it.
+  {
+    const sent = [];
+    const host = (window.webkit ??= {});
+    const handlers = (host.messageHandlers ??= {});
+    const real = handlers.pane;
+    handlers.pane = { postMessage: (m) => { sent.push(m); real?.postMessage?.(m); } };
+
+    const typeInto = (field, text) => {
+      field.value = text;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    for (const [name, openIt, field, type] of [
+      ["⌘K", () => doc.getElementById("open-actions").click(), actionsSearch, "actionsOpen"],
+      ["⌘P", () => openWith(30), search, "switcherOpen"],
+    ]) {
+      press("Escape");
+      sent.length = 0;
+      openIt();
+      const atOpen = sent.filter((m) => m.type === type).pop();
+      sent.length = 0;
+      for (const q of ["n", "no", "not"]) typeInto(field, q);
+      const whileTyping = sent.filter((m) => m.type === type);
+      check(
+        `${name} does not resize the pane while you type in it`,
+        `no height reported after opening at ${Math.round(atOpen?.height ?? 0)}pt`,
+        whileTyping.length === 0
+          ? "none"
+          : whileTyping.map((m) => `${Math.round(m.height)}pt`).join(", "),
+        whileTyping.length === 0
+      );
+      typeInto(field, "");
+    }
+
+    if (real) handlers.pane = real;
+    else delete handlers.pane;
+    press("Escape");
+    doc.getElementById("open-actions").click();
+  }
+
   // ---- and the rows below the fold are still reachable ------------------------------------------
   //
   // This is the assertion the cap has to earn. It was removed once precisely because a capped list

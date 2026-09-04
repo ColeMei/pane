@@ -309,7 +309,20 @@ export function mountActionPanel(options: ActionPanelOptions) {
   search.addEventListener("input", () => {
     selected = 0;
     render(search.value);
-    if (isOpen()) options.onVisibilityChange(true, desiredHeight());
+    // Deliberately no height report here — the pane keeps whatever height opening this panel asked
+    // for, however far the filter narrows the list.
+    //
+    // This used to re-report on every keystroke, and the switcher's `reportHeight` explains why it
+    // does not: "a window that resizes on every keystroke of a search is a window that will not sit
+    // still". ⌘K was exempted on the grounds that it "has fourteen rows and settles" — true while
+    // this list had no cap, when the pane was sized to the note and filtering barely moved it.
+    // **Decision 114 ended that.** With a ceiling, opening ⌘K grows the pane to 627pt and typing two
+    // characters collapsed it to the height of two rows, which is the whole window jumping while
+    // your eyes are on a menu. The reason for the exemption expired with the change that capped it.
+    //
+    // Reporting once is always enough here, and for the same reason it is enough in the switcher:
+    // the panel is at its tallest the moment it opens, with nothing filtered out. A filter can only
+    // shrink it, and the pane is already big enough for the largest case.
   });
 
   search.addEventListener("keydown", (event) => {

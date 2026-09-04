@@ -91,10 +91,13 @@ export function mountSwitcher(options: SwitcherOptions) {
    * `paneHeight(forOverlay:)`, which adds the 54 again. So ⌘P grew the pane to 691pt whatever was
    * in it, and a six-note vault got a 370pt panel floating in the middle of it.
    *
-   * Once, rather than on every keystroke the way ⌘K does it: ⌘K has fourteen rows and settles,
-   * while this list can go from 200 notes to three as you type, and a window that resizes on every
-   * keystroke of a search is a window that will not sit still. The panel keeps its own max-height,
-   * so a list that outgrows the pane scrolls (decision 45).
+   * Once, rather than on every keystroke: this list can go from 200 notes to three as you type, and
+   * a window that resizes on every keystroke of a search is a window that will not sit still. The
+   * panel keeps its own max-height, so a list that outgrows the pane scrolls (decision 45).
+   *
+   * ⌘K used to re-report on every keystroke and now does not — see the note on its `input` handler.
+   * Once is enough for both, and for the same reason: an unfiltered list is the tallest either panel
+   * can be, so the height asked for at opening already covers every filter that follows.
    */
   function reportHeight(): void {
     if (!isOpen() || heightReported) return;
