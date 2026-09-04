@@ -149,6 +149,10 @@ export function mountTooltips(paneEl: HTMLElement): void {
     // button" makes this poll fire constantly against a state it cannot see. The pointer genuinely
     // leaving the pane is already covered — `mouseleave` on the pane, and Swift's `setHover(false)`,
     // which exists because the pane is a window and not a page.
+    // Nothing matches `:hover` when the page gets no mouse events, which is Pane's normal state
+    // (decision 120) — and reading that as "the pointer left" would tear down every bubble Swift
+    // raises, a quarter-second after it appears. The pointer genuinely leaving is covered by
+    // `setPointer` finding no control under it, by `mouseleave` on the pane, and by `setHover(false)`.
     if (!document.querySelector(":hover")) return;
     if (named && !named.matches(":hover")) hideTooltip();
     if (pendingEl && !pendingEl.matches(":hover")) cancelPending();
@@ -157,6 +161,33 @@ export function mountTooltips(paneEl: HTMLElement): void {
 
 /** Takes the bubble down. Also called from Swift's `setHover(false)` — the pointer can leave the
  *  pane without the page hearing about it, because the pane is a window and not a page. */
+/**
+ * Where Swift says the pointer is, in page coordinates — the only reliable answer there is.
+ *
+ * Decision 120. Everything below this line used to run off `mouseenter`, `mouseover` and a `:hover`
+ * watchdog, and **none of that fires in the configuration the pane is built for**: an accessory
+ * app's non-activating panel that has not been clicked receives no mouse events at all (decision 107
+ * measured zero, against 22 in a controlled key window). So the bubble only ever appeared after you
+ * had clicked the pane — and clicking the pane is the thing the product exists to avoid.
+ *
+ * Swift already reads the pointer for `setHover` and the close dot. This is the same read, handed
+ * over, and `elementFromPoint` turns it into the control underneath. The page's own events are left
+ * in place rather than removed: they are what works in a browser harness and in a key window, and
+ * both paths funnel into `scheduleFor`, which is idempotent for a control already showing or armed.
+ */
+export function setPointer(x: number, y: number): void {
+  const el = document.elementFromPoint(x, y) as HTMLElement | null;
+  const target = el?.closest?.<HTMLElement>("[data-tip], [data-pane-described]") ?? null;
+  if (!target) {
+    // Off every control, which is also the "moved away" signal — the mousemove listener cannot see
+    // this, because no mousemove ever arrives.
+    if (named || pendingEl) hideTooltip();
+    return;
+  }
+  if (target === named || target === pendingEl) return;
+  scheduleFor(target, target.dataset.tip ?? target.getAttribute("aria-label") ?? "");
+}
+
 export function hideTooltip(): void {
   cancelPending();
   named = null;
@@ -204,6 +235,7 @@ export function describe(button: HTMLElement, text: string): void {
   // at hover time rather than capturing it.
   if (button.dataset.paneDescribed) return;
   button.dataset.paneDescribed = "1";
+  button.setAttribute("data-pane-described", "");
 
   const label = () => button.getAttribute("aria-label") ?? "";
   const hide = () => hideTooltip();

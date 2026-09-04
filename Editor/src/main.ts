@@ -43,7 +43,7 @@ import {
 
 import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
-import { describe, hideTooltip, mountTooltips } from "./tooltip";
+import { describe, hideTooltip, mountTooltips, setPointer } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { contentColumn, listAwareTab, outdentListItem } from "./list-indent";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
@@ -1651,6 +1651,17 @@ const host = {
     // The pointer can leave a *window* without the page seeing a leave event, and the chrome it was
     // over is about to fade out from under any tooltip naming it.
     if (!inside) hideTooltip();
+  },
+
+  /**
+   * Where the pointer is, from Swift — decision 120, and the same read `setHover` comes from.
+   *
+   * The page gets no mouse events in the state the pane is designed for, so this is how a control
+   * gets named without the pane having been clicked first. Sent on every move, because "which
+   * control" is a different question from "inside or outside".
+   */
+  setPointer(x: number, y: number): void {
+    setPointer(x, y);
   },
 
   openSwitcher(): void {

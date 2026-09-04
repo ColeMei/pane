@@ -1714,6 +1714,22 @@ extension PaneController: NSWindowDelegate {
         // precisely the movement that takes it onto the dot, and an early return here would mean the
         // dot only ever lit on the stroke that entered the window.
         refreshCloseHover()
+        refreshPointer()
+    }
+
+    /// Decision 120: the page is told where the pointer is, so the tooltip can name what is under it.
+    ///
+    /// The same read as `refreshHover` and `refreshCloseHover`, generalised. Those two exist because
+    /// the page receives no mouse events in Pane's real configuration, and each fixed one control by
+    /// pushing Swift's answer in; the tooltip is the third thing with that problem and it had gone
+    /// unnoticed because it works perfectly once the pane has been clicked — which is the one state
+    /// nobody tests, since the point of the pane is that you never have to click it.
+    ///
+    /// Sent on every move rather than on enter and leave: the page decides which control it is over,
+    /// and a bare "still inside" tells it nothing about moving from ⌘P to ⌘K.
+    private func refreshPointer() {
+        guard panel.isSummoned, isHovered, let p = editor.pointerInPage() else { return }
+        editor.call("setPointer", [Double(p.x), Double(p.y)])
     }
 
     /// Decision 107: the close dot lights when the pointer is on it.

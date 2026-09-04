@@ -369,6 +369,21 @@ final class EditorWebView: NSView {
     ///
     /// Nil until the web layer has reported one, which is a real state: `reportDragRegions` runs
     /// after the first layout, and a hover read before then must simply not light the dot.
+    /// Where the pointer is, in the page's own top-left coordinates — the inverse of the flip below.
+    ///
+    /// Decision 120: the page cannot find this out for itself. In Pane's real configuration a
+    /// WKWebView receives no mouse events at all (decision 107 measured zero), so anything driven by
+    /// `mouseenter`, `mouseover` or `:hover` is dead whenever the pane is doing its job — floating,
+    /// unfocused, over the app you are working in. Swift already reads the pointer for `setHover`
+    /// and the close dot; this hands the same read to the page so the tooltip can resolve it with
+    /// `elementFromPoint`.
+    func pointerInPage() -> CGPoint? {
+        guard let window else { return nil }
+        let inWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let inView = convert(inWindow, from: nil)
+        return CGPoint(x: inView.x, y: bounds.height - inView.y)
+    }
+
     func closeButtonScreenRect() -> CGRect? {
         guard !closeButtonTopLeft.isEmpty, let window else { return nil }
         let flipped = CGRect(

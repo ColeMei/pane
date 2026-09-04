@@ -125,5 +125,57 @@ export async function run(view, bar, doc) {
   );
   away();
 
+  // ---- Named from Swift's pointer alone, with no DOM mouse events -------------------------------
+  //
+  // The path that matters most and was dead until decision 120. In Pane's real configuration the page
+  // receives *no* mouse events — an accessory app's non-activating panel that has not been clicked
+  // (decision 107 measured zero against 22 in a key window) — so every case above this one, and every
+  // tooltip in the shipped app, only worked after the pane had been clicked. Which is the state
+  // nobody tests, because not having to click the pane is the point of the product.
+  //
+  // So this case sends nothing but the coordinates Swift sends, and asserts the bubble anyway.
+  {
+    await reset();
+    // Swift raises `setHover` before it sends a position, and the order is load-bearing: dimmed
+    // chrome is `pointer-events: none` (decision 41), so `elementFromPoint` returns the *container*
+    // and finds no control at all until the pane is marked hovered. Mirror that here.
+    window.paneHost.setHover(true);
+    const box = second.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+
+    window.paneHost.setPointer(cx, cy);
+    check(
+      "a control is not named the instant Swift's pointer arrives on it",
+      "hidden",
+      shown() ? "shown" : "hidden",
+      !shown()
+    );
+
+    await sleep(DELAY + 200);
+    check(
+      "a control is named from Swift's pointer alone, with no DOM mouse event",
+      "shown",
+      shown() ? `shown: "${text()}"` : "hidden",
+      shown()
+    );
+    check(
+      "and it is the control the pointer is actually over",
+      second.getAttribute("aria-label"),
+      text(),
+      squash(text()) === squash(second.getAttribute("aria-label"))
+    );
+
+    // Moving off every control is the only "left" signal there is — no mouseout ever arrives.
+    window.paneHost.setPointer(4, 4);
+    check(
+      "and it goes when Swift's pointer moves off every control",
+      "hidden",
+      shown() ? "shown" : "hidden",
+      !shown()
+    );
+    window.paneHost.setHover(false);
+  }
+
   return { checked, failures };
 }
