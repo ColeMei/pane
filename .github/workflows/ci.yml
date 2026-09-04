@@ -32,6 +32,22 @@ jobs:
       - name: Test PaneKit
         run: Scripts/test.sh
 
+      # The four editor suites, all on the same `editor-probe`: a real WKWebView in a real NSWindow.
+      # They are the ones that catch what reading the code cannot — a decoration in the wrong place,
+      # a rectangle under a gradient, a panel that resizes the window as you filter it. The bundle is
+      # built once here and each script is told to skip its own build.
+      - name: Build the editor bundle
+        run: node build.mjs
+        working-directory: Editor
+
+      - name: Test the editor
+        run: |
+          set -euo pipefail
+          Scripts/test-editor.sh --skip-editor
+          Scripts/test-markdown.sh --skip-editor
+          Scripts/test-switcher.sh --skip-editor
+          Scripts/test-tooltip.sh --skip-editor
+
       # Assembles the real .app, so a break in the bundling script, the Info.plist substitution or
       # the ad-hoc signature fails the build rather than waiting for a release.
       - name: Build Pane.app
