@@ -398,8 +398,14 @@ body {
 }
 
 /* A conflict is not an error — the text was saved, in full, under a name the user can open. Amber
- * says "look at this when you get a moment", which is exactly the urgency it has. */
-.pane__banner[data-kind="conflict"] .pane__banner-dot {
+ * says "look at this when you get a moment", which is exactly the urgency it has.
+ *
+ * A note deleted on another machine shares the colour because it shares the urgency exactly: nothing
+ * went wrong, nothing was lost, and there is something you may want to act on — the note is in
+ * Recently Deleted if you want it back (decision 117). Red would say the app failed, which it did
+ * not, and grey would say this was routine, which it is not. */
+.pane__banner[data-kind="conflict"] .pane__banner-dot,
+.pane__banner[data-kind="deleted"] .pane__banner-dot {
   background: #e0a02a;
 }
 

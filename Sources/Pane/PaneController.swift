@@ -20,12 +20,14 @@ final class PaneController: NSObject {
     enum Banner {
         case conflict
         case downloading
+        case deletedElsewhere
         case problem(String)
 
         var kind: String {
             switch self {
             case .conflict: return "conflict"
             case .downloading: return "downloading"
+            case .deletedElsewhere: return "deleted"
             case .problem: return "problem"
             }
         }
@@ -48,6 +50,11 @@ final class PaneController: NSObject {
                 return "This note changed elsewhere."
             case .downloading:
                 return "Downloading from iCloud…"
+            case .deletedElsewhere:
+                // Decision 76 again: the name of the thing that happened. Not "your note was deleted
+                // but don't worry, it's in Recently Deleted" — the toast after ⌃X already teaches
+                // where deleted notes go, and this row has no width for the second sentence.
+                return "Deleted on another device."
             case .problem(let message):
                 return message
             }
@@ -447,7 +454,7 @@ final class PaneController: NSObject {
         panel.applyCollectionBehaviour(pinned: noteState.isPinned)
 
         editor.call("loadNote", [filename, text, noteState.caretOffset, noteState.isPinned])
-        hideBanner()
+        hideBannerUnlessHeld()
         if isVisible { editor.focusEditor() }
 
         // Decision 105b, on load as well as on a vault change: a losing version can have been filed
@@ -484,7 +491,7 @@ final class PaneController: NSObject {
         // Empty filename rather than a made-up one: the web layer reads it as "no note", so ⌃X and
         // the pin decline rather than acting on a file that does not exist.
         editor.call("loadNote", ["", "", 0, false])
-        hideBanner()
+        hideBannerUnlessHeld()
         if isVisible { editor.focusEditor() }
     }
 
@@ -926,10 +933,14 @@ final class PaneController: NSObject {
                 // most often starts — the old name is in `filenames` and gone from disk.
                 self.followExternalRename(of: current, within: filenames) { [weak self] in
                     guard let self else { return }
-                    // Genuinely gone. The state entry deliberately stays: `VaultIO.write` recreates a
-                    // note deleted elsewhere rather than dropping what is in the buffer, and throwing
-                    // the caret and the pin away here would strand a note that is about to come back.
-                    self.checkVaultStillThere()
+                    // Genuinely gone, and not a rename. Either the whole vault went — which is
+                    // decision 13's "choose vault", not this — or another machine deleted the note
+                    // this pane has open.
+                    if self.vaultIsMissing() {
+                        self.onVaultMissing?()
+                        return
+                    }
+                    self.noteDeletedElsewhere(current)
                 }
                 return
 
@@ -1070,11 +1081,70 @@ final class PaneController: NSObject {
     }
 
     /// Decision 13: a vault that is simply gone must never be silently recreated.
+    /// The three call sites that only want the side effect: a failed read or write is often the
+    /// vault having moved, and decision 13 says ask rather than recreate.
     private func checkVaultStillThere() {
+        if vaultIsMissing() { onVaultMissing?() }
+    }
+
+    private func vaultIsMissing() -> Bool {
         var isDirectory: ObjCBool = false
         let vaultURL = settings.value.vaultURL
         let exists = FileManager.default.fileExists(atPath: vaultURL.path, isDirectory: &isDirectory)
-        if !exists || !isDirectory.boolValue { onVaultMissing?() }
+        return !exists || !isDirectory.boolValue
+    }
+
+    /// Decision 117: another machine deleted the note this pane has open.
+    ///
+    /// **The delete sticks.** Before this the note simply came back: the state entry stayed, nothing
+    /// cancelled the pending write, and `VaultIO.write` recreated the file on the next keystroke
+    /// with everything typed since. No text was lost, which is why it survived so long — but a
+    /// delete made on one machine did not hold on the other, and neither person was told. Pane has
+    /// no save button (decision 10 writes on a 500 ms debounce), so that recreation was never a
+    /// decision anybody made; it was the app overruling a delete automatically and in silence.
+    ///
+    /// **Nothing is lost either.** If the buffer differs from what the vault last held, those edits
+    /// exist nowhere else — the machine that deleted the note never saw them — so they go into
+    /// Recently Deleted, which is the surface that already means "gone, and recoverable for 30 days"
+    /// (decisions 20 and 35). If the buffer matches disk there is nothing only this machine has, and
+    /// nothing is written: the note is already in *that* machine's Recently Deleted, and a second
+    /// copy here would be one the reader never made.
+    ///
+    /// Then the banner names what happened and the pane moves on, exactly as it does after ⌃X.
+    private func noteDeletedElsewhere(_ filename: String) {
+        // First, and before anything can schedule another one: stop the write that would put the
+        // file back. Same ordering argument as `delete` — all vault I/O is one serial queue, and a
+        // write landing after this would recreate the note, which is the bug this method exists to
+        // fix wearing its original face.
+        writeTimer?.cancel()
+        writeTimer = nil
+        writeRequestedWhileWriting = false
+
+        let unsavedEdits = baselineHash != nil && bufferHash != baselineHash
+        let text = bufferText
+
+        // The buffer is no longer bound to a file, so nothing downstream can flush it back.
+        currentFilename = nil
+        baselineHash = nil
+        bufferText = ""
+        unsettledName = nil
+        state.update { $0.notes.removeValue(forKey: filename) }
+        onPinsChanged?()
+
+        let finish: @MainActor () -> Void = { [weak self] in
+            guard let self else { return }
+            self.showBanner(.deletedElsewhere)
+            // Set before the open, because the open is what would clear it.
+            self.bannerHeldThroughNextLoad = true
+            self.openLastUsedNote()
+            self.refreshSwitcherIfOpen()
+        }
+
+        if unsavedEdits {
+            vault.keepDeleted(filename, text: text) { _ in finish() }
+        } else {
+            vault.forgetIndexed(filename) { finish() }
+        }
     }
 
     // MARK: - Switcher
@@ -1161,6 +1231,23 @@ final class PaneController: NSObject {
 
     private func showBanner(_ banner: Banner) {
         editor.call("showBanner", [banner.kind, banner.text])
+    }
+
+    /// A banner normally belongs to the note it was raised for, so loading a note clears it.
+    ///
+    /// One state has to outlive that, and it is decision 117's: "Deleted on another device" is
+    /// raised *because* the pane is about to switch notes, so the switch it explains would otherwise
+    /// be the thing that erased it. Held for exactly one load and then released — a flag rather than
+    /// a second banner channel, because the banner is one row (decision 25) and this is one of its
+    /// states, not a new piece of chrome.
+    private var bannerHeldThroughNextLoad = false
+
+    private func hideBannerUnlessHeld() {
+        if bannerHeldThroughNextLoad {
+            bannerHeldThroughNextLoad = false
+            return
+        }
+        hideBanner()
     }
 
     private func hideBanner() {

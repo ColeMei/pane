@@ -137,19 +137,56 @@ public enum RecentlyDeleted {
         }
 
         try FileManager.default.createDirectory(at: store, withIntermediateDirectories: true)
+        let (name, stampedAt) = freeName(for: filename, in: store, at: now, timeZone: timeZone)
+        try move(from: source, to: store.appendingPathComponent(name))
+        return DeletedNote(storedName: name, originalName: filename, deletedAt: stampedAt)
+    }
 
-        // Two deletes of the same note inside one second would collide. Walking the clock forward
-        // keeps the name fixed-width — which the parser depends on — and costs at most a few seconds
-        // of accuracy on a retention measured in days.
+    /// Puts *text* into the holding folder under `filename`'s name, with no file to move.
+    ///
+    /// The delete-happened-elsewhere case (decision 117). `accept` moves a note out of the vault,
+    /// and by the time we hear that another machine deleted the open note there is nothing left in
+    /// the vault to move — the only copy of the unsaved edits is the buffer in this process. So this
+    /// takes the bytes directly.
+    ///
+    /// It is deliberately the same folder, the same stored-name format and the same parser: a note
+    /// kept this way restores, lists and purges exactly like one the user deleted here, because from
+    /// the reader's side it *is* one — a note that is gone and that they may want back.
+    @discardableResult
+    public static func keep(
+        _ text: String,
+        as filename: String,
+        into store: URL,
+        at now: Date = Date(),
+        timeZone: TimeZone = .current
+    ) throws -> DeletedNote {
+        try FileManager.default.createDirectory(at: store, withIntermediateDirectories: true)
+        let (name, stampedAt) = freeName(for: filename, in: store, at: now, timeZone: timeZone)
+        // Normalised on the way in, the same as every other write (decision 10) — a restored note
+        // must not differ from the one that was deleted by a trailing newline.
+        let body = MarkdownDocument.normalizeTrailingNewline(text)
+        try body.write(to: store.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        return DeletedNote(storedName: name, originalName: filename, deletedAt: stampedAt)
+    }
+
+    /// A stored name nothing is using yet, and the timestamp that goes with it.
+    ///
+    /// Two deletes of the same note inside one second would collide. Walking the clock forward keeps
+    /// the name fixed-width — which the parser depends on (decision 35) — and costs at most a few
+    /// seconds of accuracy on a retention measured in days.
+    private static func freeName(
+        for filename: String,
+        in store: URL,
+        at now: Date,
+        timeZone: TimeZone
+    ) -> (String, Date) {
         var stampedAt = now
         var name = storedName(original: filename, deletedAt: stampedAt, timeZone: timeZone)
         while FileManager.default.fileExists(atPath: store.appendingPathComponent(name).path) {
             stampedAt = stampedAt.addingTimeInterval(1)
             name = storedName(original: filename, deletedAt: stampedAt, timeZone: timeZone)
         }
-
-        try move(from: source, to: store.appendingPathComponent(name))
-        return DeletedNote(storedName: name, originalName: filename, deletedAt: stampedAt)
+        return (name, stampedAt)
     }
 
     // MARK: - Listing

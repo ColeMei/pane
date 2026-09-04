@@ -426,6 +426,33 @@ final class VaultService: @unchecked Sendable {
         }
     }
 
+    /// Keeps the buffer's text in Recently Deleted for a note that is already gone from the vault.
+    ///
+    /// Decision 117. `delete` above moves a file; this one has no file to move, because the machine
+    /// that deleted the note took it. What is left is the text in this process, and if it differs
+    /// from what the vault last held, this is the only copy of it anywhere.
+    ///
+    /// On the serial queue like every other vault operation, which is also what orders it against a
+    /// write already in flight (decision 56).
+    func keepDeleted(_ filename: String, text: String, completion: @escaping @MainActor (Bool) -> Void) {
+        queue.async {
+            var ok = false
+            if let store = self.deletedStore {
+                ok = (try? RecentlyDeleted.keep(text, as: filename, into: store)) != nil
+            }
+            self.index.forget(filename)
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(ok) } }
+        }
+    }
+
+    /// Drops a note from the index without touching any file — it is already gone from the vault.
+    func forgetIndexed(_ filename: String, completion: @escaping @MainActor () -> Void) {
+        queue.async {
+            self.index.forget(filename)
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion() } }
+        }
+    }
+
     // MARK: - Recently Deleted
 
     /// Resolved once, and — like `vaultURL` and the index — only ever touched from `queue`, which is

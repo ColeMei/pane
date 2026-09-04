@@ -205,5 +205,76 @@ func runRecentlyDeletedTests() {
                 )
             }
         }
+
+        // ---- Decision 117: a note deleted on another machine ----------------------------------
+        //
+        // `accept` cannot serve this: by the time the delete reaches us the vault has no file left
+        // to move, and the only copy of the unsaved edits is the buffer in the running process.
+
+        Check.test("a note deleted elsewhere keeps its unsaved text with no file to move") {
+            let store = tempDirectory("deleted")
+
+            let record = try? RecentlyDeleted.keep(
+                "# Standup\n\nTyped after the other machine deleted it",
+                as: "2026-08-11-1453-standup.md",
+                into: store,
+                at: at("2026-08-16T01:45:30Z"), timeZone: utc
+            )
+
+            Check.equal(record?.originalName, "2026-08-11-1453-standup.md")
+            Check.equal(
+                names(in: store),
+                ["20260816-014530--2026-08-11-1453-standup.md"],
+                "the same stored-name format as a note deleted here, because it is the same thing"
+            )
+            let body = try? String(
+                contentsOf: store.appendingPathComponent("20260816-014530--2026-08-11-1453-standup.md"),
+                encoding: .utf8
+            )
+            Check.equal(
+                body,
+                "# Standup\n\nTyped after the other machine deleted it\n",
+                "the buffer's text, with decision 10's single trailing newline"
+            )
+        }
+
+        Check.test("a kept note restores and lists exactly like a deleted one") {
+            let vault = tempDirectory("vault")
+            let store = tempDirectory("deleted")
+
+            try? RecentlyDeleted.keep(
+                "# Standup\n", as: "2026-08-11-1453-standup.md", into: store,
+                at: at("2026-08-16T01:45:30Z"), timeZone: utc
+            )
+
+            Check.equal(
+                RecentlyDeleted.list(in: store, timeZone: utc).map(\.originalName),
+                ["2026-08-11-1453-standup.md"],
+                "it must appear in the restore list"
+            )
+            let back = try? RecentlyDeleted.restore(
+                "20260816-014530--2026-08-11-1453-standup.md", from: store, into: vault
+            )
+            Check.equal(back, "2026-08-11-1453-standup.md")
+            Check.equal(names(in: vault), ["2026-08-11-1453-standup.md"])
+            Check.equal(names(in: store), [], "and leave the holding folder when it does")
+        }
+
+        Check.test("two notes kept in the same second do not collide") {
+            let store = tempDirectory("deleted")
+            let when = at("2026-08-16T01:45:30Z")
+
+            try? RecentlyDeleted.keep("first", as: "2026-08-11-1453-note.md", into: store, at: when, timeZone: utc)
+            try? RecentlyDeleted.keep("second", as: "2026-08-11-1453-note.md", into: store, at: when, timeZone: utc)
+
+            Check.equal(
+                names(in: store),
+                [
+                    "20260816-014530--2026-08-11-1453-note.md",
+                    "20260816-014531--2026-08-11-1453-note.md",
+                ],
+                "the clock walks forward rather than one overwriting the other"
+            )
+        }
     }
 }
