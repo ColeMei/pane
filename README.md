@@ -96,10 +96,15 @@ apps have uses the same key, so your fingers carry over.
 Plain `.md` files, `~/Documents/Pane` by default. What's in the file is what you typed, byte for
 byte — no frontmatter, no database.
 
-Filenames are frozen at creation (`2026-08-11-1453-first-few-words.md`) and the title is just the
-first line, so editing a title never renames a file. Renames are the biggest single source of
-duplicate copies in iCloud Drive and Syncthing. Caret positions, pins and window geometry live in
-`~/Library/Application Support/Pane/`, outside the vault, never synced.
+A note's title is just its first line, and the filename follows that line while you're still in the
+note — `2026-08-11-1453-first-few-words.md`. Leave the note and the name is frozen for good; the
+timestamp never moves at all. Renames are the biggest single source of duplicate copies in iCloud
+Drive and Syncthing, which is exactly why they're confined to a note's first few minutes, while
+it's still on screen and before your sync has done much with the file. **Rename File…** in
+<kbd>⌘K</kbd> is there for when you want a different name anyway.
+
+Caret positions, pins and window geometry live in `~/Library/Application Support/Pane/`, outside
+the vault, never synced.
 
 ## Settings
 
