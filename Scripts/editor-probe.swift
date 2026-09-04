@@ -66,7 +66,10 @@ final class Runner: NSObject, WKNavigationDelegate {
         const key = Object.keys(content).find((k) => content[k] && content[k].view);
         const view = content[key].view;
         const bar = document.getElementById("format-bar");
-        return JSON.stringify(module.run(view, bar, document));
+        // Awaited, so a suite can wait on a real timer — the tooltip delay cannot be asserted any
+        // other way. `await` on a plain object is the object, so every synchronous suite is
+        // unaffected.
+        return JSON.stringify(await module.run(view, bar, document));
         """
         do {
             let raw = try await web.callAsyncJavaScript(script, contentWorld: .page)
