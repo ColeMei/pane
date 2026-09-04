@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in Pane behaved wrongly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Almost every fault in Pane has been found by someone using it and reporting what they saw.
+        If something felt wrong but you can't say why, that is still worth filing.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, and what Pane did instead of what you expected.
+      placeholder: |
+        I pressed ⇧⌘7 with the caret in a nested list item and the level above it converted too.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Pane version
+      description: Settings → About, or the version of the disk image you installed.
+      placeholder: "0.6.4"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "14.6, Apple silicon"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: vault
+    attributes:
+      label: Where your notes folder lives
+      description: >
+        Sync providers cause a specific family of faults — a file changing underneath Pane, a note
+        arriving late, two machines writing at once — so this narrows things down quickly.
+      options:
+        - Local disk only
+        - iCloud Drive
+        - Dropbox, Google Drive or OneDrive
+        - Syncthing
+        - Something else
+    validations:
+      required: true
+
+  - type: dropdown
+    id: persists
+    attributes:
+      label: Does it survive quitting Pane?
+      options:
+        - "Yes — it happens again after a restart"
+        - "No — a restart cleared it"
+        - "Haven't tried"
+    validations:
+      required: true
+
+  - type: textarea
+    id: anything
+    attributes:
+      label: Anything else
+      description: >
+        A screenshot, the note's raw markdown, or what the file on disk looks like, if any of those
+        are part of the story.
+    validations:
+      required: false

@@ -1,0 +1,38 @@
+name: Idea
+description: Suggest something Pane should do
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the **Deliberately not in scope** list in
+        [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) first — several popular requests have
+        already been decided against, and the list says which.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you'd like Pane to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: moment
+    attributes:
+      label: The moment it would have helped
+      description: >
+        The last time you actually wanted this, and what you did instead. Concrete beats general —
+        it's the difference between a feature and a request.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: The scope test
+      description: >
+        Pane is a panel you summon over your work, write in, and dismiss. Every feature that makes
+        it more like a full notes app makes it less like the thing that was wanted.
+      options:
+        - label: This helps the first ten seconds after the hotkey.
+          required: false
