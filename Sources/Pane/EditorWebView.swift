@@ -195,7 +195,7 @@ final class EditorWebView: NSView {
         configuration.websiteDataStore = .nonPersistent()
         configuration.suppressesIncrementalRendering = false
 
-        webView = WKWebView(frame: frameRect, configuration: configuration)
+        webView = ClickThroughWebView(frame: frameRect, configuration: configuration)
         super.init(frame: frameRect)
 
         configuration.userContentController.add(bridge, name: "pane")
@@ -369,6 +369,32 @@ final class EditorWebView: NSView {
     ///
     /// Nil until the web layer has reported one, which is a real state: `reportDragRegions` runs
     /// after the first layout, and a hover read before then must simply not light the dot.
+    /// **This override is on the wrong view to matter, and is kept only to say so.**
+    ///
+    /// `EditorWebView` is a container: the `WKWebView` is a *subview* of it (see `addSubview` in
+    /// `init`), and AppKit asks `acceptsFirstMouse` of the view a click hit-tests to. That is the web
+    /// view, never this one. Overriding it here changed nothing and was reported as still broken —
+    /// the real answer is `ClickThroughWebView` at the bottom of this file.
+    ///
+    /// `NSView` returns false here, which is right for a document window — you click it to bring it
+    /// forward, and you would not want that click also pressing whatever was under it. **A floating
+    /// utility panel is the opposite case.** The pane is summoned over the app you are working in and
+    /// deliberately never activates (decision 9); a click on ⌘K is a click on ⌘K, and spending it on
+    /// focus means every action costs two clicks and the first one silently does nothing.
+    ///
+    /// Reported from use, and it presents exactly as AppKit swallowing the click: the button takes
+    /// its pressed fill, because the page does receive the mouse-down (decision 107 measured that a
+    /// click *is* delivered even when moves are not), and then nothing happens.
+    ///
+    /// **Not reproducible with synthetic events**, which is worth writing down rather than treating
+    /// as doubt: a `CGEvent` posted at `cghidEventTap` enters below the window server's first-click
+    /// arbitration, so a driver clicks straight through and always "passes". The harness cannot see
+    /// this class of fault at all.
+    ///
+    /// Spotlight and Raycast both behave this way, and it is what makes a panel feel like a panel
+    /// rather than a window.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     /// Where the pointer is, in the page's own top-left coordinates — the inverse of the flip below.
     ///
     /// Decision 120: the page cannot find this out for itself. In Pane's real configuration a
@@ -394,6 +420,30 @@ final class EditorWebView: NSView {
         )
         return window.convertToScreen(convert(flipped, to: nil))
     }
+}
+
+/// A `WKWebView` whose first click acts instead of being spent on focusing the window.
+///
+/// `NSView` answers false here, which is right for a document window — you click it to bring it
+/// forward, and that click should not also press whatever was under it. **A floating utility panel is
+/// the opposite case.** The pane is summoned over the app you are working in and deliberately never
+/// activates (decision 9), so a click on ⌘K is a click on ⌘K; spending it on focus makes every action
+/// cost two clicks, with the first silently doing nothing.
+///
+/// Reported from use, and it presents exactly as AppKit swallowing the click: the button takes its
+/// pressed fill — the page does receive the mouse-down, which decision 107 measured — and then
+/// nothing happens.
+///
+/// **It has to be on this class and not on `EditorWebView`.** That one is a container and the web
+/// view is its subview, so AppKit never asks it. The first attempt put the override there, changed
+/// nothing, and the build came back reported as unfixed.
+///
+/// **Not reproducible with synthetic events**, which is worth writing down rather than treating as
+/// doubt: a `CGEvent` posted at `cghidEventTap` enters below the window server's first-click
+/// arbitration, so a driver clicks straight through and always passes. The harness cannot see this
+/// class of fault at all — three runs with the unfocused precondition asserted said it was fine.
+private final class ClickThroughWebView: WKWebView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 /// Holds the `WKScriptMessageHandler` conformance so the web view does not retain the view that owns
@@ -473,6 +523,10 @@ private final class DragOverlayView: NSView {
         }
         return hit ? self : nil
     }
+
+    /// Same reasoning as `EditorWebView`'s: dragging the pane by its title bar should not need the
+    /// pane focused first. Without this the first drag on an unfocused pane only focuses it.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         window?.performDrag(with: event)
