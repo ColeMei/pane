@@ -15,9 +15,9 @@ jobs:
   release:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: lts/*
           cache: npm
@@ -29,6 +29,21 @@ jobs:
 
       - name: Test PaneKit
         run: Scripts/test.sh
+
+      # Same five suites as CI. The tag is the moment with the least room for "we'll catch it next
+      # time", and this workflow used to run the Foundation suite alone — so a tag pushed from a
+      # tree CI had never seen shipped with 429 assertions unrun.
+      - name: Build the editor bundle
+        run: node build.mjs
+        working-directory: Editor
+
+      - name: Test the editor
+        run: |
+          set -euo pipefail
+          Scripts/test-editor.sh --skip-editor
+          Scripts/test-markdown.sh --skip-editor
+          Scripts/test-switcher.sh --skip-editor
+          Scripts/test-tooltip.sh --skip-editor
 
       - name: Version from the tag
         id: version
