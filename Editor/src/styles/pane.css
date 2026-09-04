@@ -553,8 +553,33 @@ body {
   font-size: 13.5px;
 }
 
-/* The U reads as underline only if it is underlined — the S beside it has strikethrough for the
- * same reason.
+/* Each letter is drawn in the effect it applies, which is the whole reason these four are type and
+ * not icons: the control is a *specimen* of what it does rather than a picture of it, and no drawn
+ * glyph can be that.
+ *
+ * Three of the four were not, and had never been. `format-bar__bold`, `__italic` and `__strike` were
+ * assigned in `format-bar.ts` from the beginning and **no rule was ever written for them**, so B, I
+ * and S rendered as plain characters — while the comment here claimed "the S beside it has
+ * strikethrough for the same reason", describing a rule that did not exist. Decision 71's trap one
+ * step worse: not a declaration that loses, but a hook with nothing on the other end. Reported by
+ * eye, off the shipped bar.
+ *
+ * The weights and decorations are the type's own, not synthetic: `font-weight` for the B rather than
+ * a stroked outline, real `font-style` for the I. A faux-bolded letter beside a real one is exactly
+ * the tell this is trying to avoid. */
+.format-bar__bold {
+  font-weight: 700;
+}
+
+.format-bar__italic {
+  font-style: italic;
+}
+
+.format-bar__strike {
+  text-decoration: line-through;
+}
+
+/* The U reads as underline only if it is underlined.
  *
  * The offset is 1px rather than 2, and that came out of a report: in a run of B, I, S and U, the U
  * was the one that looked wrong. It is not that it is a letter beside a drawing — B, I and S are
