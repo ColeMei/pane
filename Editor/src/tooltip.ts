@@ -175,9 +175,31 @@ export function mountTooltips(paneEl: HTMLElement): void {
  * in place rather than removed: they are what works in a browser harness and in a key window, and
  * both paths funnel into `scheduleFor`, which is idempotent for a control already showing or armed.
  */
+/**
+ * Marks the control the pointer is over, so CSS has something to key off.
+ *
+ * `:hover` cannot do it, for the reason decision 107 measured and this file's `setPointer` note
+ * repeats: the page receives no mouse events in the configuration the pane is built for. The dot got
+ * `[data-close-hover]` and every other control was left on `:hover`, so the title bar, the format
+ * bar, the find bar and the switcher's row actions all sat inert under the pointer — the bubble named
+ * them and the button underneath it never lit.
+ *
+ * One attribute rather than one per control: the pointer is over exactly one thing at a time, so the
+ * previous holder is cleared before the new one is set.
+ */
+let litControl: HTMLElement | null = null;
+
+function light(target: HTMLElement | null): void {
+  if (target === litControl) return;
+  litControl?.removeAttribute("data-pointer");
+  litControl = target;
+  litControl?.setAttribute("data-pointer", "");
+}
+
 export function setPointer(x: number, y: number): void {
   const el = document.elementFromPoint(x, y) as HTMLElement | null;
   const target = el?.closest?.<HTMLElement>("[data-tip], [data-pane-described]") ?? null;
+  light(target);
   if (!target) {
     // Off every control, which is also the "moved away" signal — the mousemove listener cannot see
     // this, because no mousemove ever arrives.
@@ -190,6 +212,8 @@ export function setPointer(x: number, y: number): void {
 
 export function hideTooltip(): void {
   cancelPending();
+  // The bubble and the lit control come and go together — both answer "what is under the pointer".
+  light(null);
   named = null;
   if (tip) tip.hidden = true;
 }

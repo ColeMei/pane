@@ -297,7 +297,16 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.icon-button:hover {
+/* `:hover` for a key window and a browser harness; `[data-pointer]` for the state the pane is
+ * actually in, where the page receives no mouse events at all (decision 107, decision 120). Both,
+ * because neither covers the other: the attribute is only set while Swift is reporting a position,
+ * and `:hover` is the only thing that works when the page is being driven directly.
+ *
+ * Every `:hover` rule on the chrome carries this pair now. The close dot is the exception and keeps
+ * its own `[data-close-hover]`: it is set from a rect Swift measures rather than from a hit test,
+ * because the dot has to light even where `elementFromPoint` would land on the title bar behind it. */
+.icon-button:hover,
+.icon-button[data-pointer] {
   background: var(--fill-hover);
 }
 
@@ -596,7 +605,8 @@ body {
   text-underline-offset: 1px;
 }
 
-.format-bar button:hover {
+.format-bar button:hover,
+.format-bar button[data-pointer] {
   background: var(--fill-hover);
 }
 
@@ -701,7 +711,8 @@ body {
   transition: transform 120ms ease, background-color 120ms ease;
 }
 
-.find__disclosure:hover {
+.find__disclosure:hover,
+.find__disclosure[data-pointer] {
   background: var(--fill-hover);
 }
 
@@ -768,7 +779,9 @@ body {
 }
 
 .find__step:hover,
-.find__close:hover {
+.find__close:hover,
+.find__step[data-pointer],
+.find__close[data-pointer] {
   background: var(--fill-hover);
   color: var(--text-secondary);
 }

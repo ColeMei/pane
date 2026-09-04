@@ -166,8 +166,33 @@ export async function run(view, bar, doc) {
       squash(text()) === squash(second.getAttribute("aria-label"))
     );
 
+    // ---- and the control under the pointer lights, not just the bubble ------------------------
+    //
+    // Reported alongside the tooltip fix: "only the tooltips — there is no like I hover on that."
+    // Every chrome control still keyed its fill off `:hover`, which never matches here, so the bubble
+    // named a button that stayed inert. Decision 107 gave the close dot `[data-close-hover]` and left
+    // the rest; this is that mechanism generalised, so it is asserted the same way.
+    check(
+      "the control under the pointer is marked, so its fill has something to key off",
+      "second button carries data-pointer",
+      second.hasAttribute("data-pointer") ? "marked" : "not marked",
+      second.hasAttribute("data-pointer")
+    );
+    check(
+      "and only that one is marked",
+      "exactly 1",
+      String(doc.querySelectorAll("[data-pointer]").length),
+      doc.querySelectorAll("[data-pointer]").length === 1
+    );
+
     // Moving off every control is the only "left" signal there is — no mouseout ever arrives.
     window.paneHost.setPointer(4, 4);
+    check(
+      "and the mark goes with the pointer",
+      "nothing marked",
+      String(doc.querySelectorAll("[data-pointer]").length),
+      doc.querySelectorAll("[data-pointer]").length === 0
+    );
     check(
       "and it goes when Swift's pointer moves off every control",
       "hidden",

@@ -218,7 +218,8 @@
   font-size: 12px;
 }
 
-.switcher__action:hover {
+.switcher__action:hover,
+.switcher__action[data-pointer] {
   background: var(--fill-hover);
 }
 
@@ -359,7 +360,8 @@ kbd {
 
 /* Permanent removal. The only control in Pane with no undo behind it, so it reads as danger on
    hover rather than sitting there red and daring you — the row is a restore list first. */
-.switcher__action--danger:hover {
+.switcher__action--danger:hover,
+.switcher__action--danger[data-pointer] {
   color: #d0342c;
 }
 
