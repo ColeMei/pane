@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="artifacts/pane-hero.png" alt="The Pane panel floating over the desktop, showing a markdown note rendered live" width="760">
+  <img src="artifacts/pane-hero.png" alt="The Pane panel floating above a code editor, showing a markdown note rendered live" width="760">
 </p>
 
 Press <kbd>⌃⌥Space</kbd> and a panel floats in over your work, caret already in the note you used
@@ -75,15 +75,15 @@ apps have uses the same key, so your fingers carry over.
 
 <p align="center">
   <img src="artifacts/pane-switcher.png" alt="The note switcher, showing notes grouped into recency bands" width="46%">
-  <img src="artifacts/pane-actions.png" alt="The action panel, listing fourteen actions with their keyboard shortcuts" width="46%">
+  <img src="artifacts/pane-actions.png" alt="The action panel, listing actions with their keyboard shortcuts" width="46%">
 </p>
 
 - **Live markdown**, Typora-style — raw syntax shows only on the caret's line, so the rest of the
   note stays rendered while you type.
 - **<kbd>⌘P</kbd>** switcher: recency bands, fuzzy title match, full-text search. No results?
   <kbd>⏎</kbd> makes a note titled with what you typed.
-- **<kbd>⌘K</kbd>** for everything else — find, export, reveal in Finder, hide from screen capture,
-  recently deleted — so the title bar stays at three icons.
+- **<kbd>⌘K</kbd>** for everything else — find, export, reveal in Finder, rename the file, hide from
+  screen capture, recently deleted — so the title bar stays at three icons.
 - **Deleted notes are recoverable** for as long as you choose, and they wait outside your vault so
   they don't sync back.
 - Height follows the note until you drag it. Floats over fullscreen apps, follows you between
@@ -113,8 +113,8 @@ the vault, never synced.
   <img src="artifacts/pane-dark.png" alt="The same note in dark mode" width="46%">
 </p>
 
-<kbd>⌘,</kbd> from any pane. Hotkey recorder, vault location, accent, text size, translucency, and
-a rebindable table for every in-pane shortcut.
+<kbd>⌘,</kbd> from any pane. Hotkey recorder, vault location, what "recent" means in the switcher,
+accent, text size, translucency, and a rebindable table for every in-pane shortcut.
 
 It's all plain JSON in `settings.json`, which Pane watches and re-reads live — so editing it by
 hand, over SSH, or from a dotfiles repo works immediately.
@@ -149,13 +149,19 @@ A SwiftPM package plus a web bundle. No Xcode project, on purpose — everything
 Command Line Tools alone.
 
 ```bash
-Scripts/test.sh                # run the PaneKit suite
+Scripts/test.sh                # the PaneKit suite — pure Foundation, runs anywhere
+Scripts/test-editor.sh         # the formatting commands, in a real WKWebView
+Scripts/test-markdown.sh       # typing markdown, and what it draws
+Scripts/test-switcher.sh       # the two overlays, measured as rectangles
+Scripts/test-tooltip.sh        # when a control names itself, and after how long
 Scripts/build-app.sh --debug   # assemble build/Pane.app
 ```
 
 Swift + AppKit owns the panel, hotkey and file I/O; the editor is CodeMirror 6 in a `WKWebView`.
 No Node process, no Rust core, no Electron. The buffer *is* the markdown — live preview is
 view-only decoration, so what lands on disk is byte-for-byte what you typed.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the rest, including what Pane deliberately won't do.
 
 ## License
 
