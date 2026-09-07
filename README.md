@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <b>An open-source, file-backed alternative to Raycast Notes for macOS.</b>
+  <b>A free, open source alternative to Raycast Notes for macOS.</b>
 </p>
 
 <p align="center">
@@ -23,12 +23,15 @@
   <img src="artifacts/pane-hero.png" alt="The Pane panel floating above a code editor, showing a markdown note rendered live" width="760">
 </p>
 
-Press <kbd>⌃⌥Space</kbd> and a panel floats in over your work, caret already in the note you used
-last. Type. Press it again and it's gone, caret back where it was. No app switch, no save dialog,
-no cold start — summoning Pane doesn't activate it or touch your menu bar.
+Press <kbd>⌃⌥Space</kbd> to bring a floating note over your current app and continue where you
+left off. Write with live Markdown formatting, switch notes with <kbd>⌘P</kbd>, and dismiss the
+panel when you're done. Pane runs independently of Raycast, with unlimited notes and no account
+or subscription.
 
-Your notes are `.md` files in a flat folder you choose. Unlimited, yours, and readable by
-everything else you own.
+<p align="center">
+  <a href="https://github.com/ColeMei/pane/releases/latest"><b>Download for macOS</b></a>
+  · <a href="#install">Installation instructions</a>
+</p>
 
 ## Install
 
@@ -36,15 +39,16 @@ everything else you own.
 brew install --cask ColeMei/pane/pane
 ```
 
-Or download the `.dmg` from the [latest release](https://github.com/ColeMei/pane/releases), open it,
+Or download the `.dmg` from the [latest release](https://github.com/ColeMei/pane/releases/latest), open it,
 and drag `Pane.app` onto the `Applications` folder beside it.
 
 > [!IMPORTANT]
-> **macOS will say Pane "is damaged and can't be opened". It isn't.**
+> **macOS may block Pane on first launch.**
 >
-> That is what Gatekeeper says about any unsigned app, and right-click → Open no longer gets past
-> it. Pane has no Apple Developer ID behind it. Clear the quarantine flag once and it launches
-> normally from then on:
+> Pane is not signed with an Apple Developer ID or notarized by Apple. Depending on your macOS
+> version, Gatekeeper may report that the app is damaged or that its developer cannot be verified.
+> If you installed Pane from this repository's releases or Homebrew cask, you can clear its
+> quarantine flag once:
 >
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/Pane.app
@@ -58,16 +62,22 @@ and drag `Pane.app` onto the `Applications` folder beside it.
 
 ## Coming from Raycast Notes
 
-Pane is built to the same habits on purpose — same summon-and-type feel, and every shortcut both
-apps have uses the same key, so your fingers carry over.
+Pane is built around familiar Raycast Notes habits: summon a floating note, start typing, and use
+keyboard shortcuts to switch notes and run actions. It is a standalone app, so Raycast is not required.
 
 |                | Raycast Notes                    | Pane                                                     |
 | -------------- | -------------------------------- | -------------------------------------------------------- |
 | Notes          | 5 on the free plan, unlimited on Pro | Unlimited                                              |
 | Where they live| Raycast's own storage            | `.md` files in a folder you pick                          |
-| Sync           | Cloud Sync, on Pro               | Whatever you already run — iCloud Drive, Syncthing, git   |
+| Sync           | Cloud Sync, on Pro               | Sync the notes folder between Macs with iCloud Drive or a tool such as Syncthing |
 | Cost           | Free tier + Pro subscription     | Free, MIT, no account                                     |
-| Needs          | The Raycast app                  | Nothing                                                   |
+| App            | Part of Raycast                  | Standalone macOS app; no Raycast required                 |
+
+Pane does not provide its own cloud service or an iPhone or iPad app. Folder sync carries your
+notes between Macs; local settings and window state stay on each Mac.
+
+Raycast plan details: [pricing](https://www.raycast.com/pricing) and
+[Raycast Notes](https://www.raycast.com/core-features/notes), checked September 7, 2026.
 
 *Not affiliated with or endorsed by Raycast Technologies.*
 
@@ -78,33 +88,45 @@ apps have uses the same key, so your fingers carry over.
   <img src="artifacts/pane-actions.png" alt="The action panel, listing actions with their keyboard shortcuts" width="46%">
 </p>
 
-- **Live markdown**, Typora-style — raw syntax shows only on the caret's line, so the rest of the
-  note stays rendered while you type.
-- **<kbd>⌘P</kbd>** switcher: recency bands, fuzzy title match, full-text search. No results?
-  <kbd>⏎</kbd> makes a note titled with what you typed.
-- **<kbd>⌘K</kbd>** for everything else — find, export, reveal in Finder, rename the file, hide from
-  screen capture, recently deleted — so the title bar stays at three icons.
+- **Pick up where you left off.** Summon the panel over your current app with a global hotkey.
+  Pane remembers your last note and each note's caret position.
+- **Write with structure.** Live Markdown keeps headings, lists and code blocks readable while
+  you edit. Raw syntax appears on the caret's line while the rest of the note stays rendered.
+- **Stay in one panel.** <kbd>⌘P</kbd> switches notes with recency groups, fuzzy title matching and
+  full text search. No results? <kbd>⏎</kbd> creates a note with your query as its title.
+  <kbd>⌘K</kbd> brings up actions for find, export, reveal in Finder, file renaming, screen capture
+  privacy and recently deleted notes.
+- **A window that follows your writing.** Height grows with the note until you resize it manually.
+  Float over fullscreen apps, follow Spaces, and choose light or dark appearance.
+- **Fits your routine.** Access Pane from the menu bar or launch it at login.
+- External edits are picked up automatically. If a file changes before Pane saves, it preserves
+  the pending edit in a separate conflict file instead of silently overwriting the external change.
 - **Deleted notes are recoverable** for as long as you choose, and they wait outside your vault so
   they don't sync back.
-- Height follows the note until you drag it. Floats over fullscreen apps, follows you between
-  Spaces, menu bar item, launch at login, light and dark.
-- External edits are picked up automatically, and **Pane never silently overwrites a file that
-  changed underneath it**.
 
 ## Your notes
 
-Plain `.md` files, `~/Documents/Pane` by default. What's in the file is what you typed, byte for
-byte — no frontmatter, no database.
-
-A note's title is just its first line, and the filename follows that line while you're still in the
-note — `2026-08-11-1453-first-few-words.md`. Leave the note and the name is frozen for good; the
-timestamp never moves at all. Renames are the biggest single source of duplicate copies in iCloud
-Drive and Syncthing, which is exactly why they're confined to a note's first few minutes, while
-it's still on screen and before your sync has done much with the file. **Rename File…** in
-<kbd>⌘K</kbd> is there for when you want a different name anyway.
+Notes are plain Markdown files in a folder you choose, `~/Documents/Pane` by default, with no
+added frontmatter or notes database. A note's title is its first line. You can edit the files in
+other apps, and Pane picks up those changes automatically.
 
 Caret positions, pins and window geometry live in `~/Library/Application Support/Pane/`, outside
 the vault, never synced.
+
+<details>
+<summary>File naming and sync details</summary>
+
+While a new note is open, its filename follows the title, for example
+`2026-08-11-1453-first-few-words.md`. Once you leave the note, automatic renaming stops; the
+timestamp stays fixed. This limits filename changes that sync tools need to reconcile.
+Use **Rename File…** in <kbd>⌘K</kbd> whenever you want to rename it yourself.
+
+To sync notes between Macs, choose a folder managed by iCloud Drive or your preferred sync tool
+on each Mac. Pane reads and writes the files; the tool handles transferring them.
+Pane normalizes trailing newlines when saving, so files are not guaranteed to be byte identical
+to text entered or edited elsewhere.
+
+</details>
 
 ## Settings
 
@@ -114,7 +136,8 @@ the vault, never synced.
 </p>
 
 <kbd>⌘,</kbd> from any pane. Hotkey recorder, vault location, what "recent" means in the switcher,
-accent, text size, translucency, and a rebindable table for every in-pane shortcut.
+accent, text size, translucency, and shortcut recorders for navigation and panel actions.
+Additional editor shortcut overrides are available in `settings.json`.
 
 It's all plain JSON in `settings.json`, which Pane watches and re-reads live — so editing it by
 hand, over SSH, or from a dotfiles repo works immediately.
@@ -158,8 +181,8 @@ Scripts/build-app.sh --debug   # assemble build/Pane.app
 ```
 
 Swift + AppKit owns the panel, hotkey and file I/O; the editor is CodeMirror 6 in a `WKWebView`.
-No Node process, no Rust core, no Electron. The buffer *is* the markdown — live preview is
-view-only decoration, so what lands on disk is byte-for-byte what you typed.
+No Node process, no Rust core, no Electron. The buffer *is* the Markdown source. Live preview
+changes its presentation without converting notes to a separate rich text format.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the rest, including what Pane deliberately won't do.
 
