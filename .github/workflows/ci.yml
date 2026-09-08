@@ -1,9 +1,13 @@
 name: CI
 
+# Every branch. Under the two-machine model `main` only moves by fast-forward at a release, so a
+# trigger on `main` alone would gate nothing — the work happens on `dev` and on topic branches, and
+# a topic branch has to be green before it is fast-forwarded onto `dev`. See "Two machines, one
+# line" in the agent brief.
 on:
   push:
     branches:
-      - main
+      - "**"
   pull_request:
 
 jobs:
