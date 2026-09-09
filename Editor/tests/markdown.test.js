@@ -180,8 +180,14 @@ function inspector(view, doc) {
   const marker = (n) => {
     const el = lineEl(n);
     if (!el) return null;
+    // A bullet is a drawn shape rather than a character now (decision 122), so what identifies it
+    // is which shape was asked for. The three names stand in for the three glyphs that used to be
+    // set here, so the cases below still read as "level two draws a ring".
     const bullet = el.querySelector(".pane-list-marker");
-    if (bullet) return bullet.textContent;
+    if (bullet) {
+      const depth = [...bullet.classList].find((c) => c.startsWith("pane-bullet-"));
+      return { "pane-bullet-1": "•", "pane-bullet-2": "◦", "pane-bullet-3": "▪" }[depth] ?? "?";
+    }
     // Trimmed: the rendered box holds the marker *and* the space after it, so that it is the same
     // width as the raw one under the caret. What this reader is asked is which number, not how wide.
     const number = el.querySelector(".pane-list-number");
@@ -227,6 +233,83 @@ function inspector(view, doc) {
     return round(el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft));
   };
 
+  /** The left edge of a marker's **ink**, not of the box it is centred in — decision 122.
+   *
+   * `leftEdge` returns the first painted rect, and an `inline-block` marker paints its whole box,
+   * so it answers "where does the slot start" and not "where is the dot". Those were the same
+   * number while markers were left-aligned in the slot, and the reference's 6.5 is the second one. */
+  const markerInk = (n) => {
+    const el = lineEl(n);
+    const marker = el?.querySelector(".pane-list-marker, .pane-list-number, .pane-task");
+    if (!marker) return null;
+    const rect = (() => {
+      if (marker.classList.contains("pane-task")) return marker.getBoundingClientRect();
+      // A drawn bullet has no text to measure, and its shape is centred in the box by the
+      // stylesheet, so the box's centre *is* the ink's centre. Width is the shape's, not the box's.
+      // The drawn shape is a real element precisely so it can be measured here.
+      const shape = marker.querySelector("i");
+      if (shape) return shape.getBoundingClientRect();
+      const walker = doc.createTreeWalker(marker, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!node.textContent.replace(/\s/g, "").length) continue;
+        const range = doc.createRange();
+        range.selectNodeContents(node);
+        return range.getBoundingClientRect();
+      }
+      return null;
+    })();
+    if (!rect) return null;
+    return { left: round(rect.left), right: round(rect.right),
+             centre: round((rect.left + rect.right) / 2),
+             middle: round((rect.top + rect.bottom) / 2) };
+  };
+
+  /** The vertical middle of the line's own text, to check a marker against — decision 122.
+   *
+   * Every geometry case in this file measured horizontal positions, so a marker painted near the
+   * bottom of its line passed all of them. Reported on sight: "why are the two dots much lower". */
+  const textMiddle = (n) => {
+    const el = lineEl(n);
+    const skip = ["pane-list-marker","pane-list-number","pane-task","pane-syntax-listmark",
+                  "pane-syntax-taskmark"];
+    const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      let p = node.parentElement, inside = false;
+      while (p && p !== el) { if (skip.some((c) => p.classList.contains(c))) { inside = true; break; } p = p.parentElement; }
+      if (inside || !node.textContent.trim().length) continue;
+      const range = doc.createRange();
+      range.selectNodeContents(node);
+      const r = range.getBoundingClientRect();
+      return round((r.top + r.bottom) / 2);
+    }
+    return null;
+  };
+
+  /** Where a given word is actually painted on the line — decision 122.
+   *
+   * `textEdge` answers where the line's first non-marker *node* starts, and that was not enough:
+   * a task's `[ ] ` was literal text at the head of that same node, so the node began in the right
+   * place while every word after it sat 24px right. The question a reader asks is where the words
+   * are, so this finds the word. */
+  const wordEdge = (n, word) => {
+    const el = lineEl(n);
+    if (!el) return null;
+    const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const at = node.textContent.indexOf(word);
+      if (at < 0) continue;
+      const range = doc.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + word.length);
+      const rect = [...range.getClientRects()].filter((r) => r.width > 0)[0];
+      if (rect) return round(rect.left);
+    }
+    return null;
+  };
+
   /** Every decoration class on the line, so a construct can say what it rendered as. */
   const classes = (n) => [...lineEl(n).classList].filter((c) => c.startsWith("pane-")).sort().join(" ");
 
@@ -235,7 +318,7 @@ function inspector(view, doc) {
   const visibleText = (n) => lineEl(n).textContent;
 
   return { lineEl, renderedDepth, depthClasses, marker, leftEdge, textEdge, height, classes,
-           visibleText, contentOrigin };
+           visibleText, contentOrigin, markerInk, wordEdge, textMiddle };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -682,9 +765,12 @@ export function runListGeometry(view, doc) {
   }
   r.check("the step is the 22px the design draws and the reference measures", 22, step);
 
+  // The marker box plus the gap after it — decision 122. It was the box alone, because the box
+  // abutted the text and the only space any marker had was whatever its own glyph left inside the
+  // box: 9.2px after a bullet and 1.4px after a number, both measured, neither intended.
   for (let level = 1; level <= 4; level++) {
-    r.check(`level ${level}'s text sits one marker box right of its marker`,
-      16, texts[level - 1] - markers[level - 1]);
+    r.check(`level ${level}'s text sits one marker box and gap right of its marker`,
+      23.5, texts[level - 1] - markers[level - 1]);
   }
 
   // A list line's marker is where a paragraph's text is, plus the level's indent. The first level is
@@ -698,7 +784,108 @@ export function runListGeometry(view, doc) {
   // leads by 6.5. The absolute numbers are not comparable between the two: the text column is
   // centred with `margin: 0 auto`, so where it starts moves with the pane's width, and the
   // reference was measured in a 496pt window. The **lead** is comparable, and ours was 10.
-  r.check("a first-level marker leads by the 6.5 the reference does", 6.5, i.leftEdge(1) - origin);
+  //
+  // **Superseded by decision 122, and the assertion changes with it.** 6.5 is where a *bullet's
+  // ink* lands, and that is a consequence of centring a 5px glyph in the marker box, not a lead
+  // applied before a left-aligned one. Chasing the number would mean shrinking our dot to the
+  // reference's, which nothing has measured a reason for; what is worth pinning is the model the
+  // number came out of. So the case below asks the question the report asked: **do the three
+  // marker kinds sit on one centre axis**, which is the thing that was visibly wrong.
+  r.check("the marker box starts one lead in from the text column", 1, i.leftEdge(1) - origin);
+
+  // All three kinds, each on its own line, centred on the same axis. Left-aligned, their ink
+  // centres were 2.8px apart at 15px text — a checkbox at 35.0, a number at 35.8 and a bullet at
+  // 33.0 — because each glyph is a different width and each started at the box's left edge.
+  const inkCentre = (text) => {
+    d.load(text + "\npara\n");
+    d.at("para");
+    return i.markerInk(1).centre - i.contentOrigin();
+  };
+  const bulletCentre = inkCentre("- one");
+  for (const [name, text] of [["a number", "1. one"], ["a checkbox", "- [ ] one"]]) {
+    r.check(`${name} centres on the same axis a bullet does`, true,
+      Math.abs(inkCentre(text) - bulletCentre) <= 1,
+      `bullet ${bulletCentre} against ${inkCentre(text)}`);
+  }
+
+  // A marker never wraps inside its own box — decision 122, and reported on sight the moment the
+  // box became a fixed width. An `inline-block` with a fixed width is a block container, so a
+  // marker wider than the box breaks onto a second line *inside* it and the item is drawn two
+  // lines tall with its number stranded above its text. Every geometry case above stayed green,
+  // because they all measure horizontal positions and this fault is vertical.
+  //
+  // Both the widths that can exceed the box: a revealed `2. ` (real text, and wider than the
+  // rendered `2.` it replaces) and a two-digit marker.
+  const oneLineTall = (doc_, line, where) => {
+    d.load(doc_);
+    d.at(where);
+    return i.height(line);
+  };
+  const prose = oneLineTall("para\n", 1, "para");
+  r.check("a numbered item with the caret on it is one line tall",
+    prose, oneLineTall("1. one\n", 1, "one"));
+  r.check("a two-digit numbered item is one line tall",
+    prose, oneLineTall("10. ten\n", 1, "ten"));
+  r.check("a two-digit numbered item is one line tall with the caret away",
+    prose, oneLineTall("10. ten\npara\n", 1, "para"));
+  // The reported reproduction exactly: a second item, caret in it, marker revealed. `2. ` is a
+  // hair over the box where `1. ` is a hair under, which is why one digit was not enough to see it.
+  //
+  // Compared against *itself* with the caret away, not against prose: a second list item carries
+  // decision 55's 8px block gap and is legitimately taller than a paragraph. What must not change
+  // is the item's height when its marker is revealed.
+  r.check("revealing the second item's marker does not change its height",
+    oneLineTall("1. one\n2. two\npara\n", 2, "para"),
+    oneLineTall("1. one\n2. two\npara\n", 2, "two"));
+
+  // Revealing a marker never moves the item's words — decision 122, and a task was the one kind
+  // that did. A bullet's and a number's source is drawn inside the box the widget was occupying,
+  // so the advance is unchanged; a task's `[ ] ` was literal text *after* that box, so putting the
+  // caret on a to-do pushed every word of it right by the width of the brackets.
+  const wordsOf = (doc_, where) => {
+    d.load(doc_);
+    d.at(where);
+    return i.wordEdge(1, "task");
+  };
+  for (const [name, src] of [["an unticked", "- [ ] task one"], ["a ticked", "- [x] task one"]]) {
+    r.check(`revealing ${name} task's marker does not move its words`,
+      wordsOf(src + "\npara\n", "para"), wordsOf(src + "\npara\n", "task"));
+  }
+
+  // A marker sits at the middle of its line, not at the bottom of it — decision 122.
+  //
+  // The bullet is a drawn shape inside the marker span, so it is centred by the span rather than
+  // by the line, and the first version of that centring left both dots sitting a half-line low.
+  // Nothing here saw it: every other geometry case in this file asks where something is from the
+  // left. Two pixels of tolerance, because a glyph's optical middle and its box's middle are not
+  // the same thing and the number is set in the body font.
+  for (const [name, src] of [["a bullet", "- one"], ["a number", "1. one"], ["a checkbox", "- [ ] one"]]) {
+    d.load(src + "\npara\n");
+    d.at("para");
+    const ink = i.markerInk(1);
+    r.check(`${name} sits at the vertical middle of its line`, true,
+      Math.abs(ink.middle - i.textMiddle(1)) <= 2,
+      `marker ${ink.middle} against text ${i.textMiddle(1)}`);
+  }
+
+  // The raw list-marker box must never declare a fixed `width` — decision 122, and this is a
+  // guard on a rule rather than on behaviour because the fault is not reachable from here.
+  //
+  // That box holds real document text ending in the marker's space. Given a fixed width the space
+  // lands in the box's own slack, WebKit refuses to place a caret after it, and the next character
+  // typed goes *in front of* it: a new `- ` item becomes `-a`, which is not a list item at all.
+  // Nothing about the DOM looks different, and this suite cannot see it either — it inserts text
+  // through CodeMirror, while the fault is in WebKit's own insertion into contenteditable. It was
+  // found by typing into the built app and comparing against the previous build. So what is pinned
+  // is the declaration, which is the thing that has to stay true.
+  const listmarkRule = [...doc.styleSheets]
+    .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
+    .find((rule) => rule.selectorText === ".pane-syntax-listmark");
+  r.check("the raw list-marker box is declared", true, !!listmarkRule);
+  r.check("the raw list-marker box sets no fixed width",
+    "", listmarkRule ? listmarkRule.style.getPropertyValue("width") : "?");
+  r.check("the raw list-marker box sets a min-width instead",
+    true, !!listmarkRule && listmarkRule.style.getPropertyValue("min-width") !== "");
 
   // Every kind puts its text in the same place, or a list that mixes kinds looks ragged.
   const textEdgeOf = (text) => {

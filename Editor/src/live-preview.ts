@@ -166,6 +166,16 @@ function insideCode(view: EditorView, pos: number): boolean {
 /** A rendered ordered-list number: `1.` as the reader sees it, not as raw syntax. */
 const numberMark = Decoration.mark({ class: "pane-list-number" });
 
+/** A revealed `[x]` or `[ ]`, in the marker box a checkbox was occupying — decision 122.
+ *
+ * Its own class rather than `rawListMark`'s because the two want opposite widths, and the reason
+ * is what each box contains. A revealed list marker ends in a **space**, and a fixed-width box puts
+ * that space in its own slack where WebKit will not place a caret after it, so the next character
+ * typed goes in front of it. A task marker is `[x]` with the following space hidden separately, so
+ * there is no trailing space to strand — and it needs the fixed width, because `[x]` is wider than
+ * the box and `min-width` would grow it and push the item's words 3px right on reveal. */
+const rawTaskMark = Decoration.mark({ class: "pane-syntax pane-syntax-taskmark" });
+
 /** A rendered task checkbox standing in for the literal `[ ]` or `[x]` in the buffer. */
 class TaskWidget extends WidgetType {
   constructor(
@@ -184,7 +194,11 @@ class TaskWidget extends WidgetType {
   toDOM() {
     const box = document.createElement("span");
     box.className = `pane-task ${this.done ? "pane-task--done" : "pane-task--todo"}`;
-    box.textContent = this.done ? "✓" : "";
+    // Done is a **fill**, drawn in CSS, not a tick glyph. A ✓ set in the body font is a character
+    // with the body font's own optical centre and side bearings, so it never sits square in a box
+    // — and it has to be re-tuned every time the box size changes, which is decision 82's class.
+    // A filled square inside the outline is the same shape at every size and needs no metrics.
+    box.textContent = "";
     box.dataset.paneTask = String(this.pos);
     box.setAttribute("role", "checkbox");
     box.setAttribute("aria-checked", String(this.done));
@@ -215,9 +229,20 @@ class BulletWidget extends WidgetType {
   }
 
   toDOM() {
+    // The shape is drawn in CSS, not set as a character — decision 122.
+    //
+    // `•`, `◦` and `▪` at body size paint 3px, 3px and 7px of ink, so the three levels of one list
+    // were three different sizes and the first was a speck beside a 14px checkbox. Scaling the
+    // font does not fix it either: each glyph has its own ink-to-em ratio, so it takes a different
+    // multiplier per level, and a multiplier that makes `•` right makes `▪` overflow its box. A
+    // drawn shape has the size it is given, at every text size, with no metrics in the way.
     const dot = document.createElement("span");
-    dot.className = "pane-list-marker";
-    dot.textContent = ["•", "◦", "▪"][Math.min(this.depth, 3) - 1] ?? "•";
+    dot.className = `pane-list-marker pane-bullet-${Math.min(this.depth, 3)}`;
+    // A real element rather than a `::before`, so the shape can be measured. A pseudo-element has
+    // no rect any test can read, and the first version of this centring painted both dots a
+    // half-line low with the whole geometry suite green — it could see the marker's box and not
+    // the mark inside it.
+    dot.appendChild(document.createElement("i"));
     return dot;
   }
 }
@@ -522,7 +547,20 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         if (name === "TaskMarker") {
-          if (isActive) return;
+          if (isActive) {
+            // The raw `[ ]` goes in the marker box, exactly as a revealed `-` or `1.` does — and
+            // for the same reason. A bullet and a number reveal without moving anything, because
+            // their source is drawn inside the box the widget was occupying; a task's `[ ] ` was
+            // plain literal text sitting *after* that box, so putting the caret on a to-do pushed
+            // every word of it about 24px right. The only list kind that moved when you looked at
+            // it. `[ ]` is around 13px at the default size, so it fits the box it is borrowing;
+            // wider, it overflows into the gap rather than widening (decision 122).
+            decorations.push(rawTaskMark.range(node.from, node.to));
+            if (doc.sliceString(node.to, node.to + 1) === " ") {
+              decorations.push(hide.range(node.to, node.to + 1));
+            }
+            return;
+          }
           const text = doc.sliceString(node.from, node.to);
           const done = /x/i.test(text);
           decorations.push(
@@ -565,7 +603,15 @@ function buildDecorations(view: EditorView): DecorationSet {
 
           // A task item already has a checkbox standing in for its marker. Drawing a bullet as well
           // gives every to-do two markers, which is not what frame 1b shows.
-          if (!isActive && /^\s*\[[ xX]\]/.test(doc.sliceString(node.to, Math.min(node.to + 6, doc.length)))) {
+          // The trailing space is part of the test, and leaving it out cost a marker.
+          //
+          // A `[ ]` is only a `TaskMarker` to the parser when a space follows it, so `- [ ]` at the
+          // end of a line — which is every line halfway through being deleted — has no task marker
+          // at all. Hiding the `-` there hid it in favour of nothing: the bullet vanished and the
+          // literal `[ ]` dropped out of the marker box to the text column. Decision 121's own
+          // rule, broken one decision later. `[ \t]` rather than `\s`, because a newline is not a
+          // space and the parser does not accept one either.
+          if (/^[ \t]*\[[ xX]\][ \t]/.test(doc.sliceString(node.to, Math.min(node.to + 6, doc.length)))) {
             decorations.push(hide.range(node.from, node.to));
             hideSpaceAfter(node.to);
             return;
@@ -583,6 +629,15 @@ function buildDecorations(view: EditorView): DecorationSet {
             // hold the same characters and are the same width for any number of digits, so the
             // caret arriving on item ten no longer shifts the line — hiding the space here made
             // the rendered box narrower than the raw one by a space.
+            //
+            // **This is load-bearing and decision 122 tried to remove it.** Centring the marker
+            // box centres its *content*, and content ending in a space leaves the visible digits
+            // about 2px left of the box's middle — enough that `1.` reads as flush with a
+            // checkbox's left edge rather than under its centre. Dropping the space fixes that and
+            // breaks two other things at once: the boxes stop matching, so a revealed `10. ` moves
+            // the line again (decision 108), and the only way to keep them matching is a fixed
+            // `width`, which is what put the caret in front of the marker's own space and turned a
+            // new item into `-a`. The space stays; the number is 2px off centre; that is the trade.
             const gap = doc.sliceString(node.to, Math.min(node.to + 1, doc.length)) === " " ? 1 : 0;
             decorations.push(numberMark.range(node.from, node.to + gap));
           } else {

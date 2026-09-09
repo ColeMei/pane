@@ -261,28 +261,50 @@
  * right. `--list-marker-box` is the fixed slot a marker sits in. Every padding below is derived
  * from the three rather than written out — decision 82. */
 :root {
-  --list-lead: 6.5px;
+  /* 6.5 was measured off the reference and encoded as the wrong thing — decision 122.
+   *
+   * A 5px bullet **centred** in a 16px box whose left edge is 1px in lands its ink 6.5px past the
+   * content edge, which is exactly the figure the typography pass read off the screen. Recorded as
+   * a lead applied before a *left-aligned* marker, it was right for the bullet it was measured on
+   * and wrong for every other marker in the box: a checkbox and a `1.` are wider, so left-aligning
+   * them put their ink where nothing had measured it. The lead is the box's own offset, and the
+   * centring below is what puts the bullet back at 6.5. */
+  --list-lead: 1px;
   --list-step: 22px;
   --list-marker-box: 16px;
+  /* The air between the marker box and the text. It was implicitly zero: the box abutted the text
+   * column, so the only gap any marker had was whatever its own glyph left inside the box — 9.2px
+   * for a bullet and 1.4px for a number, measured. The reference's is 7.5px for all of them. */
+  --list-marker-gap: 7.5px;
 }
 
 .pane-list-marker,
 .pane-list-number {
   display: inline-block;
-  width: var(--list-marker-box);
-  margin-left: calc(-1 * var(--list-marker-box));
+  /* `min-width`, never `width` — see `.pane-syntax-listmark` for what a fixed width did to typing.
+   * These boxes hold a number that is real document text, so they take the same treatment even
+   * though the caret is never in one (a caret on the line reveals the raw marker instead). */
+  min-width: var(--list-marker-box);
+  /* Centred, not left-aligned — decision 122. Left-aligned, each marker's ink started at the box
+   * edge and ended wherever its own width took it, so the space before the text was a different
+   * size for every kind of list: 9.2px after a bullet, 1.4px after a number, 3px after a checkbox.
+   * Centred, all three sit on one axis and the gap after them is the box's, not the glyph's. */
+  text-align: center;
+  /* Both margins, and they cancel: the marker is pulled back over its own box *and* the gap, then
+   * gives the gap back, so the widget's net advance is zero and the text stays where the line's
+   * padding put it. Pulling back without giving it back drags every list line 7.5px left. */
+  margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
+  margin-right: var(--list-marker-gap);
 }
 
-/* A number is as wide as its digits once there are two of them.
- *
- * `width: 16px` fits `1. ` and clips nothing, but a revealed `10. ` is wider — and the raw mark
- * below has always had `min-width`, so the caret landing on item ten moved the line 8px right and
- * back. Both boxes hold the same characters now, marker and following space alike, so raw and
- * rendered are the same width by construction rather than by both happening to be under 16. */
-.pane-list-number {
-  width: auto;
-  min-width: var(--list-marker-box);
-}
+/* A number needs nothing of its own: it takes the shared marker box above, `min-width` and
+ * centred. Two earlier attempts at a rule here are worth remembering, because both were reported
+ * on sight. A fixed `width` made the box a block container, so `2. ` wrapped onto a second line
+ * inside it and one list item drew two lines tall; and the same fixed width on the raw marker put
+ * the caret in front of the marker's own trailing space, so the next character typed turned a new
+ * item into `-a`. The trailing space stays inside both boxes (decision 108), which costs the
+ * digits about 2px of centring and buys back a marker that never moves the line. */
+
 
 /* A rendered marker takes no selection highlight, and the reason is geometry rather than taste.
  *
@@ -309,25 +331,56 @@
   user-select: none;
 }
 
-/* A revealed marker sits in the same box the rendered one does, or the line jumps 16px right the
- * moment the caret arrives on it — see `rawListMark` in live-preview.ts. `min-width` rather than
- * `width`, because `1. ` is wider than `- ` and neither may be clipped. */
+/* A revealed task marker: fixed width, because it carries no trailing space to strand and `[x]`
+ * is wider than the box, so `min-width` would grow it and push the item's words 3px right on
+ * reveal. `nowrap` so it overflows into the gap instead of breaking in two. */
+.pane-syntax-taskmark {
+  display: inline-block;
+  width: var(--list-marker-box);
+  white-space: nowrap;
+  text-align: center;
+  margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
+  margin-right: var(--list-marker-gap);
+}
+
+/* A revealed list marker sits in the same box the rendered one does, or the line jumps 16px right
+ * the moment the caret arrives on it — see `rawListMark` in live-preview.ts.
+ *
+ * **`min-width`, never `width`, and this one cost a typing bug.** This box holds real document
+ * text ending in the marker's own space, and a fixed-width `inline-block` is a block container:
+ * that space lands in the box's slack, where WebKit will not place a caret after it. So a caret
+ * CodeMirror had put at the end of `- ` resolved to the position *before* the space, and the next
+ * character typed went between the hyphen and its space — turning a new list item into `-a`, which
+ * is not a list item at all and draws as a continuation of the item above. Measured against both
+ * builds by typing into them: `min-width` gives `- a`, `width` gives `-a`. Nothing in the DOM
+ * differs, and no suite here can see it — they insert through CodeMirror, and this is WebKit's own
+ * insertion into contenteditable. */
 .pane-syntax-listmark {
   display: inline-block;
   min-width: var(--list-marker-box);
-  margin-left: calc(-1 * var(--list-marker-box));
+  text-align: center;
+  margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
+  margin-right: var(--list-marker-gap);
 }
 
-/* Lead-in, plus the marker's box back, plus one step a level. */
-.cm-line.pane-line-li-1 { padding-left: calc(var(--list-lead) + var(--list-marker-box)); }
+/* Lead-in, plus the marker's box and the gap after it back, plus one step a level. */
+.cm-line.pane-line-li-1 {
+  padding-left: calc(var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap));
+}
 .cm-line.pane-line-li-2 {
-  padding-left: calc(var(--list-lead) + var(--list-marker-box) + var(--list-step));
+  padding-left: calc(
+    var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap) + var(--list-step)
+  );
 }
 .cm-line.pane-line-li-3 {
-  padding-left: calc(var(--list-lead) + var(--list-marker-box) + 2 * var(--list-step));
+  padding-left: calc(
+    var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap) + 2 * var(--list-step)
+  );
 }
 .cm-line.pane-line-li-4 {
-  padding-left: calc(var(--list-lead) + var(--list-marker-box) + 3 * var(--list-step));
+  padding-left: calc(
+    var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap) + 3 * var(--list-step)
+  );
 }
 
 /* The padding a collapsed fence was standing in for — see `fenceOpenRaw` in live-preview.ts. Only
@@ -422,6 +475,60 @@
   color: var(--accent);
 }
 
+/* A bullet is a drawn shape, not a character — decision 122. See `BulletWidget` for why.
+ *
+ * 5px at the default text size, which is the reference's, and a third of the text size so it holds
+ * at every other one. Centred in the line the same way the checkbox is: `vertical-align: top` and
+ * a translate of half the difference between the line box and the shape, computed rather than
+ * tuned, because text size is a setting from 10 to 32 (decision 82). */
+.pane-list-marker {
+  --bullet-size: calc(var(--text-size) / 3);
+  /* Centred by the box rather than by arithmetic.
+   *
+   * The first version copied the checkbox's `translateY((line - size) / 2)`, which is right for
+   * the checkbox because that element is itself the marker and sits at the top of the line. Here
+   * the shape is a `::before` *inside* the marker span, so it starts on the span's own baseline
+   * and the translate pushed it a further half-line down: both dots painted near the bottom of
+   * their lines. A flex box centres it against the line's real height with no constant at all,
+   * which is the same fix decision 82 asks for whenever a number is derived from another number. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(var(--text-size) * var(--line-height));
+  vertical-align: top;
+}
+
+.pane-list-marker i {
+  width: var(--bullet-size);
+  height: var(--bullet-size);
+  flex: none;
+}
+
+/* Level one is a filled dot, level two a ring, level three a square: the same three shapes the
+ * glyphs stood for, now at one size instead of three. */
+.pane-bullet-1 i {
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pane-bullet-2 i {
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+
+.pane-bullet-3 i {
+  background: currentColor;
+}
+
+/* **Tabular figures were tried here and reverted, which is worth writing down.** In this face `1`
+ * is narrower than `2`, so `1.` measures 9px against `2.`'s 11 and a numbered list's markers sit
+ * at two slightly different widths; the reference has tabular figures and does not. But tabular
+ * digits are wider, and `1. ` then measures 17.4px against a 16px marker box, so the box grows and
+ * the text on numbered lines lands 1.4px right of the text on every other line. Trading a 2px
+ * raggedness between markers for a 1.4px break in the one column every list shares is a bad trade,
+ * and widening the box is not available either: the distance from a checkbox's left edge to the
+ * text is 22.5px in both apps, measured, and that is the number worth keeping. */
+
 /* The blockquote bar too — same argument, and it is the only thing distinguishing a quote from
  * indented text at a glance. */
 .cm-line.pane-line-quote {
@@ -445,9 +552,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* 13px inside a 16px slot leaves 3px of air before the text. At 15 it sat 1px away and read as
-   * touching the word — aligned, and too close to look aligned. */
-  --checkbox-size: 13px;
+  /* 14px, the reference's figure, measured off a screenshot of both panes side by side rather
+   * than tuned: 15 then 13 then 11 were all guesses, and the report after each was that the box
+   * looked wrong. Centred in the 16px marker box it spans the box almost exactly, which is what
+   * makes a checkbox read as the same kind of object as a bullet rather than as a smaller one. */
+  --checkbox-size: 14px;
   width: var(--checkbox-size);
   height: var(--checkbox-size);
   flex: none;
@@ -455,8 +564,20 @@
    * text after it starts at 26 like a bullet's and a number's. The literal spaces around it are
    * hidden by live preview — two sources for one gap is one too many, which is the rule the
    * leading indentation already follows. */
-  margin-left: -16px;
-  margin-right: 3px;
+  /* Centred in the marker box, with the advance still summing to zero.
+   *
+   * The zero matters: the widget replaces literal source that live preview hides, so anything it
+   * adds moves the whole line, and the first attempt at this shrank the box and quietly took the
+   * text column with it. Both margins are solved from the box, the gap and the checkbox's own
+   * size rather than written down — half the slack on each side, so the box centres, and the two
+   * together cancel the width. */
+  margin-left: calc(
+    (var(--list-marker-box) - var(--checkbox-size)) / 2
+      - var(--list-marker-box) - var(--list-marker-gap)
+  );
+  margin-right: calc(
+    (var(--list-marker-box) - var(--checkbox-size)) / 2 + var(--list-marker-gap)
+  );
   border-radius: 4px;
   /* Centred in the line box, computed rather than tuned.
    *
@@ -473,10 +594,24 @@
   vertical-align: top;
 }
 
+/* Done is the box filled in, not a tick in it.
+ *
+ * The outline stays and a smaller square is painted inside it, which is what the reference draws.
+ * Both numbers derive from the box rather than being picked: the inner square is inset by the same
+ * hairline the border is drawn at plus one, and its corner radius keeps the outer one's proportion,
+ * so the whole thing scales with `--checkbox-size` and there is nothing to re-tune. */
 .pane-task--done {
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  position: relative;
+}
+
+.pane-task--done::after {
+  content: "";
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 2px;
   background: var(--accent);
-  color: #fff;
-  border: none;
 }
 
 .pane-task--todo {

@@ -371,11 +371,20 @@ export function runLayout(view, doc) {
   };
 
   // A marker does not move when the caret arrives on its line.
+  //
+  // Within a pixel for a task, and the pixel is structural rather than slack — decision 122. The
+  // checkbox is 14px centred in the 16px marker box, so it starts 1px inside the box, while the
+  // raw `- [ ] ` that replaces it is text and starts at the box's own edge. What decision 108's
+  // case is protecting is the **line** not moving, and that is exact: both the widget and the raw
+  // mark have a net advance of zero, so the text column is identical either way, asserted
+  // separately in the markdown suite.
   for (const [kind, lineNo] of [["bullet", 1], ["numbered", 3], ["task", 6]]) {
     put(lineNo === 1 ? 4 : 1, 0);
     const away = markerX(lineNo);
     put(lineNo, 2);
-    check(`the ${kind} marker stays put when the caret lands on it`, away, markerX(lineNo));
+    const near = markerX(lineNo);
+    check(`the ${kind} marker stays put when the caret lands on it`, true,
+      Math.abs(near - away) <= (kind === "task" ? 1 : 0));
   }
 
   // A revealed fence keeps the padding the collapsed strip was standing in for.
