@@ -43,7 +43,7 @@ import {
 
 import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
-import { describe, hideTooltip, mountTooltips, setPointer } from "./tooltip";
+import { describe, hideTooltip, mountTooltips, retitle, setPointer } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { contentColumn, listAwareTab, outdentListItem } from "./list-indent";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
@@ -51,7 +51,7 @@ import { renumberOrderedLists } from "./renumber";
 import { mountSwitcher, type NoteSummary } from "./switcher";
 import { MARKDOWN_FORMAT_KEYS, mountFormatBar, setHeading } from "./format-bar";
 import { noteTitle } from "./note-title";
-import { countWords } from "./word-count";
+import { countCharacters, countWords } from "./word-count";
 
 // ---------------------------------------------------------------------------------------------
 // Bridge
@@ -79,6 +79,7 @@ type OutboundMessage =
   | { type: "toggleHideFromCapture" }
   | { type: "toggleAutoSizing" }
   | { type: "toggleSpaceBehaviour" }
+  | { type: "toggleFooterCount" }
   | { type: "duplicateNote"; text: string }
   | { type: "requestDeleted" }
   | { type: "restoreDeleted"; storedName: string }
@@ -144,7 +145,7 @@ const editorTheme = EditorView.theme({
 
 function notifyEdited(view: EditorView): void {
   const text = view.state.doc.toString();
-  wordCountEl.textContent = formatWordCount(countWords(text));
+  renderCount(text);
   showTitle(view.state.doc.iterLines());
   send({ type: "edited", text, caret: view.state.selection.main.head });
   scheduleContentHeight();
@@ -171,8 +172,28 @@ function showTitle(lines: Iterable<string>): void {
   paneTitleEl.textContent = noteTitle(lines) || "Untitled";
 }
 
+/**
+ * The footer's number, and which number it is.
+ *
+ * A click on it swaps the two. There is no control anywhere for this and there should not be: the
+ * number *is* the control, it says which one it is in its own label, and one press puts it back.
+ * `data-tip` names the other one so the bubble answers "what happens if I click this" without the
+ * app explaining itself (decisions 70, 76).
+ */
+let footerCount: "words" | "characters" = "words";
+
 function formatWordCount(n: number): string {
   return `${n} ${n === 1 ? "word" : "words"}`;
+}
+
+function renderCount(text: string): void {
+  if (footerCount === "characters") {
+    const n = countCharacters(text);
+    wordCountEl.textContent = `${n} ${n === 1 ? "character" : "characters"}`;
+  } else {
+    wordCountEl.textContent = formatWordCount(countWords(text));
+  }
+  retitle(wordCountEl, footerCount === "characters" ? "Show words" : "Show characters");
 }
 
 /**
@@ -1221,6 +1242,29 @@ function toggleFormatBar(): void {
   reportDragRegions();
 }
 
+/*
+ * The count swaps on a press of the number itself.
+ *
+ * `mousedown`, and prevented, for the reason the overlay scrim is: the count is a `<span>` outside
+ * CodeMirror, so an ordinary click takes focus off the editor — and an unfocused editor renders the
+ * whole note (decision 53), so reading the count would re-draw the note under the pointer and put
+ * the caret's line back to rendered. Preventing the default keeps the caret exactly where it was.
+ *
+ * Swapped here rather than waiting for Swift to come back through `applySettings`: the round trip is
+ * not synchronous, and a number that changes a frame after the press reads as a lag rather than as a
+ * press. Swift's answer then arrives and agrees.
+ */
+document.getElementById("word-count")!.addEventListener("mousedown", (event) => {
+  event.preventDefault();
+  footerCount = footerCount === "words" ? "characters" : "words";
+  renderCount(view.state.doc.toString());
+  send({ type: "toggleFooterCount" });
+});
+
+// Named from the first frame rather than from the first edit. The markup ships "0 words" as text
+// and nothing had ever set the tip, so an untouched pane had one control the bubble could not name.
+renderCount(view.state.doc.toString());
+
 document.getElementById("format-toggle")!.addEventListener("click", toggleFormatBar);
 closeEl.addEventListener("click", () => send({ type: "close" }));
 document.getElementById("new-note")!.addEventListener("click", () =>
@@ -1517,7 +1561,7 @@ const host = {
     paneEl.toggleAttribute("data-pinned", pinned);
     document.getElementById("pin")!.setAttribute("aria-pressed", String(pinned));
     showTitle(text.split("\n"));
-    wordCountEl.textContent = formatWordCount(countWords(text));
+    renderCount(text);
     scheduleContentHeight();
   },
 
@@ -1575,6 +1619,7 @@ const host = {
     translucent?: boolean;
     themeCSS?: string;
     shortcuts?: Record<string, string>;
+    footerCount?: string;
   }): void {
     const root = document.documentElement;
     if (settings.appearance && settings.appearance !== "system") {
@@ -1590,6 +1635,11 @@ const host = {
     // here is that it goes last in the cascade, after tokens/pane/markdown, so a theme can override
     // any token without !important and without knowing the stylesheet order.
     if (settings.themeCSS !== undefined) themeStyleEl.textContent = settings.themeCSS;
+
+    if (settings.footerCount === "words" || settings.footerCount === "characters") {
+      footerCount = settings.footerCount;
+      renderCount(view.state.doc.toString());
+    }
 
     if (settings.shortcuts) {
       liveShortcuts = { ...DEFAULT_SHORTCUTS, ...settings.shortcuts };

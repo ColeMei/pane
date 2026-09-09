@@ -241,6 +241,24 @@ public struct Settings: Codable, Equatable, Sendable {
 
     public var noteOrder: NoteOrder
 
+    /// What the footer counts, which is a click on the number rather than a control anywhere.
+    ///
+    /// Words is the design's figure and the default. Characters is here because `countWords` splits
+    /// on whitespace, and a note written in Chinese or Japanese has no whitespace to split on — it
+    /// counts one "word" per sentence, which is not a wrong number so much as an unrelated one.
+    ///
+    /// A setting rather than a per-session toggle for the reason `hideFromScreenCapture` is one: the
+    /// reason anyone changes it outlives the pane. No Settings row, like every other toggle that
+    /// belongs to the pane rather than to the app.
+    public enum FooterCount: String, Codable, Equatable, Sendable, CaseIterable {
+        case words
+        case characters
+
+        public var other: FooterCount { self == .words ? .characters : .words }
+    }
+
+    public var footerCount: FooterCount
+
     /// Filename of the markdown theme CSS in the themes folder, or empty for Pane's own.
     ///
     /// Decision 19: a theme *is* a CSS file in a folder, so this is a filename rather than an enum —
@@ -292,6 +310,7 @@ public struct Settings: Codable, Equatable, Sendable {
         accent: String = "#c98a1f",
         markdownTheme: String = "",
         noteOrder: NoteOrder = .modified,
+        footerCount: FooterCount = .words,
         textSize: Double = 15,
         translucentPanes: Bool = true,
         hideFromScreenCapture: Bool = false,
@@ -310,6 +329,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.accent = accent
         self.markdownTheme = markdownTheme
         self.noteOrder = noteOrder
+        self.footerCount = footerCount
         self.textSize = textSize
         self.translucentPanes = translucentPanes
         self.hideFromScreenCapture = hideFromScreenCapture
@@ -345,6 +365,10 @@ public struct Settings: Codable, Equatable, Sendable {
         // not just this key. An order nobody recognises should clamp to the default and no more.
         noteOrder = NoteOrder(rawValue: try c.decodeIfPresent(String.self, forKey: .noteOrder) ?? "")
             ?? d.noteOrder
+        // Decoded as a string for the reason above it.
+        footerCount =
+            FooterCount(rawValue: try c.decodeIfPresent(String.self, forKey: .footerCount) ?? "")
+            ?? d.footerCount
         textSize = try c.decodeIfPresent(Double.self, forKey: .textSize) ?? d.textSize
         translucentPanes = try c.decodeIfPresent(Bool.self, forKey: .translucentPanes) ?? d.translucentPanes
         hideFromScreenCapture =

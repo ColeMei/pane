@@ -1320,6 +1320,7 @@ final class PaneController: NSObject {
                 "appearance": settings.value.appearance.rawValue,
                 "accent": settings.value.accent,
                 "textSize": settings.value.textSize,
+                "footerCount": settings.value.footerCount.rawValue,
                 "translucent": settings.value.translucentPanes,
                 "shortcuts": settings.value.shortcuts,
                 // Decision 19: a theme is a CSS file, so what crosses the bridge is the file's
@@ -1517,6 +1518,18 @@ extension PaneController: EditorWebViewDelegate {
             // Decision 73's rule, reached by a second route: what this changes is invisible until
             // you switch Space, so without a line the key reads as having done nothing at all.
             editor.call("showToast", [now ? "Showing on every Space" : "Keeping to this Space"])
+
+        case .toggleFooterCount:
+            // Read out of the store *before* the update, never inside the closure: `settings.update`
+            // holds a modifying access for the length of it, so `settings.value` in there is a
+            // simultaneous read of the same storage and Swift traps the process on the spot. Every
+            // other toggle here spells the value out first for this reason (`toggleSpaceBehaviour`);
+            // this one did not, and the crash is invisible to every suite because it needs the
+            // message to actually arrive from a running pane.
+            let next = settings.value.footerCount.other
+            // No toast and no label to correct: the number itself changes under the pointer, which
+            // is the whole of the feedback decision 73 asks for.
+            settings.update { $0.footerCount = next }
 
         case .duplicateNote(let text):
             duplicate(text: text)

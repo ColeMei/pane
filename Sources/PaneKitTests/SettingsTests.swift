@@ -62,6 +62,37 @@ func runSettingsTests() {
         }
     }
 
+    Check.suite("Footer count setting") {
+
+        func decode(_ json: String) -> Settings? {
+            try? JSONDecoder().decode(Settings.self, from: Data(json.utf8))
+        }
+
+        Check.test("round-trips through the file") {
+            for count in Settings.FooterCount.allCases {
+                var settings = Settings()
+                settings.footerCount = count
+                let data = try! JSONEncoder().encode(settings)
+                Check.equal(try! JSONDecoder().decode(Settings.self, from: data).footerCount, count)
+            }
+        }
+
+        Check.test("an unknown value costs that field, not the file") {
+            let s = decode(#"{"footerCount": "syllables", "textSize": 21}"#)
+            Check.equal(s?.footerCount, .words)
+            Check.equal(s?.textSize, 21)
+        }
+
+        Check.test("a file written before this setting existed counts words") {
+            Check.equal(decode(#"{"textSize": 15}"#)?.footerCount, .words)
+        }
+
+        Check.test("the other one is the other one, both ways") {
+            Check.equal(Settings.FooterCount.words.other, .characters)
+            Check.equal(Settings.FooterCount.characters.other, .words)
+        }
+    }
+
     Check.suite("Switcher order setting") {
 
         func decode(_ json: String) -> Settings? {

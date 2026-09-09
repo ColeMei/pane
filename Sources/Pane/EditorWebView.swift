@@ -39,6 +39,7 @@ enum PaneMessage {
     /// ⇧⌘/. Auto-sizing is window state, so only Swift can hold it (decision 40).
     case toggleAutoSizing
     case toggleSpaceBehaviour
+    case toggleFooterCount
     /// ⌘D. Carries the buffer rather than re-reading the file, so a duplicate taken mid-sentence
     /// contains the sentence.
     case duplicateNote(text: String)
@@ -114,6 +115,8 @@ enum PaneMessage {
             self = .toggleAutoSizing
         case "toggleSpaceBehaviour":
             self = .toggleSpaceBehaviour
+        case "toggleFooterCount":
+            self = .toggleFooterCount
         case "duplicateNote":
             self = .duplicateNote(text: string("text"))
         case "requestDeleted":

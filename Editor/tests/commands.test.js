@@ -897,11 +897,72 @@ export function runListKinds(view, doc, bar) {
   return { checked, failures };
 }
 
+/**
+ * The number in the footer, and the press that swaps which number it is.
+ *
+ * Two things worth pinning. The count is taken over the note **as it reads** — the same plain text
+ * `countWords` counts — so making a word bold must not lengthen the note by four characters; a
+ * count that moves when you format something is counting the wrong document.
+ *
+ * And the press must not take focus. The count is a `<span>` outside CodeMirror, so an ordinary
+ * click blurs the editor — and an unfocused editor renders the whole note (decision 53), so reading
+ * the count would redraw the note under the pointer and put the caret's line back to rendered. The
+ * assertion is the caret, because that is what a person would notice.
+ */
+export function runFooterCount(view, doc) {
+  const failures = [];
+  let checked = 0;
+
+  const el = doc.getElementById("word-count");
+  const check = (name, want, got) => {
+    checked += 1;
+    if (got !== want) failures.push({ case: `footer count \u00b7 ${name}`, want, got });
+  };
+  const set = (text) =>
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+  const press = () =>
+    el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+
+  set("one two\n");
+  check("words to start with", "2 words", el.textContent);
+
+  press();
+  check("a press swaps it for characters", "7 characters", el.textContent);
+  check("and the bubble names the way back", "Show words", el.getAttribute("data-tip"));
+
+  // Markdown is not text somebody typed at the note. `**one**` is the same seven characters.
+  set("**one** two\n");
+  check("emphasis does not lengthen the note", "7 characters", el.textContent);
+
+  // A line break is structure, not text: breaking a note into paragraphs does not make it longer.
+  set("one two\n\nthree\n");
+  check("nor does a paragraph break", "12 characters", el.textContent);
+
+  set("x\n");
+  check("one is singular", "1 character", el.textContent);
+
+  press();
+  check("and a second press puts words back", "1 word", el.textContent);
+  check("with the bubble the other way round", "Show characters", el.getAttribute("data-tip"));
+
+  // The one that matters. `preventDefault` on mousedown is what keeps the caret where it was.
+  set("hello there\n");
+  view.dispatch({ selection: { anchor: 5 } });
+  view.focus();
+  press();
+  check("the press leaves the caret alone", 5, view.state.selection.main.head);
+  press();
+  check("and the editor still has focus", true, view.hasFocus);
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
 
-  for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips, runListKinds]) {
+  for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips, runListKinds,
+                       runFooterCount]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);

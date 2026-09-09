@@ -38,6 +38,21 @@ function toPlainText(markdown: string): string {
   );
 }
 
+/**
+ * Characters of the note as it reads, which is the other half of the number in the footer.
+ *
+ * Over the same plain text `countWords` counts, for the same reason: markdown punctuation is not
+ * something anybody typed *at* the note, and a count that moves when you make a word bold is
+ * counting the wrong document.
+ *
+ * Spaces included, matching every word processor's "characters (with spaces)" — the count is a
+ * measure of how much note there is, and a space is part of that. Line breaks are not: they are
+ * structure rather than text, and a note broken into more paragraphs is not a longer one.
+ */
+export function countCharacters(markdown: string): number {
+  return [...toPlainText(markdown).replace(/\n/g, "")].length;
+}
+
 export function countWords(markdown: string): number {
   const plain = toPlainText(markdown);
   let count = 0;
