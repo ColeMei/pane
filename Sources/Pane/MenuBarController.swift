@@ -30,11 +30,46 @@ final class MenuBarController: NSObject {
         if let button = item.button {
             button.image = Self.statusImage
             button.toolTip = "Pane — \(hotkey.displayString)"
+            button.target = self
+            button.action = #selector(clicked)
+            // Both buttons, or the action fires on the left one only and a right-click does nothing
+            // at all — the state of this control before the split, since `item.menu` swallowed both.
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         menu.delegate = self
-        item.menu = menu
+        // Deliberately **not** `item.menu`: setting it hands AppKit both buttons and the status
+        // item's own action is never called. The menu is opened by hand in `showMenu` instead.
         rebuild(hotkey: hotkey)
+    }
+
+    /*
+     * Left summons, right opens the menu.
+     *
+     * The convention every menu bar app with one primary action follows, and Pane has exactly one:
+     * the icon is a second way to press the hotkey, for the machine where something else has claimed
+     * it or the week you have not learned it yet. Before this both buttons opened the menu, so the
+     * frequent thing was two clicks away from the icon and the rare thing was one.
+     *
+     * A control-click is a right-click on macOS and always has been, so it goes to the menu too — a
+     * trackpad with secondary click switched off has no other way in.
+     */
+    @objc private func clicked() {
+        let event = NSApp.currentEvent
+        let secondary = event?.type == .rightMouseUp
+            || event?.modifierFlags.contains(.control) == true
+        if secondary { showMenu() } else { onShow?() }
+    }
+
+    /// Pops the menu under the item, with the item highlighted as if AppKit had opened it.
+    ///
+    /// `item.menu` is assigned for the length of one click and taken away again: a status item shows
+    /// its menu on press when it has one, and `performClick` is the only call that gets the highlight
+    /// and the placement right. Left set, it would take the left button back.
+    private func showMenu() {
+        item.menu = menu
+        item.button?.performClick(nil)
+        item.menu = nil
     }
 
     private var hotkey: Hotkey = .defaultSummon
