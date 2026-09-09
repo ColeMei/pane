@@ -783,6 +783,94 @@ export function runListKinds(view, doc, bar) {
   // deliberately does not replace.
   viaKey("⇧⌘B quotes a list rather than replacing it", "- Hi\n- A\n", ["B"], "> - Hi\n> - A\n");
 
+  // --- an empty line ---------------------------------------------------------------------------
+  //
+  // The four block buttons did **nothing at all** on one: no marker, no error, no movement, while
+  // Bold and Code on the same line wrote their markers and parked the caret between them. Reported
+  // as counter-intuitive, and it is: a button that draws itself pressable and then declines reads
+  // as broken.
+  //
+  // The cause is that `blocksIn` skips blank lines by construction — they belong to no block —
+  // which is right for a selection spanning several paragraphs and is the whole reason a blank line
+  // between two of them does not become an empty item. So this is a case, not a relaxation: one
+  // caret, one blank line. The last three assertions here are the skip itself, still holding.
+  //
+  // The separation is the other half, and pandoc found it before the app did: `a\n- ` is a **setext
+  // heading**, `a\n1. ` is a lazy continuation, and an item written directly above a paragraph
+  // swallows it as soon as it has text. A blank line goes in on whichever side is a paragraph.
+  const onBlankLine = (name, start, lineNumber, label, want, wantCaret) => {
+    set(start);
+    view.dispatch({ selection: { anchor: view.state.doc.line(lineNumber).from } });
+    click(label);
+    check(name, want);
+    if (wantCaret !== undefined) {
+      checked += 1;
+      const got = view.state.selection.main.head;
+      if (got !== wantCaret) {
+        failures.push({ case: `list kinds \u00b7 ${name} (caret)`, want: wantCaret, got });
+      }
+    }
+  };
+
+  // The plain case: a blank line with nothing either side of it that needs separating.
+  onBlankLine("a bullet starts on an empty line", "- x\n\n", 2, "Bulleted list",
+    "- x\n- \n", 6);
+  onBlankLine("a task starts on an empty line", "- x\n\n", 2, "Task list",
+    "- x\n- [ ] \n", 10);
+  onBlankLine("a quote starts on an empty line", "- x\n\n", 2, "Quote",
+    "- x\n> \n", 6);
+  onBlankLine("and a numbered item does", "- x\n\n", 2, "Numbered list",
+    "- x\n1. \n", 7);
+
+  // The number is the whole point of the button that writes it, and there is no block to read it
+  // off — so the count comes from the caret's own line. Anchored on `blocks[0]` this wrote `1.`
+  // under a list that had reached two.
+  onBlankLine("a numbered item continues the list above it", "1. a\n2. b\n\n", 3,
+    "Numbered list", "1. a\n2. b\n3. \n", 13);
+  onBlankLine("and starts at one where there is no list above it", "> q\n\n", 2,
+    "Numbered list", "> q\n1. \n", 7);
+
+  // A paragraph above takes a blank line, or the `-` underlines it into a heading.
+  onBlankLine("a paragraph above is separated from the marker", "a\n\n", 2, "Bulleted list",
+    "a\n\n- \n", 5);
+  // And one below takes a blank line, because the item swallows it once it has text in it.
+  onBlankLine("and so is one below", "a\n\nb\n", 2, "Bulleted list",
+    "a\n\n- \n\nb\n", 5);
+  // Nothing is added where the neighbour closes itself.
+  onBlankLine("a heading needs no separating", "# h\n\n", 2, "Bulleted list",
+    "# h\n- \n", 6);
+
+  // Pressing it again takes it off: a marker-only line **is** a block, so this goes back through
+  // the ordinary toggle rather than through anything new.
+  set("- x\n\n");
+  view.dispatch({ selection: { anchor: view.state.doc.line(2).from } });
+  click("Bulleted list");
+  click("Bulleted list");
+  check("and a second press takes it off again", "- x\n\n");
+
+  // The skip, still doing its job. A range is not a caret, and a blank line inside one is still
+  // not a place a marker goes.
+  set("a\n\n\nb\n");
+  view.dispatch({ selection: { anchor: 2, head: 3 } });
+  click("Bulleted list");
+  check("a selection of blank lines alone still writes nothing", "a\n\n\nb\n");
+
+  all("and a blank line between two paragraphs is still not an item", "a\n\nb\n",
+    ["Bulleted list"], "- a\n\n- b\n");
+
+  // A blank line inside a fence is content (decision 90), not a place between blocks.
+  set("```\n\n```\n");
+  view.dispatch({ selection: { anchor: view.state.doc.line(2).from } });
+  click("Bulleted list");
+  check("a blank line inside a code block is left alone", "```\n\n```\n");
+
+  // From the keyboard as well, for the reason the block above this one exists: the bar's buttons
+  // and ⇧⌘7/8/9 were two implementations of one command, and the matrix only ever pressed buttons.
+  set("- x\n\n");
+  view.dispatch({ selection: { anchor: view.state.doc.line(2).from } });
+  key("7");
+  check("⇧⌘7 starts a numbered item on an empty line", "- x\n1. \n");
+
   // The pressed state, which is what made the corruption visible. A task is a bullet in the tree,
   // so Bulleted lit alongside Task on every checkbox before this.
   content.dispatchEvent(new KeyboardEvent("keydown", {

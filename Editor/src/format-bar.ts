@@ -11,9 +11,9 @@
 
 import { syntaxTree } from "@codemirror/language";
 
-import { blocksIn, linesOf } from "./blocks";
+import { blockAt, blocksIn, linesOf } from "./blocks";
 import { describe } from "./tooltip";
-import type { ChangeSet, EditorState } from "@codemirror/state";
+import type { ChangeSet, EditorState, Line } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 interface Button {
@@ -635,6 +635,88 @@ function indentOf(text: string): number {
 }
 
 /**
+ * The blank line a bare caret is sitting on, and nothing else.
+ *
+ * `blocksIn` skips blank lines by construction — they belong to no block — which is right for a
+ * selection spanning several paragraphs and is why a blank line between two of them does not become
+ * an empty list item. Applied to a caret alone on an empty line it meant the four block buttons did
+ * **nothing at all**: no marker, no error, no movement. Bold and Code on the same empty line write
+ * their markers and put the caret between them, because they are inline commands and an empty
+ * selection is a legitimate thing for one to wrap.
+ *
+ * So the blank line is a case rather than a relaxation of the skip: one caret, one line, no
+ * selection. A range that happens to cover only blank lines still yields nothing, which is the
+ * behaviour the skip was written for.
+ *
+ * **A blank line inside a block is not one of these.** `blockAt` returns null only for a line that
+ * sits between blocks; inside a fence a blank line is content (decision 90), and a marker written
+ * there is three literal characters of code.
+ */
+function blankCaretLine(state: EditorState): Line | null {
+  const range = state.selection.main;
+  if (!range.empty || state.selection.ranges.length > 1) return null;
+  const line = state.doc.lineAt(range.head);
+  if (line.text.trim() !== "") return null;
+  return blockAt(state, line.from, 1) ? null : line;
+}
+
+/** Whether line `number` is a paragraph — the one neighbour a new block has to be separated from. */
+function paragraphAt(state: EditorState, number: number): boolean {
+  if (number < 1 || number > state.doc.lines) return false;
+  const line = state.doc.line(number);
+  if (line.text.trim() === "") return false;
+  return blockAt(state, line.from + indentOf(line.text), 1)?.name === "Paragraph";
+}
+
+/**
+ * Starts a block on an empty line, with the caret after the marker.
+ *
+ * **A marker touching a paragraph is not a marker**, and this is decision 108's lazy continuation
+ * one construct over — the first draft wrote the marker and nothing else, and pandoc read the
+ * results as something nobody typed:
+ *
+ *     "a\n- "        ->  <h2>a</h2>          <- a setext underline, not a list at all
+ *     "a\n1. "       ->  <p>a 1.</p>         <- lazy continuation
+ *     "a\n\n- x\nb"   ->  <li>x b</li>        <- the item swallows the paragraph below it
+ *
+ * The first two are why a blank line goes above, the third why one goes below: the item is empty at
+ * the moment it is written and absorbs the next paragraph as soon as it has text in it, which is
+ * after the very next keystroke. Only where the neighbour is a **paragraph** — a heading, a list, a
+ * quote and a rule all close themselves, so nothing needs separating from them, and adding a line
+ * there would be an edit nobody asked for. Same shape as decision 108's rule for *leaving* a list:
+ * one blank line, and only when there is not one already.
+ *
+ * The caret is placed explicitly rather than mapped. Mapping an empty range against an insertion at
+ * its own position depends on the association, and a caret sitting *before* the line's leading
+ * whitespace maps to before the marker — the one position that reads as the button having inserted
+ * the marker somewhere else.
+ *
+ * The caret then lands immediately after a marker's trailing space on its own active line, which is
+ * decision 122's fault to the character: a fixed-width marker box strands that space where WebKit
+ * will not put a caret after it, and the next character typed goes in front of the marker. It is
+ * safe here only because `rawListMark` takes a `min-width` rather than a width, for exactly that
+ * reason — a rule in another file, so this one is checked by typing into the built app.
+ */
+function startBlockOnBlankLine(
+  view: EditorView,
+  line: Line,
+  markerFor: (index: number, indent: number) => string
+): void {
+  const state = view.state;
+  const indent = indentOf(line.text);
+  const at = line.from + indent;
+  const above = paragraphAt(state, line.number - 1) ? "\n" : "";
+  const below = paragraphAt(state, line.number + 1) ? "\n" : "";
+  const marker = markerFor(0, indent);
+  view.dispatch({
+    changes: { from: at, insert: above + marker + below },
+    selection: { anchor: at + above.length + marker.length },
+    userEvent: "input",
+  });
+  view.focus();
+}
+
+/**
  * Puts a marker on **each block** the selection covers, and on nothing else.
  *
  * This replaced a per-*line* prefix, which was wrong three ways at once and all three were visible
@@ -660,7 +742,11 @@ function applyBlockMarker(
 ): void {
   const state = view.state;
   const blocks = blocksIn(state, state.selection.main.from, state.selection.main.to);
-  if (blocks.length === 0) return;
+  if (blocks.length === 0) {
+    const blank = blankCaretLine(state);
+    if (blank) startBlockOnBlankLine(view, blank, markerFor);
+    return;
+  }
 
   const doc = state.doc;
   // Everything is measured after the leading whitespace, not at column zero. A nested item is
@@ -720,7 +806,12 @@ function applyBlockMarker(
 function applyOrderedList(view: EditorView): void {
   const state = view.state;
   const blocks = blocksIn(state, state.selection.main.from, state.selection.main.to);
-  if (blocks.length === 0) return;
+  // The blank line the caret is on is the anchor when there is no block to take one from. Without
+  // this the count is read off `blocks[0]`, which does not exist, and every press on an empty line
+  // under a list that had reached 7 would have written `1.` — the number being the whole point of
+  // the button that writes it.
+  const blank = blocks.length === 0 ? blankCaretLine(state) : null;
+  if (blocks.length === 0 && !blank) return;
 
   // Look past the blank line that separates a paragraph from the list above it — otherwise
   // extending a list always restarts at one, because the line directly above is never the list.
@@ -728,7 +819,7 @@ function applyOrderedList(view: EditorView): void {
   // Only a line at the **same indent** counts. A nested list is a different list, so continuing
   // from its parent would number a new top-level item after the deepest number above it — and
   // continuing from a *child* would be worse still.
-  const firstLine = state.doc.lineAt(blocks[0]!.from);
+  const firstLine = blank ?? state.doc.lineAt(blocks[0]!.from);
   const depth = indentOf(firstLine.text);
   let start = 1;
   for (let n = firstLine.number - 1; n >= 1; n--) {
