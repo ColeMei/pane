@@ -14,6 +14,7 @@ import { syntaxTree } from "@codemirror/language";
 import { blockAt, blocksIn, linesOf } from "./blocks";
 import { describe } from "./tooltip";
 import type { ChangeSet, EditorState, Line } from "@codemirror/state";
+import type { SyntaxNode } from "@lezer/common";
 import { EditorView } from "@codemirror/view";
 
 interface Button {
@@ -660,8 +661,96 @@ function blankCaretLine(state: EditorState): Line | null {
   return blockAt(state, line.from, 1) ? null : line;
 }
 
+/**
+ * Blocks that a line under them can be *swallowed by* — the ones that do not close themselves.
+ *
+ * A heading, a fenced code block and a horizontal rule all end at their own last line, so anything
+ * written under one is a new block whatever it is. A paragraph does not: CommonMark's lazy
+ * continuation pulls the following line into it, and a paragraph inside a list item or a quote does
+ * the same from inside them. Measured against the pane's own renderer for all seven, because the
+ * tree does not say this and pandoc disagrees with it — see `needsSeparation`.
+ */
+const CONTINUING_BLOCKS = new Set(["Paragraph", "ListItem", "Blockquote"]);
+
+/** The innermost list open at a line, and the indent of the item that owns it. */
+function openList(
+  state: EditorState,
+  line: Line
+): { kind: "bullet" | "ordered"; indent: number } | null {
+  if (line.text.trim() === "") return null;
+  let node: SyntaxNode | null = syntaxTree(state).resolveInner(
+    line.from + indentOf(line.text),
+    1
+  );
+  let item: SyntaxNode | null = null;
+  for (; node; node = node.parent) {
+    if (node.name === "ListItem" && !item) item = node;
+    if (node.name === "BulletList" || node.name === "OrderedList") {
+      return {
+        kind: node.name === "BulletList" ? "bullet" : "ordered",
+        indent: indentOf(state.doc.lineAt((item ?? node).from).text),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a **marker-only** line needs a blank line above it to be the block it looks like.
+ *
+ * Reported as an indent going weird: press ⏎ in a bullet list, which leaves `- `, then press
+ * Numbered. The bytes are `- what\n1. ` and they are not wrong — pandoc reads them as a list and
+ * then another list. **The pane's own parser does not**, and the pane is the thing drawing: an
+ * *empty* list item cannot interrupt a paragraph, so `1. ` is a lazy continuation of the paragraph
+ * inside the item above and the line draws as literal text at the item's text column. Decision 108's
+ * lazy continuation again, and the third construct it has turned up in.
+ *
+ * The two parsers agreeing is not available here — they genuinely disagree — so the fix is to write
+ * bytes that cannot be read two ways. A blank line above closes the list and both read it as a new
+ * one, which is why `- what\n\n1. ` renders correctly and `- what\n1. ` does not.
+ *
+ * Three conditions, every one of them measured against the renderer rather than reasoned about:
+ *
+ *   - **Marker-only.** `- what\n1. x` is fine: an item with content interrupts a paragraph happily,
+ *     and so does `- [ ] `, whose `[ ]` *is* content. Only a bare `- ` or `1. ` is empty.
+ *   - **Something above that does not close itself.** A heading and a fence close, so `# h\n1. `
+ *     and a fence's closing line are both fine. A paragraph, a list item and a quote do not.
+ *   - **And not the same list carrying on.** `- what\n- ` is the second item of a list already
+ *     open, which needs no interrupting — this is the ⏎ that put the empty item there in the first
+ *     place, and separating it would turn a tight list loose.
+ */
+function needsSeparation(
+  state: EditorState,
+  line: Line,
+  kind: "bullet" | "ordered",
+  indent: number
+): boolean {
+  if (line.number <= 1) return false;
+  const above = state.doc.line(line.number - 1);
+  if (above.text.trim() === "") return false;
+  // Only at the same indent. A marker indented past the line above it is that line's *content* —
+  // ⏎ then ⇥ then ⇧⌘7 is how a nested list is started, and separating there writes a blank line
+  // into the middle of an item and takes the nesting with it. The nested marker-only line does
+  // render as literal text for as long as it stays empty, which is until the next keystroke; that
+  // is the trade, and it is the transient half of the fault rather than the one anybody reported.
+  if (indent !== indentOf(above.text)) return false;
+  const block = blockAt(state, above.from + indentOf(above.text), 1);
+  if (!block || !CONTINUING_BLOCKS.has(block.name)) return false;
+  const open = openList(state, above);
+  return !(open && open.kind === kind && open.indent === indent);
+}
+
+/** What kind of list a marker starts, or null for a quote — which interrupts a paragraph fine. */
+function kindOf(marker: string): "bullet" | "ordered" | null {
+  if (ORDERED_MARKER.test(marker)) return "ordered";
+  // A task marker is a bullet, but never a *bare* one: `[ ]` is content, so the item is not empty
+  // and nothing above can swallow it.
+  if (TASK_MARKER.test(marker)) return null;
+  return BULLET_MARKER.test(marker) ? "bullet" : null;
+}
+
 /** Whether line `number` is a paragraph — the one neighbour a new block has to be separated from. */
-function paragraphAt(state: EditorState, number: number): boolean {
+function paragraphBelow(state: EditorState, number: number): boolean {
   if (number < 1 || number > state.doc.lines) return false;
   const line = state.doc.line(number);
   if (line.text.trim() === "") return false;
@@ -679,12 +768,11 @@ function paragraphAt(state: EditorState, number: number): boolean {
  *     "a\n1. "       ->  <p>a 1.</p>         <- lazy continuation
  *     "a\n\n- x\nb"   ->  <li>x b</li>        <- the item swallows the paragraph below it
  *
- * The first two are why a blank line goes above, the third why one goes below: the item is empty at
- * the moment it is written and absorbs the next paragraph as soon as it has text in it, which is
- * after the very next keystroke. Only where the neighbour is a **paragraph** — a heading, a list, a
- * quote and a rule all close themselves, so nothing needs separating from them, and adding a line
- * there would be an edit nobody asked for. Same shape as decision 108's rule for *leaving* a list:
- * one blank line, and only when there is not one already.
+ * The first two are why a blank line goes above and `needsSeparation` decides it — the same rule
+ * that stops an empty marker written under a list item being swallowed by it. The third is why one
+ * goes below: the item is empty at the moment it is written and absorbs the paragraph under it as
+ * soon as it has text, which is the very next keystroke. Same shape as decision 108's rule for
+ * *leaving* a list: one blank line, and only where there is not one already.
  *
  * The caret is placed explicitly rather than mapped. Mapping an empty range against an insertion at
  * its own position depends on the association, and a caret sitting *before* the line's leading
@@ -705,9 +793,10 @@ function startBlockOnBlankLine(
   const state = view.state;
   const indent = indentOf(line.text);
   const at = line.from + indent;
-  const above = paragraphAt(state, line.number - 1) ? "\n" : "";
-  const below = paragraphAt(state, line.number + 1) ? "\n" : "";
   const marker = markerFor(0, indent);
+  const kind = kindOf(marker);
+  const above = kind && needsSeparation(state, line, kind, indent) ? "\n" : "";
+  const below = paragraphBelow(state, line.number + 1) ? "\n" : "";
   view.dispatch({
     changes: { from: at, insert: above + marker + below },
     selection: { anchor: at + above.length + marker.length },
@@ -775,6 +864,23 @@ function applyBlockMarker(
     const insert = removing ? "" : markerFor(index, indentOf(first.text));
     const start = markerStart(first);
 
+    // A marker-only line changing kind needs the same blank line a new one does.
+    //
+    // This is the reported case: ⏎ in a bullet list leaves `- `, and Numbered turned it into a line
+    // the pane drew as literal text at the item's text column. An empty item cannot interrupt the
+    // paragraph above it, so `- what\n1. ` is a lazy continuation to this parser — while pandoc
+    // reads it as two lists, which is what made the bytes look right. `needsSeparation` carries the
+    // conditions and the measurements behind them.
+    const kind = removing ? null : kindOf(insert);
+    const empty = text.length === had;
+    const lead =
+      kind && empty && needsSeparation(state, doc.lineAt(first.from), kind, indentOf(first.text))
+        ? "\n"
+        : "";
+
+    // The blank line goes in front of the line's own indentation, not between it and the marker —
+    // `  - ` with the newline after the two spaces is a line of whitespace and an unindented item.
+    if (lead) changes.push({ from: first.from, to: first.from, insert: lead });
     changes.push({ from: start, to: start + had, insert });
 
     // Continuation lines follow the marker in or out, so the text stays aligned under itself.

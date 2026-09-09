@@ -850,8 +850,11 @@ export function runListKinds(view, doc, bar) {
     "- x\n- [ ] \n", 10);
   onBlankLine("a quote starts on an empty line", "- x\n\n", 2, "Quote",
     "- x\n> \n", 6);
-  onBlankLine("and a numbered item does", "- x\n\n", 2, "Numbered list",
-    "- x\n1. \n", 7);
+  // A numbered marker on its own under a bullet item takes a blank line: an empty item cannot
+  // interrupt the paragraph inside the item above, so `- x\n1. ` is a lazy continuation to this
+  // parser and draws as literal text at the item's text column. Measured, not reasoned.
+  onBlankLine("and a numbered item takes a blank line off the list above it", "- x\n\n", 2,
+    "Numbered list", "- x\n\n1. \n", 8);
 
   // The number is the whole point of the button that writes it, and there is no block to read it
   // off — so the count comes from the caret's own line. Anchored on `blocks[0]` this wrote `1.`
@@ -859,7 +862,7 @@ export function runListKinds(view, doc, bar) {
   onBlankLine("a numbered item continues the list above it", "1. a\n2. b\n\n", 3,
     "Numbered list", "1. a\n2. b\n3. \n", 13);
   onBlankLine("and starts at one where there is no list above it", "> q\n\n", 2,
-    "Numbered list", "> q\n1. \n", 7);
+    "Numbered list", "> q\n\n1. \n", 8);
 
   // A paragraph above takes a blank line, or the `-` underlines it into a heading.
   onBlankLine("a paragraph above is separated from the marker", "a\n\n", 2, "Bulleted list",
@@ -895,12 +898,48 @@ export function runListKinds(view, doc, bar) {
   click("Bulleted list");
   check("a blank line inside a code block is left alone", "```\n\n```\n");
 
+  // --- switching an empty item's kind -----------------------------------------------------------
+  //
+  // Reported as an indent going weird: ⏎ in a bullet list leaves `- `, and Numbered turned it into
+  // a line the pane drew as literal text at the item's text column. The bytes were `- what\n1. `
+  // and pandoc reads them as two lists — **the pane's own parser does not**, because an empty item
+  // cannot interrupt the paragraph inside the item above, and the pane is the thing drawing. So the
+  // bytes have to be ones that cannot be read two ways.
+  const kindSwap = (name, start, lineNumber, label, want) => {
+    set(start);
+    view.dispatch({ selection: { anchor: view.state.doc.line(lineNumber).to } });
+    click(label);
+    check(name, want);
+  };
+
+  kindSwap("an empty bullet item becoming numbered takes a blank line", "- what\n- \n", 2,
+    "Numbered list", "- what\n\n1. \n");
+  kindSwap("and an empty numbered item becoming a bullet", "1. a\n1. \n", 2,
+    "Bulleted list", "1. a\n\n- \n");
+  // Not asserted from inside a quote: `> q\n1. ` is *already* one block to this parser — the
+  // paragraph `q 1.` — so the caret on its second visual line is in the quote, and the button
+  // converts the quote, which is what the tree says. The quote's own case is the blank-line one
+  // above, which is the reachable one: you cannot get to this document without passing through it.
+
+  // And the three that must **not** gain a line, each for its own reason.
+  kindSwap("an item with content interrupts a paragraph on its own", "- what\n1. x\n", 2,
+    "Bulleted list", "- what\n- x\n");
+  kindSwap("a task marker is not an empty item — `[ ]` is content", "- what\n- \n", 2,
+    "Task list", "- what\n- [ ] \n");
+  kindSwap("and a heading closes itself", "# h\n- \n", 2,
+    "Numbered list", "# h\n1. \n");
+
+  // A quote is a container rather than a kind and interrupts a paragraph happily, so stacking one
+  // on an item is unchanged — the case the rule must not catch.
+  kindSwap("a quote on a list item still just stacks", "- what\n- x\n", 2,
+    "Quote", "- what\n> - x\n");
+
   // From the keyboard as well, for the reason the block above this one exists: the bar's buttons
   // and ⇧⌘7/8/9 were two implementations of one command, and the matrix only ever pressed buttons.
   set("- x\n\n");
   view.dispatch({ selection: { anchor: view.state.doc.line(2).from } });
   key("7");
-  check("⇧⌘7 starts a numbered item on an empty line", "- x\n1. \n");
+  check("⇧⌘7 starts a numbered item on an empty line", "- x\n\n1. \n");
 
   // The pressed state, which is what made the corruption visible. A task is a bullet in the tree,
   // so Bulleted lit alongside Task on every checkbox before this.
