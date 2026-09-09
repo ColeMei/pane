@@ -65,12 +65,12 @@ final class GeneralSettingsViewController: NSViewController {
         menuBar.state = current.showMenuBarIcon ? .on : .off
         form.row("", menuBar)
 
-        // ---- spaces ------------------------------------------------------------------------
-        let spaces = SettingsForm.checkbox(
-            "Show on every Space", target: self, action: #selector(showOnEverySpaceChanged)
-        )
-        spaces.state = current.showOnEverySpace ? .on : .off
-        form.row("Spaces", spaces)
+        // No Spaces row. `showOnEverySpace` is a ⌘K toggle (decision 93) and ⌘K is where the pane's
+        // own toggles live — the format bar, auto-sizing and hiding from screen capture all persist
+        // to `settings.json` exactly the same way and none of them has a row here. This one had
+        // both, with the labels the opposite way round: a checkbox reading "Show on every Space"
+        // above a row reading "Keep on This Space", which reads as two features and was reported as
+        // two. The row goes; the setting, the ⌘K row and ⌥⌘S are untouched.
 
         // ---- switcher order ----------------------------------------------------------------
         // Behaviour, not appearance, so it is here rather than in Appearance: it changes which note
@@ -95,10 +95,6 @@ final class GeneralSettingsViewController: NSViewController {
         let cases = Settings.NoteOrder.allCases
         guard sender.indexOfSelectedItem >= 0, sender.indexOfSelectedItem < cases.count else { return }
         settings.update { $0.noteOrder = cases[sender.indexOfSelectedItem] }
-    }
-
-    @objc private func showOnEverySpaceChanged(_ sender: NSButton) {
-        settings.update { $0.showOnEverySpace = sender.state == .on }
     }
 
     /// Keeps the recorder honest when the hotkey changed somewhere else — a hand edit to
