@@ -57,6 +57,16 @@ const INLINE_STYLE: Record<string, string> = {
   Strikethrough: "pane-strike",
   InlineCode: "pane-code",
   Link: "pane-link",
+  // CommonMark's `<https://x.com>`. A separate node type from `Link`, and leaving it out meant it
+  // had no owner in `inlineRanges` — so its `<` and `>` fell back to the line rule, and its `URL`
+  // was hidden as a marker with nothing left to show. Decision 121.
+  Autolink: "pane-link",
+  // A bare `https://x.com`, `www.x.com` or `a@b.com`. GFM parses these as a `URL` with no
+  // construct around it at all, so this entry is what gives them the accent — and, because
+  // `INLINE_STYLE` is what `inlineRanges` is built from, what makes them reveal under the caret
+  // like every other inline construct. Guarded below: a `[label](target)` link's `URL` is a
+  // marker, not content, and must not match here.
+  URL: "pane-link",
 };
 
 /**
@@ -480,7 +490,28 @@ function buildDecorations(view: EditorView): DecorationSet {
         // An inline construct goes raw when the selection is *inside it*, not when it is anywhere
         // on the line (decision 57). Putting the caret at the end of a paragraph used to strip the
         // styling off every bold word in it and put four asterisks back on screen.
-        const inlineClass = INLINE_STYLE[name];
+        // Nothing in a note may render as nothing — decision 121, and the rule the two cases below
+        // are both instances of.
+        //
+        // A `URL` is a marker in exactly one place: a `[label](target)` link, where the label is
+        // shown *in the target's place* and hiding it is the whole point. Everywhere else the URL
+        // is the only thing there is to show, so hiding it draws the link as an empty span —
+        // reported against a pasted `https://` one, and equally true of `www.` and email
+        // autolinks, of `<https://x.com>`, and of a `[ref]: target` definition, whose line used to
+        // keep its label and lose the target that is its entire purpose.
+        //
+        // An image is the second instance, and it is settled by scope rather than by rendering:
+        // Pane does not do images. So an image is markdown Pane has decided not to interpret, and
+        // it renders as **the markdown it is** — every character, markers included. Hiding them
+        // drew `![alt](…)` as the bare word `alt`, indistinguishable from prose and with the
+        // target invisible, and drew an alt-less `![](…)` as nothing whatsoever.
+        const parentName =
+          name === "URL" || MARKER_NODES.has(name) ? node.node.parent?.name : undefined;
+        const insideImage = parentName === "Image";
+        const inlineClass =
+          name === "URL" && (parentName === "Link" || parentName === "Autolink" || insideImage)
+            ? undefined
+            : INLINE_STYLE[name];
         if (inlineClass) {
           const revealed = touches(node.from, node.to);
           inlineRanges.push({ from: node.from, to: node.to, revealed });
@@ -567,6 +598,14 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         if (MARKER_NODES.has(name)) {
+          // An image hides none of itself, for the reason above: it is markdown Pane does not
+          // interpret, so every character of it stays on screen.
+          if (insideImage) return;
+          // Inside an `Autolink` the URL is the content and the `<` `>` are the markers, so it
+          // takes neither branch below: the construct's own mark already covers it. A bare URL
+          // never reaches here — it was handled as an inline construct above.
+          if (name === "URL" && parentName !== "Link") return;
+
           // A mark follows whatever it belongs to. Inside an inline construct that is the construct
           // — the `**` appear with the caret and stay hidden while it is elsewhere on the line. A
           // block's marks — a heading's hashes, a quote's `>`, a fence and its language — keep the

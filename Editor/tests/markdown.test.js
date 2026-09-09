@@ -981,6 +981,57 @@ export function runConstructs(view, doc) {
   inline("highlight", "==marked==", "pane-mark");
   inline("a link", "[text](http://x.com)", "pane-link");
 
+  // --- links you can still read (decision 121, issue #1) -----------------------------------------
+  //
+  // `inline` above asks whether the class landed, and it cannot see a construct rendered as
+  // *nothing*: an empty `.pane-link` span satisfies it exactly as a full one does. The report was
+  // that a pasted URL's line goes blank the moment the caret leaves it — the class was there the
+  // whole time. So the question a link has to answer is what the **line says**, which is the one
+  // thing a reader of the note cares about.
+  //
+  // Three forms, and they are three different node shapes rather than one with variations:
+  // GFM's bare autolink is a `URL` with no `Link` around it at all; CommonMark's angle form is a
+  // `Link` whose entire content is the URL; and the labelled form is a `Link` whose content is a
+  // label the URL is not part of. Only the third may hide its URL.
+  const linkReads = (name, typed, wantVisible, wantHidden, wantClass = "pane-link") => {
+    const whole = `before ${typed} after`;
+    d.reset();
+    d.type(whole);
+    d.press("Enter");
+    d.type("elsewhere");
+    d.at("elsewhere");
+    const shown = i.visibleText(1);
+    r.check(`${name} is readable with the caret off its line`, true,
+      shown.includes(wantVisible), `${whole} → "${shown}"`);
+    if (wantHidden) {
+      r.check(`${name} hides its target with the caret off its line`, false,
+        shown.includes(wantHidden), `${whole} → "${shown}"`);
+    }
+    if (wantClass) {
+      r.check(`${name} carries the link class`, true,
+        !!i.lineEl(1).querySelector(`.${wantClass}`), whole);
+    }
+  };
+
+  linkReads("a bare URL", "https://x.com/a/b", "https://x.com/a/b");
+  linkReads("an angle autolink", "<http://x.com>", "http://x.com", "<");
+  linkReads("a labelled link", "[text](http://x.com)", "text", "http://x.com");
+
+  // GFM autolinks the reporter did not mention and the tree found: all three parse as a bare `URL`
+  // exactly as a pasted `https://` one does, so all three were invisible for the same reason.
+  linkReads("a bare www address", "www.x.com/page", "www.x.com/page");
+  linkReads("a bare email address", "someone@example.com", "someone@example.com");
+  linkReads("a bare URL with a query", "https://x.com/a?b=1&c=2", "https://x.com/a?b=1&c=2");
+
+  // Images are out of scope, so an image renders as its own source rather than as a rendering of
+  // something Pane has decided not to render. Both halves matter: `![alt](…)` used to draw the
+  // bare word `alt` with its target invisible, and `![](…)` — no alt text — used to draw nothing
+  // at all, which is this decision's own fault in the one construct nobody reported.
+  // No class assertion: an `Image` is not in `INLINE_STYLE` and its source is plain text.
+  linkReads("an image", "![alt](http://x.com/a.png)", "![alt](http://x.com/a.png)", null, null);
+  linkReads("an image with no alt text", "![](http://x.com/a.png)", "![](http://x.com/a.png)",
+    null, null);
+
   // Underscore emphasis is the other half of CommonMark and a file can arrive carrying it.
   inline("underscore italic", "_italic_", "pane-em");
   inline("underscore bold", "__bold__", "pane-strong");
