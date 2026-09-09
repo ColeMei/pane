@@ -446,6 +446,37 @@ export function runLayout(view, doc) {
   clickMoves("a run of blank lines is still clickable", "alpha\n\n\nbravo\n", 2);
   clickMoves("a blank line inside a fence is content, not a gap", "```\nfirst\n\nlast\n```\n", 3);
 
+  // ---- A quoted list ----------------------------------------------------------------------------
+  //
+  // Two rules setting `padding-left` on one line at equal specificity, so source order decided and
+  // the quote won: the line kept the quote's 12px inset while the marker's -23.5px pull stayed, and
+  // the bullet landed at -11.5px — outside the line's own box, painted on top of the quote's bar.
+  // Decision 71's trap, third time in this file. Reported by eye; asserted as a rectangle, because
+  // the DOM was correct throughout.
+  {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "> - a\n> - b\n" } });
+    // The caret off the line, or it reveals its raw source and there is no widget to measure.
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    const line = lineEl(1);
+    const box = line.getBoundingClientRect();
+    const marker = line.querySelector(".pane-list-marker");
+    const at = marker ? Math.round(marker.getBoundingClientRect().left - box.left) : null;
+    check("a quoted bullet is drawn inside its own line, clear of the bar", true,
+      at !== null && at > 2);
+    // And the inset composes rather than replacing: the quote's 12 plus the list's own column.
+    check("the quoted list line carries both indents", "36.5px", getComputedStyle(line).paddingLeft);
+  }
+
+  // The two it must not have changed.
+  {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "> q\n" } });
+    check("a plain quote is still inset by the bar alone", "12px",
+      getComputedStyle(lineEl(1)).paddingLeft);
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "- a\n" } });
+    check("and a plain list line by its marker column alone", "24.5px",
+      getComputedStyle(lineEl(1)).paddingLeft);
+  }
+
   return { checked, failures };
 }
 

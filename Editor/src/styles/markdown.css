@@ -363,23 +363,39 @@
   margin-right: var(--list-marker-gap);
 }
 
-/* Lead-in, plus the marker's box and the gap after it back, plus one step a level. */
-.cm-line.pane-line-li-1 {
-  padding-left: calc(var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap));
-}
-.cm-line.pane-line-li-2 {
+/* Lead-in, plus the marker's box and the gap after it back, plus one step a level.
+ *
+ * **Plus whatever the line is already inset by**, which is the quote's 12px and nothing else today.
+ * A quoted list is two rules setting `padding-left` on one line at equal specificity, so source
+ * order decided and the quote won: the line kept the quote's 12px while the marker's -23.5px pull
+ * stayed, putting the bullet at -11.5px — outside the line's box, painted on top of the quote's own
+ * bar. That is decision 71's equal-specificity trap for the third time in this file, and reported as
+ * a quoted list looking wrong rather than as a collision.
+ *
+ * So these four are qualified with `.cm-editor` to outrank anything setting the property at
+ * `.cm-line.pane-*` — the list indent is the more specific statement, and a line carrying both
+ * classes needs both numbers. The inset comes in as a token so the two never race. */
+.cm-editor .cm-line.pane-line-li-1 {
   padding-left: calc(
-    var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap) + var(--list-step)
+    var(--line-inset, 0px) + var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap)
   );
 }
-.cm-line.pane-line-li-3 {
+.cm-editor .cm-line.pane-line-li-2 {
   padding-left: calc(
-    var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap) + 2 * var(--list-step)
+    var(--line-inset, 0px) + var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap)
+      + var(--list-step)
   );
 }
-.cm-line.pane-line-li-4 {
+.cm-editor .cm-line.pane-line-li-3 {
   padding-left: calc(
-    var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap) + 3 * var(--list-step)
+    var(--line-inset, 0px) + var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap)
+      + 2 * var(--list-step)
+  );
+}
+.cm-editor .cm-line.pane-line-li-4 {
+  padding-left: calc(
+    var(--line-inset, 0px) + var(--list-lead) + var(--list-marker-box) + var(--list-marker-gap)
+      + 3 * var(--list-step)
   );
 }
 
@@ -399,7 +415,10 @@
 
 .cm-line.pane-line-quote {
   border-left: 2px solid var(--rule);
-  padding-left: 12px;
+  /* The token as well as the property: a quoted *list* line takes its padding from the rule above,
+     which adds this to the marker column rather than replacing one with the other. */
+  --line-inset: 12px;
+  padding-left: var(--line-inset);
   color: var(--text-secondary);
 }
 
