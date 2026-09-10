@@ -173,7 +173,26 @@ final class PaneController: NSObject {
         if let existing = state.value.panes.first {
             paneID = existing.id
         } else {
-            let fresh = PaneState()
+            // **A pane that has never existed starts square, with auto-sizing off** — decision 129.
+            //
+            // The welcome note is 924pt at this width and the pane shows about 370, so the first
+            // thing a new user meets is a note that plainly continues past the fold, ending on a tip
+            // that ⇧⌘/ makes the pane follow its content. Auto-sizing on would have grown the pane to
+            // the note and there would have been nothing to demonstrate; off, the feature teaches
+            // itself by being switched on.
+            //
+            // **The guard is this branch, and it is the whole guard**: it runs only when `state.json`
+            // holds no pane at all. An upgrade keeps its panes, so an existing user's auto-sizing is
+            // never silently turned off by installing a new version — which would be a setting
+            // changing under someone who had chosen it.
+            //
+            // `manualHeight` has to be set alongside the flag: `heightWanted` falls back to the
+            // content height when it is nil, so `autoSizing = false` on its own is auto-sizing with
+            // extra steps.
+            let fresh = PaneState(
+                autoSizing: false,
+                manualHeight: Double(PanePanel.defaultHeight)
+            )
             paneID = fresh.id
             state.update { $0.panes = [fresh] }
         }
