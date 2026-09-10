@@ -59,4 +59,23 @@ public enum BuildProfile: Sendable, Equatable {
         case .scratch: "~/Pane-scratch"
         }
     }
+
+    /// Where the Sync radio's **iCloud Drive** side puts the vault (decision 133).
+    ///
+    /// This is the other half of `defaultVaultPath` and it was missing. The radio's *local* side has
+    /// read this enum since decision 99; its iCloud side was a literal `…/CloudDocs/Pane` in the
+    /// Storage tab, so pressing iCloud Drive in a **scratch** build offered to move scratch notes
+    /// into the folder the daily build keeps real ones in — and decision 30's move skips a name that
+    /// exists on both sides, so the failure is a silent merge rather than an error.
+    ///
+    /// Exactly decision 99's hazard, one file over: a development path nobody watches, where the
+    /// consequence lands on real notes. The names differ, so the two can share an iCloud account
+    /// without ever sharing a folder — which is also the arrangement the two-machine soak already
+    /// uses by hand.
+    public var iCloudVaultPath: String {
+        switch self {
+        case .release: "~/Library/Mobile Documents/com~apple~CloudDocs/Pane"
+        case .scratch: "~/Library/Mobile Documents/com~apple~CloudDocs/Pane-scratch"
+        }
+    }
 }

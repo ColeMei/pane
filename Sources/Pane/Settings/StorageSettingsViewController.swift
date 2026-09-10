@@ -38,15 +38,18 @@ final class StorageSettingsViewController: NSViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    /// `~/Library/Mobile Documents/com~apple~CloudDocs/Pane`.
+    /// `~/Library/Mobile Documents/com~apple~CloudDocs/Pane` — or `…/Pane-scratch` in a debug build.
     ///
     /// Built from the literal container name rather than from `url(forUbiquityContainerIdentifier:)`,
     /// which decision 13 measured returning nil here: unsigned means no ubiquity entitlement. The
     /// folder is still perfectly writable — Pane is just a non-sandboxed app writing into a synced
     /// directory, which is the whole architecture.
+    ///
+    /// **The folder name comes from `BuildProfile`** (decision 133). It was a literal here, so this
+    /// one control reached past decision 99's separation and offered to move a scratch vault into
+    /// the daily one.
     static var iCloudDriveVault: URL {
-        URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Pane")
+        URL(fileURLWithPath: (BuildProfile.current.iCloudVaultPath as NSString).expandingTildeInPath)
     }
 
     static func isInICloudDrive(_ url: URL) -> Bool {
