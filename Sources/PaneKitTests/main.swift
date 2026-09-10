@@ -18,5 +18,6 @@ runMarkdownExportTests()
 runAutoSizingTests()
 runReleaseCheckTests()
 runBuildProfileTests()
+runWelcomeNoteTests()
 
 exit(Check.finish())

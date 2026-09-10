@@ -71,33 +71,50 @@ public enum VaultLifecycle {
 ///
 /// So it is short. A welcome note nobody finishes reading has taught nothing, and the product's whole
 /// claim is about the first ten seconds.
+///
+/// **Rewritten for decision 129**, against a 460×460 first-run pane rather than a 692-wide one, and
+/// with the fold treated as part of the design: at 460 the note is 924pt and the pane shows ~370 of
+/// it, so everything load-bearing — all four keys and the ⇧⌘/ tip — is on the first screen, and the
+/// cut lands on an unticked checkbox, which is a more specific invitation to scroll than a sentence
+/// severed mid-clause. **⌘K is named**, which the first version never did despite it carrying
+/// fifteen actions. **The vault path is not named**: `~/Documents/Pane` is true only until someone
+/// moves their vault, after which the note is a lie sitting in their own folder — "a folder you own"
+/// plus ⌘K → Reveal in Finder is true permanently and teaches a key on the way past.
 public enum WelcomeNote {
 
     public static let text = """
         # Welcome to Pane
 
-        This is a note. It's a markdown file in `~/Documents/Pane` — yours, editable by anything, \
-        gone if you delete it.
+        This is a note. Press **⌃⌥Space** to put Pane away. Press it again and Pane comes right back.
 
-        ## The three things
+        ## Start with three keys
 
-        - **⌃⌥Space** summons and dismisses this panel, from anywhere
-        - **⌘N** starts a new note
-        - **⌘P** finds one you already have
+        - **⌘N** New note
+        - **⌘P** Find a note
+        - **⌘K** Everything else
 
-        ## It renders as you type
+        Pane starts at a fixed size. Press **⇧⌘/** if you'd rather have it grow with your notes.
 
-        Headings, **bold**, *italic*, `code`, and lists all format live. The raw markdown shows on \
-        whichever line the caret is on, so nothing is ever hidden from you.
+        ## Just write
 
-        - [ ] Try ticking this box
-        - [x] Then press ⌃⌥Space and come back
+        Markdown formats as you type.
 
-        > The file on disk is exactly what you typed. No database, no frontmatter, no sync service.
+        Try **bold**, *italic*, `code`, a heading, a list, or a checkbox.
 
-        ---
+        - [ ] Tick this box
+        - [x] This one's done
 
-        Edit this note, or delete it. Pane will not put it back.
+        The markdown for the line you're editing stays visible, so you can always see what you're \
+        writing.
+
+        > Every note is a plain `.md` file in a folder you own. No database. No account. Nothing to \
+        sign into.
+
+        You can find them anytime with **⌘K → Reveal in Finder**.
+
+        That's enough to get started.
+
+        Feel free to delete this note. Pane won't bring it back.
 
         """
 }
