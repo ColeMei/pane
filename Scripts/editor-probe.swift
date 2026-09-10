@@ -29,9 +29,9 @@ guard let testSource = try? String(contentsOf: testFile, encoding: .utf8) else {
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
-// Offscreen, and 692 wide because that is `PanePanel.defaultWidth` — layout has to match the pane.
+// Offscreen, and 460 wide because that is `PanePanel.defaultWidth` — layout has to match the pane.
 let window = NSWindow(
-    contentRect: NSRect(x: 0, y: 0, width: 692, height: 600),
+    contentRect: NSRect(x: 0, y: 0, width: 460, height: 600),
     styleMask: [.borderless], backing: .buffered, defer: false)
 let web = WKWebView(frame: window.contentLayoutRect)
 window.contentView = web

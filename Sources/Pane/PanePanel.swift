@@ -17,8 +17,22 @@ final class PanePanel: NSPanel {
     /// Rule 2's width. Resizing is allowed between `PanelGeometry.minimumWidth` and
     /// `maximumWidth` — the content has its own measure, so past that a wider pane buys gutters
     /// rather than longer lines, and it used to be draggable to the full width of a display.
-    static let defaultWidth: CGFloat = 692
-    static let defaultHeight: CGFloat = 400
+    ///
+    /// **460, not 692.** 692 was the width at which `--content-measure` (680px) exactly touches both
+    /// edges, which made it the widest *useful* pane — and it was then also shipped as the default,
+    /// which is a different question nobody had asked. A pane at its own maximum measure is a
+    /// document window; measured side by side at 400/460/520/692 with the welcome note in it, 692
+    /// reads as one, and the note's structure is lost across 85 characters of line. 460 gives a 416pt
+    /// column, about 55 characters — inside the classic comfortable measure, and the shape a person
+    /// actually reaches for. The maximum is untouched: drag it to 724 whenever a note wants it.
+    ///
+    /// The format bar was the thing to check before moving, and it fits: all sixteen controls at 400,
+    /// with room. See decision 129.
+    static let defaultWidth: CGFloat = 460
+
+    /// Square with `defaultWidth`, and it is a real size rather than a placeholder now — decision 129
+    /// ships the first run with auto-sizing off, so this is the pane a new user actually sees.
+    static let defaultHeight: CGFloat = 460
 
     /// The title bar is the drag handle (rule 3), and its height is the one number Swift needs from
     /// the design tokens to decide whether a remembered frame is still reachable.
