@@ -313,6 +313,50 @@ func runStateTests() {
             Check.expect(loaded.note("a.md").isPinned)
         }
 
+        // MARK: - The held height belongs to the display, not the pane
+        //
+        // Reported from the office, 2026-09-10, driving two monitors: drag the pane wide and short on
+        // the main display, then narrow and tall on the portrait one, and going back to the main
+        // gives **wide and tall**. The width is that display's; the height is the other's.
+
+        Check.test("a height dragged on one display does not follow you to the other") {
+            let main = "AAA-1920x1080", portrait = "BBB-1080x1920"
+            let pane = PaneState(
+                frames: [
+                    main: StoredFrame(x: 0, y: 0, width: 700, height: 300),      // wide and short
+                    portrait: StoredFrame(x: 0, y: 0, width: 360, height: 900),  // narrow and tall
+                ],
+                autoSizing: false,
+                // The last drag was on the portrait display, which is what `manualHeight` records —
+                // one number for the whole pane, and the bug was reading it directly.
+                manualHeight: 900
+            )
+            Check.equal(pane.heldHeight(onDisplay: main), 300, "the main display's own height")
+            Check.equal(pane.heldHeight(onDisplay: portrait), 900)
+        }
+
+        Check.test("a display the pane has not been sized on falls back to the last drag") {
+            let pane = PaneState(
+                frames: ["AAA-1920x1080": StoredFrame(x: 0, y: 0, width: 700, height: 300)],
+                autoSizing: false,
+                manualHeight: 300
+            )
+            Check.equal(
+                pane.heldHeight(onDisplay: "NEW-2560x1440"), 300,
+                "a new monitor inherits the height you chose, like it inherits the width"
+            )
+        }
+
+        Check.test("with auto-sizing on there is no held height anywhere") {
+            let pane = PaneState(
+                frames: ["AAA-1920x1080": StoredFrame(x: 0, y: 0, width: 700, height: 300)],
+                autoSizing: true,
+                manualHeight: nil
+            )
+            Check.equal(pane.heldHeight(onDisplay: "AAA-1920x1080"), nil, "the note decides")
+            Check.equal(pane.heldHeight(onDisplay: "NEW-2560x1440"), nil)
+        }
+
         // Frames filed under the display ID, which macOS re-issues on every power cycle. The Mac
         // that found this had 56 of them for two physical monitors, and every one was unreachable —
         // the pane fell back to its first-launch size instead, which is what got reported.

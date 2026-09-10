@@ -158,6 +158,12 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
     /// `nil` while auto-sizing is on, because then the content decides. Overlays are the exception
     /// in both modes: the switcher and ⌘K may always force the pane taller, since a panel clipped by
     /// the window it lives in is not a size anyone chose.
+    ///
+    /// **This is a whole-pane value and `frames` is per display, so it is the seed and not the
+    /// answer** — read the held height through `heldHeight(onDisplay:)`, which prefers the display's
+    /// own remembered frame. Taking this value directly is what made a pane dragged tall on one
+    /// monitor come back tall on the other while correctly keeping that monitor's width
+    /// (decision 130).
     public var manualHeight: Double?
 
     public init(
@@ -195,6 +201,24 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         // no `autoSizing` beside it. Read as the new pair that is "auto-sizing on, held at the old
         // floor", which is nonsense — so the height is dropped rather than silently pinning the pane.
         if autoSizing { manualHeight = nil }
+    }
+}
+
+extension PaneState {
+
+    /// The height to hold on a given display while auto-sizing is off.
+    ///
+    /// **Per display, because a size is per display.** `frames` has always been keyed by display and
+    /// carries a full rect, so the height the user dragged to on *this* monitor is already recorded;
+    /// `manualHeight` is one number for the whole pane and only seeds a display the pane has not
+    /// been sized on yet. Reading `manualHeight` directly meant the pane restored the right width
+    /// for the display and then immediately overwrote the height with the other display's — visible
+    /// only once frames reliably survived a display change, which is to say only after decision 128.
+    ///
+    /// `nil` while auto-sizing is on: then the note decides and there is nothing to hold.
+    public func heldHeight(onDisplay key: String) -> Double? {
+        guard !autoSizing else { return nil }
+        return frames[key]?.height ?? manualHeight
     }
 }
 

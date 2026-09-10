@@ -1302,9 +1302,14 @@ final class PaneController: NSObject {
     /// switcher and ⌘K are drawn inside this window and a panel clipped by its own pane is not a
     /// size anyone asked for. Closing the overlay returns to whichever answer the mode gives.
     private var heightWanted: CGFloat {
+        // The held height is the *current display's*, not the pane's — see
+        // `PaneState.heldHeight(onDisplay:)`. Safe to read `panel.screen` here: every caller runs
+        // with the pane on screen, and `applyContentHeight` declines outright when it is not.
+        let held: Double? = (panel.screen ?? NSScreen.main)
+            .flatMap { paneState.heldHeight(onDisplay: Self.displayKey($0)) }
         var wanted = paneState.autoSizing
             ? lastContentHeight
-            : CGFloat(paneState.manualHeight ?? Double(lastContentHeight))
+            : CGFloat(held ?? Double(lastContentHeight))
         if switcherIsOpen { wanted = max(wanted, switcherPaneHeight) }
         if actionsIsOpen { wanted = max(wanted, actionsPaneHeight) }
         return wanted
