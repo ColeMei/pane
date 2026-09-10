@@ -668,19 +668,33 @@ body {
   display: none;
   flex-direction: column;
   flex: none;
-  border-top: 1px solid var(--separator);
 }
 
 .pane[data-find] .find {
   display: flex;
 }
 
+/* **The border belongs to the row, not to `.find`** — decision 134.
+ *
+ * The comment above says the find bar is the same row as the format bar and that swapping between
+ * them must not move the note by a pixel. It was not: `.format-bar` carries `height` and
+ * `border-top` on one element, so under `border-box` the border is *inside* the 38, while `.find`
+ * carried the border on the container and the height on this child, so it added on top. Measured:
+ * format bar 38, find bar 39, and opening find grew the pane by 5 where opening the format bar grew
+ * it by 4. One pixel, and the invariant that hid it was written down and never read.
+ *
+ * The replace row keeps its own `border-top` below — that one is the divider *between* the two
+ * rows, not the bar's top edge, and suppressing it here was the first draft of this fix. It lasted
+ * about a minute: `.find__row--replace` is stated again further down at equal specificity, so source
+ * order decided and the suppression silently lost. Decision 71's trap, fourth time in this file, hit
+ * while fixing a different one. */
 .find__row {
   display: flex;
   align-items: center;
   gap: 8px;
   height: var(--formatbar-height);
   padding: 0 10px;
+  border-top: 1px solid var(--separator);
 }
 
 /* Hidden until the disclosure is opened. `display` is safe here, unlike anywhere in decision 41's

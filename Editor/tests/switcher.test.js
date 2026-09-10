@@ -439,5 +439,77 @@ export function run(view, bar, doc) {
     );
   }
 
+  // ---- The footer's three states are one row (decision 134) -----------------------------------
+  //
+  // Not a switcher case, but it belongs in the geometry suite for the same reason everything else
+  // here does: the DOM was correct and the pixels were not. The stylesheet asserted in a comment
+  // that the find bar and the format bar are the same row and that swapping between them "must not
+  // move the text above by a pixel" — and they differed by one, because the format bar carried
+  // `height` and `border-top` on one element (border inside, under `border-box`) while the find bar
+  // put the border on its container and the height on its child, so it added on top. Opening find
+  // grew the pane by 5 where the format bar grew it by 4. Found by a T1 checklist item that
+  // predicted 4 and was written off as stale wording.
+  {
+    const pane = doc.querySelector(".pane");
+    const heightOf = (sel) => {
+      const el = doc.querySelector(sel);
+      return el ? +el.getBoundingClientRect().height.toFixed(2) : null;
+    };
+
+    pane.removeAttribute("data-find");
+    pane.removeAttribute("data-format-bar");
+    const footer = heightOf(".pane__footer");
+
+    pane.setAttribute("data-format-bar", "");
+    const formatBar = heightOf(".format-bar");
+    pane.removeAttribute("data-format-bar");
+
+    pane.setAttribute("data-find", "");
+    const findBar = heightOf(".find");
+    pane.removeAttribute("data-find");
+
+    check(
+      "the find bar and the format bar are the same row",
+      "equal painted heights",
+      `format bar ${formatBar}, find bar ${findBar}`,
+      Math.abs(formatBar - findBar) < 0.5
+    );
+
+    check(
+      "both replace the footer by the same amount",
+      "the note moves by the same number of pixels either way",
+      `format bar +${(formatBar - footer).toFixed(2)}, find +${(findBar - footer).toFixed(2)}`,
+      Math.abs((formatBar - footer) - (findBar - footer)) < 0.5
+    );
+
+    // The replace row's own border is the divider *between* the two rows (decision 72), not the
+    // bar's top edge. Suppressing it was the first draft of this fix and it was wrong twice over:
+    // wrong by design, and inert anyway, because `.find__row--replace` is restated further down at
+    // equal specificity and source order decided. Both rows carry one border and both measure the
+    // format bar's row.
+    pane.setAttribute("data-find", "");
+    doc.querySelector(".find").setAttribute("data-replace", "");
+    const searchRow = heightOf(".find__row:not(.find__row--replace)");
+    const replaceRow = heightOf(".find__row--replace");
+    const replaceBorder = getComputedStyle(
+      doc.querySelector(".find__row--replace")
+    ).borderTopWidth;
+    doc.querySelector(".find").removeAttribute("data-replace");
+    pane.removeAttribute("data-find");
+
+    check(
+      "the replace row keeps the divider between the two rows",
+      "1px",
+      replaceBorder,
+      Number.parseFloat(replaceBorder) === 1
+    );
+    check(
+      "both find rows are the format bar's row",
+      formatBar + " each",
+      "search " + searchRow + ", replace " + replaceRow,
+      Math.abs(searchRow - formatBar) < 0.5 && Math.abs(replaceRow - formatBar) < 0.5
+    );
+  }
+
   return { checked, failures };
 }
