@@ -202,7 +202,6 @@ public enum PanelGeometry {
         remembered: CGRect?,
         lastSize: CGSize? = nil,
         titleBarHeight: CGFloat,
-        screens: [CGRect],
         activeVisibleFrame: CGRect,
         defaultWidth: CGFloat,
         defaultHeight: CGFloat
@@ -214,7 +213,20 @@ public enum PanelGeometry {
                 visibleFrame: activeVisibleFrame
             )
         }
-        if isReachable(remembered, titleBarHeight: titleBarHeight, onAnyOf: screens) {
+        // **Reachable on the display being summoned to, not on any display.**
+        //
+        // A remembered frame is stored in global screen coordinates and looked up by the display
+        // the pointer is on. Testing it against *every* screen let a frame filed under one monitor
+        // be restored onto another: after a monitor power cycle the arrangement's origins move, and
+        // the main display's remembered frame — still perfectly reachable, on the other screen —
+        // put the pane on the portrait monitor every time it was summoned from the main one. It
+        // read as "the pane can no longer be summoned on this display".
+        //
+        // The old rule was written when a remembered frame almost never survived a display change
+        // (decision 128) and so almost never came back at all. **Decision 131**, and the third time
+        // decisions 115/116's lesson has applied: when something starts working, re-read what was
+        // reasoning about it not working.
+        if isReachable(remembered, titleBarHeight: titleBarHeight, onAnyOf: [activeVisibleFrame]) {
             // Size still gets clamped: a frame remembered before a cap existed, or from a larger
             // display, would otherwise come back bigger than the pane is now allowed to be.
             let width = constrainWidth(remembered.width)

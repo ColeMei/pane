@@ -75,17 +75,42 @@ func runPanelGeometryTests() {
 
         // MARK: - Rule 3 and 4, Stay put / display change
 
-        Check.test("a frame still on a connected screen is restored untouched") {
-            let remembered = CGRect(x: 1800, y: 900, width: paneWidth, height: 400)
+        Check.test("a frame on the display being summoned to is restored untouched") {
+            // "Stay put" is per display: the frame handed in was looked up under *this* display's
+            // key, so the case that means anything is a frame that belongs here.
+            let remembered = CGRect(x: 300, y: 400, width: paneWidth, height: 400)
             let restored = PanelGeometry.restore(
                 remembered: remembered,
                 titleBarHeight: titleBar,
-                screens: [builtIn, external],
                 activeVisibleFrame: builtIn,
                 defaultWidth: paneWidth,
                 defaultHeight: 400
             )
             Check.equal(restored, remembered, "stay put means stay put")
+        }
+
+        Check.test("a frame that lands on another display is pulled onto this one") {
+            // The report, 2026-09-10: after a power cycle of two monitors, summoning on the main
+            // display put the pane on the portrait one, every time. The main display's stored frame
+            // was at x=2267 — inside the portrait monitor's area — and `restore` accepted it because
+            // it tested reachability against *every* screen rather than the one being summoned to.
+            //
+            // This is reachable in the app whenever the arrangement's origins move under a stored
+            // frame, which a display wake does. Clamping onto the active display is the recovery.
+            let onTheOtherScreen = CGRect(x: 2267, y: 147, width: 320, height: 718)
+            let restored = PanelGeometry.restore(
+                remembered: onTheOtherScreen,
+                titleBarHeight: titleBar,
+                activeVisibleFrame: builtIn,
+                defaultWidth: paneWidth,
+                defaultHeight: 400
+            )
+            Check.expect(
+                builtIn.contains(restored),
+                "the pane must come up on the display you summoned from, got \(restored)"
+            )
+            Check.equal(restored.width, 320, "the size the user chose is kept")
+            Check.equal(restored.height, 718)
         }
 
         Check.test("a frame on a screen that went away comes back to the active display") {
@@ -94,7 +119,6 @@ func runPanelGeometryTests() {
             let restored = PanelGeometry.restore(
                 remembered: remembered,
                 titleBarHeight: titleBar,
-                screens: [builtIn],
                 activeVisibleFrame: builtIn,
                 defaultWidth: paneWidth,
                 defaultHeight: 400
@@ -137,7 +161,6 @@ func runPanelGeometryTests() {
             let restored = PanelGeometry.restore(
                 remembered: nil,
                 titleBarHeight: titleBar,
-                screens: [builtIn],
                 activeVisibleFrame: builtIn,
                 defaultWidth: paneWidth,
                 defaultHeight: 400
@@ -202,7 +225,6 @@ func runPaneWidthTests() {
             let restored = PanelGeometry.restore(
                 remembered: remembered,
                 titleBarHeight: 40,
-                screens: [screen],
                 activeVisibleFrame: screen,
                 defaultWidth: 692,
                 defaultHeight: 400
@@ -218,7 +240,7 @@ func runPaneWidthTests() {
             let remembered = CGRect(x: 100, y: 200, width: 500, height: 400)
             Check.equal(
                 PanelGeometry.restore(
-                    remembered: remembered, titleBarHeight: 40, screens: [screen],
+                    remembered: remembered, titleBarHeight: 40,
                     activeVisibleFrame: screen, defaultWidth: 692, defaultHeight: 400
                 ),
                 remembered
@@ -292,7 +314,7 @@ func runPaneWidthTests() {
             let portrait = CGRect(x: 0, y: 0, width: 1080, height: 1895)
             let remembered = CGRect(x: 100, y: 200, width: 500, height: 1600)
             let restored = PanelGeometry.restore(
-                remembered: remembered, titleBarHeight: titleBar, screens: [portrait],
+                remembered: remembered, titleBarHeight: titleBar,
                 activeVisibleFrame: portrait, defaultWidth: paneWidth, defaultHeight: 400
             )
             Check.equal(restored.height, PanelGeometry.maximumHeight)
@@ -348,7 +370,6 @@ func runPaneWidthTests() {
                 remembered: nil,
                 lastSize: chosen,
                 titleBarHeight: titleBar,
-                screens: [builtIn],
                 activeVisibleFrame: builtIn,
                 defaultWidth: paneWidth,
                 defaultHeight: 400
@@ -360,7 +381,7 @@ func runPaneWidthTests() {
 
         Check.test("with nothing remembered anywhere the default still applies") {
             let restored = PanelGeometry.restore(
-                remembered: nil, lastSize: nil, titleBarHeight: titleBar, screens: [builtIn],
+                remembered: nil, lastSize: nil, titleBarHeight: titleBar,
                 activeVisibleFrame: builtIn, defaultWidth: paneWidth, defaultHeight: 400
             )
             Check.equal(
@@ -373,7 +394,7 @@ func runPaneWidthTests() {
             let restored = PanelGeometry.restore(
                 remembered: nil,
                 lastSize: CGSize(width: 4000, height: 400),
-                titleBarHeight: titleBar, screens: [builtIn],
+                titleBarHeight: titleBar,
                 activeVisibleFrame: builtIn, defaultWidth: paneWidth, defaultHeight: 400
             )
             Check.equal(restored.width, PanelGeometry.maximumWidth)

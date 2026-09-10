@@ -279,7 +279,6 @@ final class PaneController: NSObject {
             remembered: paneState.frames[Self.displayKey(screen)]?.rect,
             lastSize: paneState.lastSize?.size,
             titleBarHeight: PanePanel.titleBarHeight,
-            screens: NSScreen.screens.map(\.visibleFrame),
             activeVisibleFrame: screen.visibleFrame,
             defaultWidth: PanePanel.defaultWidth,
             defaultHeight: max(PanelGeometry.minimumHeight, lastContentHeight)
@@ -343,9 +342,13 @@ final class PaneController: NSObject {
     }
 
     private func rememberFrame() {
-        guard let screen = panel.screen ?? NSScreen.main, let frame = panel.rememberedFrame else {
-            return
-        }
+        // **`panel.screen` only — never `NSScreen.main` as a fallback.** `main` is "the screen with
+        // the key window", which during a display wake is whichever monitor came back first, so a
+        // pane whose own screen was momentarily nil had its frame filed under a display it had never
+        // been on. Measured after one power cycle of two monitors: all four keys in `state.json`
+        // held the same rect, the portrait pane's, including the main display's. Writing nothing is
+        // strictly better — the frame that is already stored is still true (decision 131).
+        guard let screen = panel.screen, let frame = panel.rememberedFrame else { return }
         var pane = paneState
         pane.frames[Self.displayKey(screen)] = StoredFrame(frame)
         pane.lastSize = StoredSize(frame.size)
