@@ -61,11 +61,29 @@ public enum PanelGeometry {
     /// count start overlapping each other.
     public static let minimumWidth: CGFloat = 320
 
-    /// Width into its allowed range. **Height deliberately has no equivalent**: a taller pane is
-    /// simply more note, which is the thing the pane is for, so it keeps a floor and no ceiling —
-    /// auto-sizing already stops `bottomMargin` short of the screen edge, and a drag may go past it.
+    /// Tallest the pane may be, and the reason is decision 83's own argument arriving on the other
+    /// axis.
+    ///
+    /// "No maximum height" was decided while every display in view was wider than it was tall, so
+    /// the screen was the ceiling and the screen was a sensible one. A **portrait** display breaks
+    /// that: on a rotated 1080×1920 the pane could grow past 1890pt, which is not more note in any
+    /// useful sense — it is one column of text taller than any reader's eye travels, on a pane whose
+    /// content measure is 680.
+    ///
+    /// Derived rather than picked (decision 82): `maximumWidth` × √2, the A-series page ratio, so
+    /// the widest allowed pane at its tallest is exactly a page. That lands at 1024, which is above
+    /// the usable height of every landscape display the project has met — so this cap **only ever
+    /// bites on a tall screen**, which is the case that had no answer.
+    public static let maximumHeight: CGFloat = (maximumWidth * 1.41421356).rounded()
+
+    /// Width into its allowed range.
     public static func constrainWidth(_ width: CGFloat) -> CGFloat {
         min(max(width, minimumWidth), maximumWidth)
+    }
+
+    /// Height into its allowed range. The screen still constrains it further — see `maxHeight`.
+    public static func constrainHeight(_ height: CGFloat) -> CGFloat {
+        min(max(height, minimumHeight), maximumHeight)
     }
 
     /// How much of the title bar has to remain on a screen for the pane to count as reachable.
@@ -89,8 +107,12 @@ public enum PanelGeometry {
     // MARK: - Growth
 
     /// Tallest the pane may be with its top edge at `topY`, given the screen it is on.
+    ///
+    /// Two ceilings, whichever is lower: the screen's, and `maximumHeight`. The screen's alone was
+    /// the whole rule until a portrait display made it a very poor one.
     public static func maxHeight(topY: CGFloat, visibleFrame: CGRect) -> CGFloat {
-        max(minimumHeight, topY - (visibleFrame.minY + bottomMargin))
+        let toScreenEdge = topY - (visibleFrame.minY + bottomMargin)
+        return max(minimumHeight, min(maximumHeight, toScreenEdge))
     }
 
     public struct Growth: Equatable, Sendable {
@@ -150,7 +172,7 @@ public enum PanelGeometry {
     /// and only shrinks if it no longer fits, because size is something the user chose.
     public static func clamped(_ frame: CGRect, into visibleFrame: CGRect) -> CGRect {
         let w = min(constrainWidth(frame.width), visibleFrame.width)
-        let h = min(max(frame.height, minimumHeight), visibleFrame.height - bottomMargin)
+        let h = min(constrainHeight(frame.height), visibleFrame.height - bottomMargin)
 
         // Horizontal: pull inside, favouring the left edge when the pane is wider than the screen.
         var x = min(frame.minX, visibleFrame.maxX - w)
@@ -171,8 +193,14 @@ public enum PanelGeometry {
     /// a pane that quietly re-centres itself every time a monitor is plugged in has broken it. Only
     /// when the frame is unreachable on every connected screen does it move, and then onto the
     /// active display.
+    ///
+    /// `lastSize` is what a display the pane has **never** been used on inherits: the size the user
+    /// last chose, anywhere. Without it a new monitor means a first-launch pane, which is a size
+    /// nobody picked — and while the display key was unstable, that was the size you got every time
+    /// a monitor was switched off and on again.
     public static func restore(
         remembered: CGRect?,
+        lastSize: CGSize? = nil,
         titleBarHeight: CGFloat,
         screens: [CGRect],
         activeVisibleFrame: CGRect,
@@ -181,18 +209,53 @@ public enum PanelGeometry {
     ) -> CGRect {
         guard let remembered, !remembered.isEmpty else {
             return firstLaunchFrame(
-                width: defaultWidth,
-                height: defaultHeight,
+                width: constrainWidth(lastSize?.width ?? defaultWidth),
+                height: lastSize?.height ?? defaultHeight,
                 visibleFrame: activeVisibleFrame
             )
         }
         if isReachable(remembered, titleBarHeight: titleBarHeight, onAnyOf: screens) {
-            // Width still gets clamped: a frame remembered before the cap existed, or from a wider
-            // display, would otherwise come back wider than the pane is now allowed to be.
+            // Size still gets clamped: a frame remembered before a cap existed, or from a larger
+            // display, would otherwise come back bigger than the pane is now allowed to be.
             let width = constrainWidth(remembered.width)
-            guard width != remembered.width else { return remembered }
-            return CGRect(x: remembered.minX, y: remembered.minY, width: width, height: remembered.height)
+            let height = constrainHeight(remembered.height)
+            guard width != remembered.width || height != remembered.height else { return remembered }
+            // Anchored by the top edge, which is the edge the user reaches for.
+            return CGRect(
+                x: remembered.minX,
+                y: remembered.maxY - height,
+                width: width,
+                height: height
+            )
         }
         return clamped(remembered, into: activeVisibleFrame)
+    }
+
+    // MARK: - Remembering, per display
+
+    /// The key a pane's remembered frame is filed under.
+    ///
+    /// **`uuid` must be the display's persistent UUID, never its `CGDirectDisplayID`.** The ID was
+    /// the key until v0.6.5, on the written assumption that it "survives sleep and resolution
+    /// changes". It does not: measured on a two-monitor Mac 2026-09-10, one power cycle of both
+    /// monitors moved them from 53 and 54 to 59 and 58 — a new number, a new key, and a pane that
+    /// came back at its first-launch size because nothing was filed under the new one. That
+    /// `state.json` had **56 entries for two monitors**, every one of them orphaned. The UUIDs were
+    /// byte-identical across the same power cycle.
+    ///
+    /// The size is still appended, so swapping a monitor for a different one at the same port
+    /// cannot inherit a frame sized for the old panel.
+    public static func displayKey(uuid: String, width: CGFloat, height: CGFloat) -> String {
+        "\(uuid)-\(Int(width))x\(Int(height))"
+    }
+
+    /// Whether a key was written by a build that filed frames under the display ID.
+    ///
+    /// Those keys can never match again — the ID they name is gone the moment a display is power
+    /// cycled — so they are dead weight that grows without bound. A legacy key is one whose first
+    /// segment is all digits; a UUID's never is.
+    public static func isLegacyDisplayKey(_ key: String) -> Bool {
+        guard let head = key.split(separator: "-").first, !head.isEmpty else { return false }
+        return head.allSatisfy(\.isNumber)
     }
 }

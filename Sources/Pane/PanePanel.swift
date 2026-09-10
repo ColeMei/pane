@@ -83,10 +83,11 @@ final class PanePanel: NSPanel {
         // count from colliding.
         minSize = NSSize(width: Self.minimumWidth, height: PanelGeometry.minimumHeight)
 
-        // Width is capped and height is not, which is the reference's split and the right one: past
-        // the content's measure a wider pane is gutters (see `PanelGeometry.maximumWidth`), while a
-        // taller one is simply more note. `greatestFiniteMagnitude` is `maxSize`'s own default.
-        maxSize = NSSize(width: PanelGeometry.maximumWidth, height: .greatestFiniteMagnitude)
+        // Both axes are capped now. Width past the content's measure is gutters
+        // (`PanelGeometry.maximumWidth`); height had no cap at all until a rotated 1080×1920 display
+        // showed what "the screen is the ceiling" means on a screen that is 1920 tall — see
+        // `PanelGeometry.maximumHeight`, which is derived from the width cap rather than picked.
+        maxSize = NSSize(width: PanelGeometry.maximumWidth, height: PanelGeometry.maximumHeight)
 
         applyCollectionBehaviour(pinned: false)
         observeScreenChanges()

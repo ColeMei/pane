@@ -225,12 +225,158 @@ func runPaneWidthTests() {
             )
         }
 
-        // Height keeps its floor and gains no ceiling.
-        Check.test("height is not capped") {
+        // MARK: - The height ceiling
+        //
+        // This replaces a test called "height is not capped", which asserted the screen was the only
+        // limit. That was decision 83 as written, and it was written with only landscape displays in
+        // view. A rotated 1080×1920 monitor is what showed the difference.
+
+        Check.test("the height ceiling is derived from the width cap, not picked") {
+            // Decision 82: when a number comes from another number, derive it. √2 is the A-series
+            // page ratio, so the widest allowed pane at its tallest is exactly a page.
+            Check.equal(
+                PanelGeometry.maximumHeight,
+                (PanelGeometry.maximumWidth * 1.41421356).rounded()
+            )
+        }
+
+        Check.test("a portrait display cannot make an enormous pane") {
+            // 1080×1920 rotated, menu bar off the top. Without the cap this grows past 1890.
+            let portrait = CGRect(x: 0, y: 0, width: 1080, height: 1895)
+            let top = portrait.maxY - 100
+            Check.equal(
+                PanelGeometry.maxHeight(topY: top, visibleFrame: portrait),
+                PanelGeometry.maximumHeight,
+                "the ceiling, not the screen edge"
+            )
+
+            let start = CGRect(x: 0, y: top - 300, width: paneWidth, height: 300)
+            let grown = PanelGeometry.grown(
+                from: start, toContentHeight: 4000, visibleFrame: portrait
+            )
+            Check.equal(grown.frame.height, PanelGeometry.maximumHeight)
+            Check.expect(grown.scrolls, "a note past the ceiling scrolls inside the pane")
+            Check.equal(grown.frame.maxY, top, "growth is still anchored by the top edge")
+        }
+
+        Check.test("what the ceiling actually costs, display by display") {
+            // Written after the first version of this test asserted the cap "never bites on a
+            // landscape display" and went red on two of them. It does bite, and the honest record is
+            // the measurement rather than the assumption — this is the same class of mistake as the
+            // `displayKey` comment the whole change exists to correct.
+            //
+            // Usable height is the visible frame; the pane also keeps `bottomMargin` off the floor.
+            let cases: [(String, CGRect, CGFloat)] = [
+                ("14\" built-in 1512×982", builtIn, 921),
+                ("1920×1080 external", CGRect(x: 0, y: 0, width: 1920, height: 1055), 1024),
+                ("3440×1440 ultrawide", CGRect(x: 0, y: 0, width: 3440, height: 1415), 1024),
+                ("1080×1920 portrait", CGRect(x: 0, y: 0, width: 1080, height: 1895), 1024),
+            ]
+            for (name, screen, expected) in cases {
+                Check.equal(
+                    PanelGeometry.maxHeight(topY: screen.maxY, visibleFrame: screen),
+                    expected,
+                    name
+                )
+            }
+        }
+
+        Check.test("clamped honours the ceiling as well as the screen") {
             let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
             let tall = PanelGeometry.clamped(
                 CGRect(x: 0, y: 0, width: 500, height: 5000), into: screen)
-            Check.equal(tall.height, screen.height - PanelGeometry.bottomMargin)
+            Check.equal(tall.height, PanelGeometry.maximumHeight)
+        }
+
+        Check.test("a remembered frame taller than the ceiling comes back capped, top edge held") {
+            let portrait = CGRect(x: 0, y: 0, width: 1080, height: 1895)
+            let remembered = CGRect(x: 100, y: 200, width: 500, height: 1600)
+            let restored = PanelGeometry.restore(
+                remembered: remembered, titleBarHeight: titleBar, screens: [portrait],
+                activeVisibleFrame: portrait, defaultWidth: paneWidth, defaultHeight: 400
+            )
+            Check.equal(restored.height, PanelGeometry.maximumHeight)
+            Check.equal(restored.maxY, remembered.maxY, "the top edge is the one the user reaches for")
+            Check.equal(restored.minX, remembered.minX)
+        }
+
+        // MARK: - Remembering per display, and the key that could not be looked up
+        //
+        // The report: turn a monitor off and on and the pane comes back at its first-launch size.
+        // Cause — the frame was filed under the `CGDirectDisplayID`, which macOS re-issues. Measured
+        // 2026-09-10 on a two-monitor Mac: one power cycle moved the displays from 53 and 54 to 59
+        // and 58, and that machine's `state.json` held 56 orphaned frames for two monitors.
+
+        Check.test("the key is the display's identity, and survives a re-issued ID") {
+            let uuid = "DA50421B-C4EE-4978-9813-F642FDDDEF28"
+            Check.equal(
+                PanelGeometry.displayKey(uuid: uuid, width: 1920, height: 1080),
+                PanelGeometry.displayKey(uuid: uuid, width: 1920, height: 1080),
+                "the same monitor is the same key however many times it has been power cycled"
+            )
+            Check.expect(
+                !PanelGeometry.displayKey(uuid: uuid, width: 1920, height: 1080).hasPrefix("53"),
+                "nothing in the key may come from the display ID"
+            )
+        }
+
+        Check.test("a different panel at the same size is a different key") {
+            Check.expect(
+                PanelGeometry.displayKey(uuid: "AAA", width: 1920, height: 1080)
+                    != PanelGeometry.displayKey(uuid: "BBB", width: 1920, height: 1080),
+                "swapping monitors must not inherit the old one's frame"
+            )
+        }
+
+        Check.test("a key written under the display ID is recognised as dead") {
+            for dead in ["53-1920x1080", "4-1080x1920", "0-1512x982"] {
+                Check.expect(PanelGeometry.isLegacyDisplayKey(dead), "\(dead) can never match again")
+            }
+            for live in [
+                "DA50421B-C4EE-4978-9813-F642FDDDEF28-1920x1080",
+                "id53-1920x1080",   // the fallback for a display that refuses a UUID
+            ] {
+                Check.expect(!PanelGeometry.isLegacyDisplayKey(live), "\(live) is a real key")
+            }
+        }
+
+        Check.test("an unknown display inherits the size you last chose, not the default") {
+            // The symptom the report actually described: a pane that comes back looking like a fresh
+            // install. Even with a genuinely new monitor, the size is one the user picked.
+            let chosen = CGSize(width: 434, height: 576)
+            let restored = PanelGeometry.restore(
+                remembered: nil,
+                lastSize: chosen,
+                titleBarHeight: titleBar,
+                screens: [builtIn],
+                activeVisibleFrame: builtIn,
+                defaultWidth: paneWidth,
+                defaultHeight: 400
+            )
+            Check.equal(restored.width, chosen.width, "not the \(paneWidth) default")
+            Check.equal(restored.height, chosen.height)
+            Check.equal(restored.midX, builtIn.midX, "placed like a first launch, sized like yours")
+        }
+
+        Check.test("with nothing remembered anywhere the default still applies") {
+            let restored = PanelGeometry.restore(
+                remembered: nil, lastSize: nil, titleBarHeight: titleBar, screens: [builtIn],
+                activeVisibleFrame: builtIn, defaultWidth: paneWidth, defaultHeight: 400
+            )
+            Check.equal(
+                restored,
+                PanelGeometry.firstLaunchFrame(width: paneWidth, height: 400, visibleFrame: builtIn)
+            )
+        }
+
+        Check.test("a last size out of range is brought back in") {
+            let restored = PanelGeometry.restore(
+                remembered: nil,
+                lastSize: CGSize(width: 4000, height: 400),
+                titleBarHeight: titleBar, screens: [builtIn],
+                activeVisibleFrame: builtIn, defaultWidth: paneWidth, defaultHeight: 400
+            )
+            Check.equal(restored.width, PanelGeometry.maximumWidth)
         }
     }
 }

@@ -258,6 +258,7 @@ final class PaneController: NSObject {
 
         let frame = PanelGeometry.restore(
             remembered: paneState.frames[Self.displayKey(screen)]?.rect,
+            lastSize: paneState.lastSize?.size,
             titleBarHeight: PanePanel.titleBarHeight,
             screens: NSScreen.screens.map(\.visibleFrame),
             activeVisibleFrame: screen.visibleFrame,
@@ -328,16 +329,35 @@ final class PaneController: NSObject {
         }
         var pane = paneState
         pane.frames[Self.displayKey(screen)] = StoredFrame(frame)
+        pane.lastSize = StoredSize(frame.size)
         paneState = pane
     }
 
-    /// Stable-ish per-display key. The display ID survives sleep and resolution changes; the frame
-    /// size is appended so that swapping a monitor for a different one at the same port does not
-    /// silently inherit a frame sized for the old panel.
+    /// The per-display key, off the display's **persistent UUID**.
+    ///
+    /// This read used to be `NSScreenNumber` — the `CGDirectDisplayID` — with a comment asserting
+    /// that it "survives sleep and resolution changes". Measured on a two-monitor Mac 2026-09-10, it
+    /// does not: one power cycle moved the two displays from 53 and 54 to 59 and 58, and the same
+    /// `state.json` held 56 orphaned frames for two physical monitors. `CGDisplayCreateUUIDFromDisplayID`
+    /// came back byte-identical across that cycle, which is what makes it the thing to file under.
+    ///
+    /// The ID is still the fallback, because a display can refuse a UUID (a virtual or captured one);
+    /// a pane that forgets its size is a nuisance, and a crash is not.
     private static func displayKey(_ screen: NSScreen) -> String {
         let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
             .uint32Value ?? 0
-        return "\(id)-\(Int(screen.frame.width))x\(Int(screen.frame.height))"
+        let identity: String
+        if let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),
+           let string = CFUUIDCreateString(nil, uuid) as String? {
+            identity = string
+        } else {
+            identity = "id\(id)"
+        }
+        return PanelGeometry.displayKey(
+            uuid: identity,
+            width: screen.frame.width,
+            height: screen.frame.height
+        )
     }
 
     // MARK: - Notes

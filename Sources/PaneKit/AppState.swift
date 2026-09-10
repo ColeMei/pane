@@ -129,7 +129,20 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
 
     /// Remembered geometry, keyed by display. "Stay put" means a pane returns to where the user left
     /// it *on that screen* — plugging in a monitor must not shuffle the panes on the built-in one.
+    ///
+    /// The key comes from `PanelGeometry.displayKey`, and it is the display's **persistent UUID**.
+    /// It was the `CGDirectDisplayID` until v0.6.5, which macOS re-issues on every power cycle, so
+    /// this map grew a fresh orphan every time a monitor was switched off and the pane came back at
+    /// its first-launch size.
     public var frames: [String: StoredFrame]
+
+    /// The size the pane was last left at, on whatever display.
+    ///
+    /// Seeds a display the pane has never been used on, so a new monitor inherits a size the user
+    /// chose instead of the first-launch one. Kept beside `frames` rather than derived from it: a
+    /// dictionary has no recency, and picking an arbitrary entry would make the size depend on hash
+    /// order.
+    public var lastSize: StoredSize?
 
     /// Whether the pane's height still follows its content (rule 2).
     ///
@@ -152,6 +165,7 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         noteFilename: String? = nil,
         showsFormatBar: Bool = false,
         frames: [String: StoredFrame] = [:],
+        lastSize: StoredSize? = nil,
         autoSizing: Bool = true,
         manualHeight: Double? = nil
     ) {
@@ -159,6 +173,7 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         self.noteFilename = noteFilename
         self.showsFormatBar = showsFormatBar
         self.frames = frames
+        self.lastSize = lastSize
         self.autoSizing = autoSizing
         self.manualHeight = manualHeight
     }
@@ -168,7 +183,12 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         noteFilename = try c.decodeIfPresent(String.self, forKey: .noteFilename)
         showsFormatBar = try c.decodeIfPresent(Bool.self, forKey: .showsFormatBar) ?? false
-        frames = try c.decodeIfPresent([String: StoredFrame].self, forKey: .frames) ?? [:]
+        // Frames filed under the old display-ID key can never match again, and there can be dozens
+        // of them — 56 for two monitors on the Mac that found this. Dropped on read rather than
+        // migrated: an ID cannot be translated into the UUID it briefly stood for.
+        let stored = try c.decodeIfPresent([String: StoredFrame].self, forKey: .frames) ?? [:]
+        frames = stored.filter { !PanelGeometry.isLegacyDisplayKey($0.key) }
+        lastSize = try c.decodeIfPresent(StoredSize.self, forKey: .lastSize)
         autoSizing = try c.decodeIfPresent(Bool.self, forKey: .autoSizing) ?? true
         manualHeight = try c.decodeIfPresent(Double.self, forKey: .manualHeight)
         // A state.json written before decision 40 carries a `manualHeight` that meant "floor", with
@@ -176,6 +196,23 @@ public struct PaneState: Codable, Equatable, Sendable, Identifiable {
         // floor", which is nonsense — so the height is dropped rather than silently pinning the pane.
         if autoSizing { manualHeight = nil }
     }
+}
+
+/// A pane size, stored the same way and for the same reason as `StoredFrame`.
+public struct StoredSize: Codable, Equatable, Sendable {
+    public var width: Double
+    public var height: Double
+
+    public init(width: Double, height: Double) {
+        self.width = width
+        self.height = height
+    }
+
+    public init(_ size: CGSize) {
+        self.init(width: Double(size.width), height: Double(size.height))
+    }
+
+    public var size: CGSize { CGSize(width: width, height: height) }
 }
 
 /// A window frame in AppKit screen coordinates, stored as named fields rather than the array

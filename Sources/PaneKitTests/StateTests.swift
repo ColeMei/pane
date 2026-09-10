@@ -312,5 +312,50 @@ func runStateTests() {
             Check.equal(loaded.note("a.md").caretOffset, 7)
             Check.expect(loaded.note("a.md").isPinned)
         }
+
+        // Frames filed under the display ID, which macOS re-issues on every power cycle. The Mac
+        // that found this had 56 of them for two physical monitors, and every one was unreachable —
+        // the pane fell back to its first-launch size instead, which is what got reported.
+        Check.test("frames filed under a display ID are dropped, the rest kept") {
+            let url = temporaryDirectory().appendingPathComponent("legacy-frames.json")
+            let json = """
+                {
+                  "panes" : [
+                    {
+                      "id" : "3D9F4E6A-0000-4000-8000-000000000001",
+                      "autoSizing" : false,
+                      "manualHeight" : 492,
+                      "lastSize" : { "width" : 434, "height" : 576 },
+                      "frames" : {
+                        "53-1920x1080" : { "x" : 1, "y" : 2, "width" : 692, "height" : 400 },
+                        "54-1080x1920" : { "x" : 3, "y" : 4, "width" : 692, "height" : 400 },
+                        "4-1080x1920"  : { "x" : 5, "y" : 6, "width" : 692, "height" : 400 },
+                        "DA50421B-C4EE-4978-9813-F642FDDDEF28-1920x1080" :
+                          { "x" : 7, "y" : 8, "width" : 434, "height" : 576 },
+                        "id99-1512x982" : { "x" : 9, "y" : 10, "width" : 500, "height" : 300 }
+                      }
+                    }
+                  ]
+                }
+                """
+            try? Data(json.utf8).write(to: url)
+
+            let (loaded, _) = JSONFileStore<AppState>(url: url).load(default: AppState())
+            guard let pane = loaded.panes.first else {
+                return Check.expect(false, "no pane decoded")
+            }
+
+            Check.equal(pane.frames.count, 2, "three ID-keyed frames dropped")
+            Check.expect(
+                pane.frames["DA50421B-C4EE-4978-9813-F642FDDDEF28-1920x1080"] != nil,
+                "a UUID key is kept"
+            )
+            Check.expect(
+                pane.frames["id99-1512x982"] != nil,
+                "so is the fallback for a display that refuses a UUID"
+            )
+            Check.equal(pane.lastSize?.width, 434, "and the size to seed a new display survives")
+            Check.equal(pane.lastSize?.height, 576)
+        }
     }
 }
