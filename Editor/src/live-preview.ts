@@ -722,7 +722,17 @@ function buildDecorations(view: EditorView): DecorationSet {
       // An empty *document* is exempt as well, and not for rhythm: its one line carries the
       // placeholder, and an 8px box would leave "Start writing…" spilling out of the line it is
       // drawn in. An unfocused empty pane is exactly when that shows, because nothing is active.
-      const exempt = caret.has(n) && caretArrivedByEdit;
+      //
+      // **The last line is exempt however the caret got there** (decision 132). Decision 89
+      // narrowed 44 to editing arrivals so that arrowing past a blank separator would not shove
+      // the paragraph below it up and down — a real complaint about a gap *between two blocks*.
+      // The final line of a note has nothing below it, so opening it moves nothing, and it is
+      // exactly where the caret sits when you resummon a note you left at the end. Without this,
+      // whether the caret looked right on resummon depended on whether the last thing you did
+      // before dismissing happened to be typing: the buffer survives a dismissal, so
+      // `caretArrivedByEdit` survived with it (`main.ts`, `resetHistory`).
+      const lastLine = n === doc.lines;
+      const exempt = caret.has(n) && (caretArrivedByEdit || lastLine);
       if (doc.length > 0 && line.length === 0 && !codeLines.has(n) && !exempt) {
         decorations.push(blankLine.range(line.from));
         continue;
