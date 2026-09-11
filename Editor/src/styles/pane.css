@@ -167,8 +167,15 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 9px;
-  border-radius: var(--radius-button);
+  padding: 5px 12px;
+  /* A capsule, like the toast and the auto-size pill. The three of them appear, say one line and
+   * leave, and that is what the shape says — the pane's rectangles (panel 14, overlay 12, row 7)
+   * are things you can put a pointer into. `999px` rather than a number, so it stays a capsule
+   * whatever the padding becomes; a radius tuned to today's height is decision 82's failure mode.
+   *
+   * The horizontal padding went 9 → 12 with it. Round ends eat their own corners, and at 9 the
+   * `⌥⌘,` chip sat almost on the curve. Read off the render, not reasoned about. */
+  border-radius: 999px;
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--overlay-blur);
   backdrop-filter: var(--overlay-blur);
@@ -831,7 +838,10 @@ body {
   z-index: 12;
   max-width: calc(100% - 48px);
   padding: 7px 14px;
-  border-radius: 8px;
+  /* Capsule, for the reason in `.pane__tip` above. The literal this replaced was `8px` — one pixel
+   * off the bubble's 7 and in no token set at all, which is how far apart two surfaces of the same
+   * family had drifted while both looked deliberate. */
+  border-radius: 999px;
   background: var(--overlay-bg);
   -webkit-backdrop-filter: var(--overlay-blur);
   backdrop-filter: var(--overlay-blur);

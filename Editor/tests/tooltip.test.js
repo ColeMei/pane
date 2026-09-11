@@ -202,5 +202,33 @@ export async function run(view, bar, doc) {
     window.paneHost.setHover(false);
   }
 
+  // ---- The transient surfaces are one family --------------------------------------------------
+  //
+  // A guard on two declarations rather than on behaviour, and deliberately so. Three things in the
+  // pane appear, say one line and leave — this bubble, the toast, and the auto-size pill — and the
+  // shape is what says they are the same kind of thing. The pill is a native `NSPanel` below the
+  // pane (a web view cannot paint outside its window) and is a capsule by construction: 13pt on a
+  // 26pt height. The other two drifted to 7px and a stray 8px literal, which put them in the
+  // *rectangle* family — the pane, the overlays, a ⌘K row, all things you can put a pointer into.
+  //
+  // Nothing here can see a corner. The probe's window is never key, so `getComputedStyle` is stale,
+  // and a radius is not geometry this harness can measure. So what is pinned is the declaration,
+  // and `999px` rather than a number is part of the claim: a radius tuned to today's height is a
+  // constant that goes stale the moment the padding moves (decision 82).
+  {
+    const rules = [...doc.styleSheets]
+      .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } });
+    for (const selector of [".pane__tip", ".pane__toast"]) {
+      const rule = rules.find((r) => r.selectorText === selector);
+      check(`${selector} is declared`, "present", rule ? "present" : "missing", !!rule);
+      check(
+        `${selector} is a capsule, not a rounded rectangle`,
+        "999px",
+        rule ? rule.style.getPropertyValue("border-radius") : "?",
+        !!rule && rule.style.getPropertyValue("border-radius") === "999px"
+      );
+    }
+  }
+
   return { checked, failures };
 }
