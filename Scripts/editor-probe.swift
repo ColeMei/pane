@@ -16,9 +16,13 @@ import WebKit
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 3 else {
-    FileHandle.standardError.write(Data("usage: editor-probe <index.html> <test.js>\n".utf8))
+    FileHandle.standardError.write(Data("usage: editor-probe <index.html> <test.js> [width]\n".utf8))
     exit(2)
 }
+// Optional, because one suite's subject is the pane being *narrow*: the ⌘K panel drops its shortcut
+// chips below 420 so the labels fit, and that rule reads the viewport — which is the pane. Every
+// other suite wants the width users have and leaves this off.
+let paneWidth = arguments.count >= 4 ? Double(arguments[3]) ?? 460 : 460
 let html = URL(fileURLWithPath: arguments[1])
 let testFile = URL(fileURLWithPath: arguments[2])
 guard let testSource = try? String(contentsOf: testFile, encoding: .utf8) else {
@@ -29,9 +33,10 @@ guard let testSource = try? String(contentsOf: testFile, encoding: .utf8) else {
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
-// Offscreen, and 460 wide because that is `PanePanel.defaultWidth` — layout has to match the pane.
+// Offscreen, and 460 wide by default because that is `PanePanel.defaultWidth` — layout has to match
+// the pane.
 let window = NSWindow(
-    contentRect: NSRect(x: 0, y: 0, width: 460, height: 600),
+    contentRect: NSRect(x: 0, y: 0, width: paneWidth, height: 600),
     styleMask: [.borderless], backing: .buffered, defer: false)
 let web = WKWebView(frame: window.contentLayoutRect)
 window.contentView = web

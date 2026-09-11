@@ -59,7 +59,14 @@ public enum PanelGeometry {
 
     /// Narrowest the pane may be. Below this the title bar's buttons and the footer's centred word
     /// count start overlapping each other.
-    public static let minimumWidth: CGFloat = 320
+    ///
+    /// **340, not 320, and the 20 points are ⌘K's.** Measured: the panel's longest row is *Disable
+    /// Window Auto-sizing*, and with its shortcut chips hidden — which they are below 420, see
+    /// `action-panel.css` — it fits at 340 and clips at 330. So this is the narrowest pane at which
+    /// every row of the panel can be read, which makes it a derived number rather than the round
+    /// one it used to be (decision 82). Hiding the chips alone does not get there: they are worth
+    /// 64px and at 320 the label is short by 91.
+    public static let minimumWidth: CGFloat = 340
 
     /// Tallest the pane may be, and the reason is decision 83's own argument arriving on the other
     /// axis.

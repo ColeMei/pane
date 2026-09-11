@@ -97,7 +97,7 @@ func runPanelGeometryTests() {
             //
             // This is reachable in the app whenever the arrangement's origins move under a stored
             // frame, which a display wake does. Clamping onto the active display is the recovery.
-            let onTheOtherScreen = CGRect(x: 2267, y: 147, width: 320, height: 718)
+            let onTheOtherScreen = CGRect(x: 2267, y: 147, width: 360, height: 718)
             let restored = PanelGeometry.restore(
                 remembered: onTheOtherScreen,
                 titleBarHeight: titleBar,
@@ -109,8 +109,25 @@ func runPanelGeometryTests() {
                 builtIn.contains(restored),
                 "the pane must come up on the display you summoned from, got \(restored)"
             )
-            Check.equal(restored.width, 320, "the size the user chose is kept")
+            Check.equal(restored.width, 360, "the size the user chose is kept")
             Check.equal(restored.height, 718)
+        }
+
+        // The minimum moved 320 → 340 when ⌘K's rows were measured, so a pane somebody had already
+        // dragged narrower than that comes back 20pt wider on the next summon. Benign and one-way,
+        // but it is a stored size being overruled, which is worth having a case for rather than
+        // discovering from a report.
+        Check.test("a remembered frame narrower than the minimum is widened to it") {
+            let tooNarrow = CGRect(x: 100, y: 100, width: 320, height: 500)
+            let restored = PanelGeometry.restore(
+                remembered: tooNarrow,
+                titleBarHeight: titleBar,
+                activeVisibleFrame: builtIn,
+                defaultWidth: paneWidth,
+                defaultHeight: 400
+            )
+            Check.equal(restored.width, PanelGeometry.minimumWidth)
+            Check.equal(restored.height, 500, "only the width is overruled")
         }
 
         Check.test("a frame on a screen that went away comes back to the active display") {

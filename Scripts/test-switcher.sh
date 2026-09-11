@@ -14,4 +14,9 @@ if [[ "${1:-}" != "--skip-editor" ]]; then
 fi
 
 echo "==> Running the switcher suite"
-exec swift Scripts/editor-probe.swift "$PWD/Editor/dist/index.html" "$PWD/Editor/tests/switcher.test.js"
+swift Scripts/editor-probe.swift "$PWD/Editor/dist/index.html" "$PWD/Editor/tests/switcher.test.js"
+
+# A second pass at a width the first one cannot see. ⌘K drops its shortcut chips below 420 so the
+# labels fit, and that rule reads the viewport — so the only way to test it is another window.
+echo "==> Running the narrow-pane suite"
+exec swift Scripts/editor-probe.swift "$PWD/Editor/dist/index.html" "$PWD/Editor/tests/narrow.test.js" 380

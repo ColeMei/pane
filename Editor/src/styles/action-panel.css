@@ -217,6 +217,41 @@
   display: flex;
   gap: 3px;
   flex: none;
+  overflow: hidden;
+  /* Both transition because only one of them is felt. `opacity` is what you see; `max-width` is
+   * what gives the label its space back, and animating it means the text un-truncates as the chips
+   * go rather than snapping once they have gone. */
+  transition: opacity 150ms ease, max-width 150ms ease, margin-left 150ms ease;
+  max-width: 120px;
+  opacity: 1;
+}
+
+/* ---- Narrow panes: the label wins ---------------------------------------------------------------
+ *
+ * **420px is measured, not chosen.** It is the pane width at which the longest row stops fitting
+ * beside its chips — and the longest row is *Disable* Window Auto-sizing, three pixels wider than
+ * the Enable state you can see in a screenshot. Tuning to the label that happens to be on screen
+ * would have left the fault behind the toggle (decision 82's habit, and decision 100's trap).
+ *
+ * Below it the shortcut goes and the label stays, because the label is what tells you which row
+ * this is; the shortcut is a second way to do something you can already do by pressing ⏎ on it.
+ * Reported as `Enable Win…`, `Copy as Ma…`, `Keep on Thi…` — six of fifteen rows unreadable at the
+ * minimum width, which is a panel that cannot answer the only question it exists to answer.
+ *
+ * The viewport is the pane: the web view fills the window, so `max-width` here is the pane's own
+ * width and needs no plumbing from Swift. **Not a container query** — `container-type: inline-size`
+ * would add containment to the element whose height feeds `reportContentHeight`, and that is a risk
+ * this does not need to take for a number that is already the right one.
+ *
+ * `PanelGeometry.minimumWidth` is 340 rather than 320 for this rule's sake: 340 is the narrowest
+ * pane at which every row is fully readable *with* the chips gone, so there is no width left where
+ * ⌘K prints a label you cannot finish. */
+@media (max-width: 419px) {
+  .actions__keys {
+    max-width: 0;
+    opacity: 0;
+    margin-left: -10px; /* cancels `.actions__row`'s gap, which a zero-width child still earns */
+  }
 }
 
 .actions__keys kbd {
