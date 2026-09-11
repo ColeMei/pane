@@ -546,6 +546,27 @@ function buildDecorations(view: EditorView): DecorationSet {
           return;
         }
 
+        // A backslash escape is chrome, and it was the one construct in the grammar with none of
+        // this applied to it — so `1\. three` drew its own backslash. That matters now rather than
+        // before because an escape is the only way markdown has to write a literal `1. ` at the
+        // start of a list item, and decision 135 makes the keyboard write one.
+        //
+        // The `Escape` node is exactly two characters: the backslash and the character it protects.
+        // The character is the content and always shows. The backslash follows the **caret** rule
+        // every other inline marker follows (decision 57) rather than the line rule, so writing
+        // `1\. ` does not leave a backslash on screen for as long as the line is being typed —
+        // under the line rule it would be visible through the whole sentence. Inside an inline
+        // construct it follows that construct, exactly as a `**` does.
+        if (name === "Escape") {
+          const owner = inlineRanges.find((r) => r.from <= node.from && r.to >= node.to);
+          if (owner ? owner.revealed : touches(node.from, node.to)) {
+            decorations.push(syntaxMark.range(node.from, node.from + 1));
+          } else {
+            decorations.push(hide.range(node.from, node.from + 1));
+          }
+          return;
+        }
+
         if (name === "TaskMarker") {
           if (isActive) {
             // The raw `[ ]` goes in the marker box, exactly as a revealed `-` or `1.` does — and

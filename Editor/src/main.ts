@@ -415,6 +415,50 @@ function checkboxInputRule(): Extension {
 }
 
 /**
+ * A marker typed into a list item is text, not a second list.
+ *
+ * `1. 1. three` is, to CommonMark and to pandoc, an ordered list containing an ordered list — on
+ * one line, with no indentation anywhere. So is `- * x`. That is correct markdown and it is never
+ * what anybody means: a nested list is made with ⇥ (decision 108), and what a person typing `1. `
+ * into an item is writing is a price, a version or a clause number. Reported as "1. 1.3 dollars
+ * works and 1. 1. 3 dollars messes up", which is exactly the line between the two — a marker needs
+ * the space after it, so only the second one ever nested.
+ *
+ * Markdown has one way to mean a literal marker and it is a backslash, so the bytes have to carry
+ * one: `1\. ` and `\* `. The buffer is still what was typed in the only sense decision 5 cares
+ * about — the line *means* the characters on screen — and `live-preview.ts` hides the backslash the
+ * way it hides a `**`, so nothing shows it off the caret. Same family as the two rules above, which
+ * already edit the buffer for the same reason (decision 59).
+ *
+ * Only at the **start of the item's content**, because that is the only place a marker can begin a
+ * block: `- [ ] - x` and `1. a 1. b` are already plain text and an escape there would be noise
+ * inserted into a note for nothing. A `> ` prefix is deliberately not a trigger — `> - x` is how a
+ * list inside a quote is written, and that one does mean a list.
+ */
+function escapeNestedMarkerRule(): Extension {
+  return EditorView.inputHandler.of((view, from, to, text) => {
+    if (text !== " ") return false;
+
+    const line = view.state.doc.lineAt(from);
+    const before = line.text.slice(0, from - line.from);
+    // The parent's marker, then the one being typed right against the content column.
+    const typed = /^\s*(?:[-*+]|\d+[.)])[ \t]+(\d+[.)]|[-*+])$/.exec(before)?.[1];
+    if (typed === undefined) return false;
+
+    // The backslash goes in front of the marker's last character, which is the punctuation in both
+    // shapes: `-` is its own punctuation, `1.` carries it at the end.
+    const escaped = `${typed.slice(0, -1)}\\${typed.slice(-1)} `;
+    const start = from - typed.length;
+    view.dispatch({
+      changes: { from: start, to, insert: escaped },
+      selection: { anchor: start + escaped.length },
+      userEvent: "input.type",
+    });
+    return true;
+  });
+}
+
+/**
  * ⇧⏎ — get out of a fenced code block.
  *
  * Inside a code block every Enter is a newline *in the code*, which is correct and is also a trap:
@@ -1143,6 +1187,7 @@ function baseExtensions(): Extension[] {
     placeholder("Start writing…"),
     checkboxInputRule(),
     bulletInputRule(),
+    escapeNestedMarkerRule(),
     editorTheme,
     updateListener,
     // Enter and Backspace, above everything else.

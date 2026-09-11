@@ -554,6 +554,57 @@ export function runTypedLists(view, doc) {
   r.check("a task list nested under a bullet", "- alpha\n  - [ ] one\n  - [ ] two", d.text(),
     "- alpha ⏎⇥ ⇧⌘9 one ⏎ two");
 
+  // --- a marker typed into an item (decision 135) ------------------------------------------------
+  //
+  // `1. 1. three` is a nested list to CommonMark, which is never what anybody means by it — a
+  // nested list is made with ⇥. Reported as "1. 1.3 dollars works and 1. 1. 3 dollars messes up",
+  // so both halves are here: a marker needs its space, and the one that has it gets escaped.
+
+  d.reset();
+  d.type("1. 1. 3 dollars");
+  r.check("a number typed into an item is escaped", "1. 1\\. 3 dollars", d.text(),
+    "1. 1. 3 dollars");
+
+  d.reset();
+  d.type("1. 1.3 dollars");
+  r.check("and a number with no space after it is untouched", "1. 1.3 dollars", d.text(),
+    "1. 1.3 dollars");
+
+  d.reset();
+  d.type("- * hello");
+  r.check("a bullet of another kind typed into an item is escaped", "- \\* hello", d.text(),
+    "- * hello");
+
+  d.reset();
+  d.type("- - hello");
+  r.check("and so is one of the same kind", "- \\- hello", d.text(), "- - hello");
+
+  d.reset();
+  d.type("1) 2. three");
+  r.check("the backslash goes in front of the punctuation, not the digits", "1) 2\\. three",
+    d.text(), "1) 2. three");
+
+  // Only at the item's content column, because that is the only place a marker can begin a block.
+  d.reset();
+  d.type("1. a 1. b");
+  r.check("a marker after the item's text is already text", "1. a 1. b", d.text(), "1. a 1. b");
+
+  d.reset();
+  d.type("- [] x - y");
+  r.check("and so is one after a checkbox", "- [ ] x - y", d.text(), "- [] x - y");
+
+  // A quote is not a list, and `> - x` is how a list inside one is written.
+  d.reset();
+  d.type("> - quoted");
+  r.check("a bullet typed into a quote is a bullet", "> - quoted", d.text(), "> - quoted");
+
+  // ⇥ first, so the escape has to survive being nested.
+  d.reset();
+  d.type("- a");
+  d.press("Enter"); d.press("Tab"); d.type("* b");
+  r.check("a marker typed into a nested item is escaped too", "- a\n  - \\* b", d.text(),
+    "- a ⏎⇥ * b");
+
   // --- numbering --------------------------------------------------------------------------------
 
   d.reset();
@@ -1268,6 +1319,17 @@ export function runConstructs(view, doc) {
     view.state.doc.toString(), "\\*not bold\\*");
   d.at("elsewhere");
   r.check("and does not render as emphasis", false, !!i.lineEl(1).querySelector(".pane-em"));
+
+  // The backslash itself is chrome (decision 135). It has to be, because an escape is the only way
+  // markdown can write a literal `1. ` at the start of an item — and the caret rule rather than the
+  // line rule, or writing one would leave a backslash on screen for the rest of the sentence.
+  d.load("1. 1\\. 3 dollars\n\npara\n");
+  d.at("para");
+  r.check("an escape's backslash is hidden", "1. 1. 3 dollars", i.visibleText(1));
+  d.at("\\. 3", 1);
+  r.check("and shows with the caret inside it", "1. 1\\. 3 dollars", i.visibleText(1));
+  d.at("dollars");
+  r.check("but not from elsewhere on the line", "1. 1. 3 dollars", i.visibleText(1));
 
   return { checked: r.checked, failures: r.failures };
 }
