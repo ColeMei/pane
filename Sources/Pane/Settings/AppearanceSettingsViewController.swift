@@ -58,8 +58,13 @@ final class AppearanceSettingsViewController: NSViewController {
 
         // ---- markdown theme ----------------------------------------------------------------
         themePopUp = SettingsForm.popUp([], target: self, action: #selector(themeChanged))
+        // No ellipsis: it opens the folder in the Finder and that is the whole action. An ellipsis
+        // promises that something will be asked of you before the command completes — a name, a
+        // file, a choice you can still back out of — and nothing is asked here. Every other one in
+        // Pane earns it: Browse Notes… and Actions… ask which, Rename File… asks for a name,
+        // Export… and Choose Folder… put up a panel, and Settings… is Apple's own convention.
         let openThemes = NSButton(
-            title: "Open Themes Folder…", target: self, action: #selector(openThemesFolder)
+            title: "Open Themes Folder", target: self, action: #selector(openThemesFolder)
         )
         openThemes.isBordered = false
         openThemes.contentTintColor = .controlAccentColor
