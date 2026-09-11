@@ -43,7 +43,7 @@ import {
 
 import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
-import { describe, hideTooltip, mountTooltips, retitle, setPointer } from "./tooltip";
+import { describe, hideTooltip, mountTooltips, setPointer } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { contentColumn, listAwareTab, outdentListItem } from "./list-indent";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
@@ -177,8 +177,11 @@ function showTitle(lines: Iterable<string>): void {
  *
  * A click on it swaps the two. There is no control anywhere for this and there should not be: the
  * number *is* the control, it says which one it is in its own label, and one press puts it back.
- * `data-tip` names the other one so the bubble answers "what happens if I click this" without the
- * app explaining itself (decisions 70, 76).
+ *
+ * **And it carries no bubble.** It had one — "Show characters" — and that is the app explaining
+ * itself (decision 76) over a control that is already a sentence in English. A tooltip earns its
+ * place where the control is a glyph: the format bar's icons and the title bar's buttons cannot say
+ * their own names. This one can, so hovering it now says nothing at all.
  */
 let footerCount: "words" | "characters" = "words";
 
@@ -193,7 +196,6 @@ function renderCount(text: string): void {
   } else {
     wordCountEl.textContent = formatWordCount(countWords(text));
   }
-  retitle(wordCountEl, footerCount === "characters" ? "Show words" : "Show characters");
 }
 
 /**

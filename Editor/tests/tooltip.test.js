@@ -202,45 +202,5 @@ export async function run(view, bar, doc) {
     window.paneHost.setHover(false);
   }
 
-  // ---- A control whose meaning changes under the pointer ----------------------------------------
-  //
-  // The bubble is named once, when the pointer arrives, and no second event ever comes. So a control
-  // that changes what it does while you are resting on it goes on advertising what it used to do —
-  // the footer's count is the first one here, because the press that swaps words for characters is
-  // the same press that changes what a second press would do.
-  {
-    const count = doc.getElementById("word-count");
-    // Driven the way the real pane drives it (decision 120): the page receives no mouse events in
-    // Pane's configuration, so Swift sends the position and `elementFromPoint` resolves it.
-    window.paneHost.setHover(true);
-    const box = count.getBoundingClientRect();
-    window.paneHost.setPointer(box.left + box.width / 2, box.top + box.height / 2);
-    await sleep(DELAY + 120);
-    check(
-      "the count names the other count",
-      "Show characters",
-      shown() ? text() : "hidden",
-      shown() && text() === "Show characters"
-    );
-
-    count.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-    await sleep(60);
-    check(
-      "and the bubble follows the press rather than going stale",
-      "Show words",
-      shown() ? text() : "hidden",
-      shown() && text() === "Show words"
-    );
-
-    // Back, so the suite leaves the pane counting words like every other one finds it.
-    count.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-    await sleep(60);
-    check("and back again", "Show characters", shown() ? text() : "hidden",
-      shown() && text() === "Show characters");
-    window.paneHost.setPointer(4, 4);
-    window.paneHost.setHover(false);
-    await reset();
-  }
-
   return { checked, failures };
 }

@@ -241,21 +241,6 @@ function showFor(button: HTMLElement, text: string): void {
 }
 
 /**
- * Renames a `data-tip` control, and the bubble with it when that control is the one on screen.
- *
- * A tip that changes while the pointer is resting on it is the one case the delegation cannot see:
- * `mouseover` fired when the pointer arrived and nothing arrives again, so the bubble goes on naming
- * what the control used to do. The footer's count is the first control here whose meaning changes
- * *under* the pointer — the press that swaps words for characters is the same press that changes
- * what a second press would do, and without this the bubble read "Show characters" over a count
- * already showing them.
- */
-export function retitle(el: HTMLElement, text: string): void {
-  el.dataset.tip = text;
-  if (named === el) showFor(el, text);
-}
-
-/**
  * Names one button. `text` carries the shortcut in it — "Notes ⌘P" — which is also the button's
  * accessible name, so the two cannot drift apart.
  *

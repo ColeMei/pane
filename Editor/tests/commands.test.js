@@ -998,7 +998,6 @@ export function runFooterCount(view, doc) {
 
   press();
   check("a press swaps it for characters", "7 characters", el.textContent);
-  check("and the bubble names the way back", "Show words", el.getAttribute("data-tip"));
 
   // Markdown is not text somebody typed at the note. `**one**` is the same seven characters.
   set("**one** two\n");
@@ -1013,7 +1012,7 @@ export function runFooterCount(view, doc) {
 
   press();
   check("and a second press puts words back", "1 word", el.textContent);
-  check("with the bubble the other way round", "Show characters", el.getAttribute("data-tip"));
+  check("and the count names nothing on hover", null, el.getAttribute("data-tip"));
 
   // The one that matters. `preventDefault` on mousedown is what keeps the caret where it was.
   set("hello there\n");
