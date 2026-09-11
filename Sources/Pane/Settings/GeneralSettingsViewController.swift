@@ -88,6 +88,18 @@ final class GeneralSettingsViewController: NSViewController {
         dock.state = current.showDockIcon ? .on : .off
         form.row("Dock", dock)
 
+        // ---- updates -----------------------------------------------------------------------
+        // The switch on the **network call**, not on the notice — which is why it is a row at all.
+        // Decision 126 says a setting whose control already lives in ⌘K does not get a second
+        // entrance here; this one has no other entrance, and it is the only thing in Pane that
+        // talks to the network (decisions 94, 136). Somebody who wants an app that makes no
+        // requests should be able to have one without editing JSON.
+        let updates = SettingsForm.checkbox(
+            "Check for updates", target: self, action: #selector(checkForUpdatesChanged)
+        )
+        updates.state = current.checkForUpdates ? .on : .off
+        form.row("Updates", updates)
+
         view = form.makeContentView()
     }
 
@@ -114,6 +126,10 @@ final class GeneralSettingsViewController: NSViewController {
 
     @objc private func launchAtLoginChanged(_ sender: NSButton) {
         settings.update { $0.launchAtLogin = sender.state == .on }
+    }
+
+    @objc private func checkForUpdatesChanged(_ sender: NSButton) {
+        settings.update { $0.checkForUpdates = sender.state == .on }
     }
 
     @objc private func showMenuBarIconChanged(_ sender: NSButton) {

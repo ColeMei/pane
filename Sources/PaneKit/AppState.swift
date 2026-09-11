@@ -34,16 +34,47 @@ public struct AppState: Codable, Equatable, Sendable {
     /// whose notes are gone sees a cheerful empty panel instead of a question.
     public var vaultEverCreated: Bool
 
+    /// When the release check last ran, so it can run about once a day rather than once a summon.
+    ///
+    /// State, not a preference: nobody sets this and nobody should have to look at it. The setting
+    /// that governs whether it happens at all is `Settings.checkForUpdates`.
+    public var lastUpdateCheck: Date?
+
+    /// The newest version this machine has already been told about, so the notice fires once.
+    ///
+    /// Only the *toast* reads this. The menu bar item is derived from the version comparison every
+    /// time, so it cannot be dismissed and cannot go stale — it is gone when the running build
+    /// catches up, with no flag to clear.
+    public var announcedUpdate: String?
+
+    /// The newer version the last check found, or nil when it found none.
+    ///
+    /// **Persisted because the menu bar item is the part that waits**, and waiting has to survive a
+    /// relaunch — it is the answer to "I saw a toast last week, where do I get it". Held in memory
+    /// only, it was gone on the next launch and did not come back until the daily check came round
+    /// again, which is a durable notice that is durable for less time than a session.
+    ///
+    /// Still derived, never dismissed: every check overwrites it, and `AppDelegate` re-compares it
+    /// against the running version on the way out of the file, so upgrading clears it at once
+    /// rather than at the next check.
+    public var availableUpdate: String?
+
     public init(
         schemaVersion: Int = AppState.currentSchemaVersion,
         notes: [String: NoteState] = [:],
         panes: [PaneState] = [],
-        vaultEverCreated: Bool = false
+        vaultEverCreated: Bool = false,
+        lastUpdateCheck: Date? = nil,
+        announcedUpdate: String? = nil,
+        availableUpdate: String? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.notes = notes
         self.panes = panes
         self.vaultEverCreated = vaultEverCreated
+        self.lastUpdateCheck = lastUpdateCheck
+        self.announcedUpdate = announcedUpdate
+        self.availableUpdate = availableUpdate
     }
 
     // Hand-written so a state.json missing any key still decodes — a file written by an older build
@@ -58,6 +89,9 @@ public struct AppState: Codable, Equatable, Sendable {
         // so an upgrade from a build predating this flag does not get offered a fresh welcome note.
         vaultEverCreated =
             try c.decodeIfPresent(Bool.self, forKey: .vaultEverCreated) ?? !notes.isEmpty
+        lastUpdateCheck = try c.decodeIfPresent(Date.self, forKey: .lastUpdateCheck)
+        announcedUpdate = try c.decodeIfPresent(String.self, forKey: .announcedUpdate)
+        availableUpdate = try c.decodeIfPresent(String.self, forKey: .availableUpdate)
     }
 }
 

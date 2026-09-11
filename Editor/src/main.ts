@@ -1783,19 +1783,25 @@ const host = {
    * failed. Never steals the caret and never blocks typing (decision 8).
    */
   /** A transient confirmation. Out of layout, so it never disturbs the reported height. */
-  showToast(text: string): void {
+  showToast(text: string, dwell?: number): void {
     toastEl.textContent = text;
     toastEl.hidden = false;
     toastEl.removeAttribute("data-fading");
     if (toastTimer) clearTimeout(toastTimer);
     if (toastFadeTimer) clearTimeout(toastFadeTimer);
-    // Long enough to read a short sentence, short enough not to sit over the note you moved on to.
+    // 1900ms is long enough to read a short sentence, short enough not to sit over the note you
+    // moved on to — and it is tuned for a **receipt**: ⌃X, a duplicate, a toggle, where you already
+    // know what happened and the toast only confirms it.
+    //
+    // `dwell` exists for the one toast that is not a receipt. An update notice is news, arriving on
+    // a summon you made to write something down, so the eye is on the caret and not up here
+    // (decision 136). News gets longer; a receipt does not need it.
     toastTimer = window.setTimeout(() => {
       toastEl.setAttribute("data-fading", "");
       toastFadeTimer = window.setTimeout(() => {
         toastEl.hidden = true;
       }, 200);
-    }, 1900);
+    }, dwell ?? 1900);
   },
 
   showBanner(kind: string, text: string): void {

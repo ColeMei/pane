@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pane.onPinsChanged = { [weak self] in self?.refreshMenuBar() }
         pane.onVaultMissing = { [weak self] in self?.handleVaultMissing() }
         pane.onOpenSettings = { [weak self] in self?.openSettingsWindow() }
+        pane.onSummoned = { [weak self] in self?.checkForUpdateIfDue() }
 
         installMenuBarItem()
         installHotkey()
@@ -352,12 +353,97 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onBrowse = { [weak self] in self?.pane.openSwitcher() }
         menuBar.onActions = { [weak self] in self?.pane.openActions() }
         menuBar.onSettings = { [weak self] in self?.openSettingsWindow() }
+        menuBar.onOpenReleases = { NSWorkspace.shared.open(UpdateChecker.releasesPage) }
+        // An item installed after a check has already run — the icon can be switched back on in
+        // Settings — starts out knowing what the last check found.
+        menuBar.setUpdateAvailable(latestAvailableVersion)
         // Summon first: the pinned section exists so a pinned note is one click away from anywhere,
         // and opening one into a pane that is still offscreen would be a click that does nothing.
         menuBar.onOpenNote = { [weak self] filename in
             self?.pane.summon()
             self?.pane.open(filename)
         }
+    }
+
+    // MARK: - Updates
+
+    /// The newer version the last check found, re-derived from `state.json` on the way out.
+    ///
+    /// **Persisted, and compared again here.** Held only in memory it vanished on relaunch and the
+    /// menu bar item — the half that is supposed to wait — did not come back until the next daily
+    /// check, up to a day later. Re-comparing rather than trusting the stored string is what makes
+    /// upgrading clear it immediately: the file still says `v0.6.6` on the first launch of v0.6.6,
+    /// and `ReleaseCheck.status` answers `.current`, so nothing is shown and the value is cleared.
+    private var latestAvailableVersion: String? {
+        guard let stored = state.value.availableUpdate else { return nil }
+        guard case .behind(let version) = ReleaseCheck.status(
+            current: UpdateChecker.runningVersion, latest: stored
+        ) else { return nil }
+        return version
+    }
+
+    /// Asks GitHub whether there is a newer release, at most once a day, on summon.
+    ///
+    /// **Decision 136, and it amends decision 94's "nothing on launch, nothing scheduled".** The
+    /// half that survives is the important one: this is not a timer and not a launch hook, so it
+    /// only ever runs with somebody at the keyboard — a summon is a keypress. Nothing is
+    /// downloaded, installed or opened, and nothing about the machine is sent.
+    ///
+    /// The notice is in two parts on purpose. The **toast** is the part that fires, once per
+    /// version, because a badge on a menu bar icon is not something you can count on being seen —
+    /// the icon may not fit in a crowded menu bar, and `showMenuBarIcon` can be off. The **menu
+    /// item and the dot** are the part that waits, and they are derived from the comparison rather
+    /// than from a flag, so they cannot be stale.
+    private func checkForUpdateIfDue() {
+        guard ReleaseCheck.shouldCheck(
+            enabled: settings.value.checkForUpdates,
+            lastChecked: state.value.lastUpdateCheck
+        ) else { return }
+
+        // Stamped before the request rather than after it, so a machine that is offline all week
+        // asks once a day rather than on every summon.
+        state.update { $0.lastUpdateCheck = Date() }
+
+        UpdateChecker.fetchStatus { [weak self] status in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.applyUpdateStatus(status)
+                }
+            }
+        }
+    }
+
+    private func applyUpdateStatus(_ status: ReleaseCheck.Status) {
+        // `.unknown` leaves the last answer alone. A check that could not reach the network is not
+        // news that the update went away — a captive portal must not silently retract the notice.
+        switch status {
+        case .behind(let version): state.update { $0.availableUpdate = version }
+        case .current: state.update { $0.availableUpdate = nil }
+        case .unknown: break
+        }
+        menuBar?.setUpdateAvailable(latestAvailableVersion)
+
+        // Read out of the store *before* the update block, never inside it: `state.value` read
+        // during `state.update` is a simultaneous access to storage already held for modification,
+        // and Swift traps the process (decision 124, found by pressing the word count once).
+        let announced = state.value.announcedUpdate
+        guard let version = ReleaseCheck.announcement(status: status, announced: announced) else {
+            return
+        }
+        state.update { $0.announcedUpdate = version }
+
+        // Named, and nothing after it (decision 76). Where to get it is the menu bar item this same
+        // call just lit; the toast's job is to say there is something, once.
+        //
+        // Only into a pane that is actually on screen. The check runs on summon, so it normally is
+        // — but the answer arrives over the network, and a dismissal in that second would otherwise
+        // fire a notice into a parked window where nobody would ever see it, and mark it announced.
+        guard pane.isVisible else {
+            state.update { $0.announcedUpdate = announced }
+            return
+        }
+        pane.showToast("Pane \(version) is available", dwell: 5000)
     }
 
     /// Note titles by filename, kept warm for the menu bar.

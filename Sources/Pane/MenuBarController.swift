@@ -19,6 +19,7 @@ final class MenuBarController: NSObject {
     var onActions: (() -> Void)?
     var onOpenNote: ((String) -> Void)?
     var onSettings: (() -> Void)?
+    var onOpenReleases: (() -> Void)?
 
     /// Supplies the pinned notes as (filename, title) pairs, most recently used first.
     var pinnedNotes: () -> [(filename: String, title: String)] = { [] }
@@ -74,6 +75,21 @@ final class MenuBarController: NSObject {
 
     private var hotkey: Hotkey = .defaultSummon
 
+    /// The newer version, when there is one — the menu item's title and the icon's dot.
+    ///
+    /// **Derived, never dismissed.** Nothing marks it as read: it is set from a version comparison
+    /// and goes away when the running build catches up, so there is no flag here that can be wrong
+    /// or stale. That is the difference between this and the toast, which fires once and is gone.
+    private var updateAvailable: String?
+
+    /// Tells the item a newer release exists, or that there is not one.
+    func setUpdateAvailable(_ version: String?) {
+        guard version != updateAvailable else { return }
+        updateAvailable = version
+        item.button?.image = version == nil ? Self.statusImage : Self.badgedStatusImage
+        rebuild(hotkey: hotkey)
+    }
+
     func rebuild(hotkey: Hotkey) {
         self.hotkey = hotkey
         menu.removeAllItems()
@@ -126,6 +142,19 @@ final class MenuBarController: NSObject {
         }
 
         menu.addItem(.separator())
+        // Above Settings, and only while there is one. This is the durable half of decision 136:
+        // the toast fires once and is gone, and this waits — in the app-level surface, because
+        // updating the app is not something ⌘K does. ⌘K's fifteen rows all act on the note or the
+        // pane, and a sixteenth that opened a browser would be the odd one out.
+        if let version = updateAvailable {
+            let update = NSMenuItem(
+                title: "Update to \(version)…",
+                action: #selector(openReleases),
+                keyEquivalent: ""
+            )
+            update.target = self
+            menu.addItem(update)
+        }
         menu.addItem(action("Settings…", key: ",", selector: #selector(settings)))
 
         let quit = NSMenuItem(title: "Quit Pane", action: #selector(quit), keyEquivalent: "q")
@@ -179,6 +208,46 @@ final class MenuBarController: NSObject {
         return image
     }()
 
+    /// The same glyph with a dot in its top-right corner, for when a newer release exists.
+    ///
+    /// **Monochrome, and deliberately.** A coloured badge would mean dropping `isTemplate`, and
+    /// template rendering is what makes this icon right in a dark menu bar, in a light one, while
+    /// the item is highlighted, and under reduce-transparency — four appearances, none of which a
+    /// hand-picked colour survives. A dot in the menu bar's own ink is less loud than an orange one
+    /// and is legible in all four, which is the trade this takes.
+    ///
+    /// The dot is punched out of the glyph rather than painted over it: `.destinationOut` clears a
+    /// slightly larger disc first, so the dot keeps its own edge even where the artwork runs under
+    /// it. Without the gap, a dot touching the glyph reads as part of the drawing.
+    private static let badgedStatusImage: NSImage? = {
+        guard let base = statusImage else { return nil }
+        let size = base.size
+        let image = NSImage(size: size, flipped: false) { rect in
+            base.draw(in: rect)
+
+            // Derived from the icon's own height rather than written down, so the badge keeps its
+            // proportion if the artwork is ever redrawn at another size (decision 82).
+            let diameter = (size.height * 0.34).rounded()
+            let gap = max(1, (diameter * 0.34).rounded())
+            let dot = NSRect(
+                x: size.width - diameter,
+                y: size.height - diameter,
+                width: diameter,
+                height: diameter
+            )
+
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            NSBezierPath(ovalIn: dot.insetBy(dx: -gap, dy: -gap)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Pane — update available"
+        return image
+    }()
+
     private static let pinImage: NSImage? = {
         let image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil)
         image?.isTemplate = true
@@ -193,6 +262,7 @@ final class MenuBarController: NSObject {
     @objc private func actionPanel() { onActions?() }
     @objc private func settings() { onSettings?() }
     @objc private func quit() { NSApp.terminate(nil) }
+    @objc private func openReleases() { onOpenReleases?() }
 
     @objc private func openPinned(_ sender: NSMenuItem) {
         guard let filename = sender.representedObject as? String else { return }

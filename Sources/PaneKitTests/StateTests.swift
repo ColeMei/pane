@@ -238,12 +238,17 @@ func runStateTests() {
             state.panes = [PaneState(noteFilename: "a.md", frames: [
                 "built-in": StoredFrame(x: 100, y: 200, width: 692, height: 400),
             ])]
+            // The update bookkeeping goes through the same file (decision 136). A state.json that
+            // lost it would ask GitHub on every summon and announce the same version forever.
+            state.lastUpdateCheck = at("2026-09-12T09:00:00Z")
+            state.announcedUpdate = "v0.6.6"
 
             try? store.save(state)
             let (loaded, outcome) = store.load(default: AppState())
             Check.equal(outcome, JSONFileStore<AppState>.Outcome.loaded)
             Check.equal(loaded, state)
             Check.equal(loaded.panes.first?.frames["built-in"]?.rect.width, 692)
+            Check.equal(loaded.announcedUpdate, "v0.6.6")
         }
 
         Check.test("state.json is readable by a human who opens it") {

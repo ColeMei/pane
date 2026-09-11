@@ -75,6 +75,9 @@ final class PaneController: NSObject {
     /// Called by ⌘K's Settings… row. The window belongs to the app, not to a pane — decision 16 —
     /// so the pane asks rather than owning one.
     var onOpenSettings: (() -> Void)?
+    /// Called every time the pane is summoned. The release check hangs off this rather than off
+    /// launch (decision 136): a summon is a keypress, so there is somebody at the keyboard.
+    var onSummoned: (() -> Void)?
 
     private var paneID: UUID
 
@@ -238,6 +241,12 @@ final class PaneController: NSObject {
 
     var isVisible: Bool { panel.isSummoned }
 
+    /// Puts a message over the note for a moment. `dwell` is for a toast that is not a receipt —
+    /// see the editor's `showToast` and decision 136.
+    func showToast(_ text: String, dwell: Int? = nil) {
+        editor.call("showToast", dwell.map { [text, $0] as [Any] } ?? [text])
+    }
+
     /// When the last toggle ran, so one press cannot be delivered twice — see the note on the menu
     /// bar's summon item. Carbon and AppKit can both hand us the same combination while the Settings
     /// window is frontmost, and two toggles in a row is a summon that immediately dismisses itself.
@@ -315,6 +324,8 @@ final class PaneController: NSObject {
             self.panel.makeKeyAndOrderFront(nil)
             self.editor.focusEditor()
         }
+
+        onSummoned?()
 
         // `isDraft` as well as the filename: a draft has no filename by design, and opening the
         // last-used note over the top of one would throw away whatever had been typed into it.

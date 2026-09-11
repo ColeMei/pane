@@ -53,4 +53,52 @@ public enum ReleaseCheck {
         }
         return .current
     }
+
+    // MARK: - When to look, and when to say something
+
+    /// How long between checks. A day, and the unit is the day rather than the launch.
+    ///
+    /// Pane is an app you leave running for weeks — it is summoned, not launched — so "once per
+    /// launch" would be once per reboot on some machines and forty times a day on others. A release
+    /// happens at most a few times a month here, so a day is already far more often than there is
+    /// anything to find.
+    public static let checkInterval: TimeInterval = 24 * 60 * 60
+
+    /// Whether to make the request at all.
+    ///
+    /// `enabled` is the user's setting and comes first: switched off means no request, not a
+    /// request whose answer is discarded — the setting is about the network call, not about the
+    /// notice.
+    ///
+    /// Called on **summon**, never on launch and never on a timer. That is the whole of decision
+    /// 94's amendment: a summon is a keypress, so there is a person at the keyboard when the answer
+    /// arrives, and nothing happens on a machine nobody is sitting at.
+    public static func shouldCheck(
+        enabled: Bool,
+        lastChecked: Date?,
+        now: Date = Date(),
+        interval: TimeInterval = ReleaseCheck.checkInterval
+    ) -> Bool {
+        guard enabled else { return false }
+        guard let lastChecked else { return true }
+        // A clock that has gone backwards — a timezone change, a manual set, a restore — reads as a
+        // negative interval and would otherwise wait however long it takes to catch up.
+        let elapsed = now.timeIntervalSince(lastChecked)
+        return elapsed >= interval || elapsed < 0
+    }
+
+    /// The version to announce once, or nil for "say nothing".
+    ///
+    /// Announcing is **once per version**, not once per check and not once per summon: the toast is
+    /// news, and news repeated is nagging. `announced` is the last version this machine has already
+    /// been told about, held in `state.json` rather than in settings because it is not a preference
+    /// (decision 11).
+    ///
+    /// Note what is *not* here: nothing marks the notice as read or dismissed. The menu bar item is
+    /// derived from the comparison itself and disappears when the running version catches up, so
+    /// there is no flag that can be wrong.
+    public static func announcement(status: Status, announced: String?) -> String? {
+        guard case .behind(let latest) = status else { return nil }
+        return latest == announced ? nil : latest
+    }
 }

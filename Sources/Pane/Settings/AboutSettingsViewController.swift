@@ -7,12 +7,17 @@ import PaneKit
 /// because the app had no route to its own version at all, which for an unsigned build distributed
 /// as a zip and a cask is a real gap: "which one am I on" had no answer inside the app.
 ///
-/// **This is Pane's only network call**, and the shape of it is deliberate. Decision 7 says no
-/// server, no account, no protocol, and telemetry is on the not-doing list; a version check is
-/// none of those, but it is the first time the app talks to anything, so it happens **only when
-/// this button is pressed**. Nothing fires on launch, nothing is scheduled, nothing is sent but the
-/// request itself. Decision 9 is untouched: an outgoing HTTPS request needs no entitlement and no
-/// privacy permission, so `Info.plist` gains nothing.
+/// **This button is one of the two callers of Pane's only network call.** Decision 7 says no server,
+/// no account, no protocol, and telemetry is on the not-doing list; a version check is none of
+/// those, and nothing is sent but the request itself. Decision 9 is untouched: an outgoing HTTPS
+/// request needs no entitlement and no privacy permission, so `Info.plist` gains nothing.
+///
+/// **Amended: "only when this button is pressed" is no longer true.** The same request is made on
+/// summon, about once a day, so that somebody on an old build finds out — see decision 136 and
+/// `UpdateChecker`. Nothing fires on *launch* and nothing is on a *timer*, which is the half of 94
+/// that survives: both callers are a press or a keypress, so the request only happens with a person
+/// at the keyboard. This button remains the way to ask on purpose, and it works with the setting
+/// switched off, because pressing it is asking.
 ///
 /// It also does not download, install, or open anything. Pane is unsigned (decision 9), so an
 /// auto-updater would need a signing story the project does not have — and the install path is a
@@ -21,18 +26,14 @@ import PaneKit
 @MainActor
 final class AboutSettingsViewController: NSViewController {
 
-    private static let releasesAPI =
-        URL(string: "https://api.github.com/repos/ColeMei/pane/releases/latest")!
-    private static let releasesPage = URL(string: "https://github.com/ColeMei/pane/releases")!
+    private static let releasesPage = UpdateChecker.releasesPage
     private static let repository = URL(string: "https://github.com/ColeMei/pane")!
 
     private var status: NSTextField!
     private var checkButton: NSButton!
 
     /// `CFBundleShortVersionString`, which `build-app.sh` writes from the tag.
-    private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-    }
+    private var version: String { UpdateChecker.runningVersion }
 
     init() {
         super.init(nibName: nil, bundle: nil)
@@ -123,33 +124,13 @@ final class AboutSettingsViewController: NSViewController {
         checkButton.isEnabled = false
         status.stringValue = "Checking…"
 
-        var request = URLRequest(url: Self.releasesAPI)
-        request.timeoutInterval = 10
-        // GitHub's API refuses a request with no User-Agent. It carries the version rather than
-        // anything about the machine, because the version is the only thing the request is about.
-        request.setValue("Pane/\(version)", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-
-        let current = version
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
-            let tag = data.flatMap {
-                (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any]
-            }?["tag_name"] as? String
-
+        UpdateChecker.fetchStatus { [weak self] result in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.checkButton.isEnabled = true
 
-                    guard error == nil, let tag else {
-                        // Named as what happened, not explained (decision 76). "Could not check" is
-                        // the fact; whether it was DNS, a rate limit or a captive portal is not
-                        // something the reader can act on differently.
-                        self.status.stringValue = "Could not check for updates"
-                        return
-                    }
-
-                    switch ReleaseCheck.status(current: current, latest: tag) {
+                    switch result {
                     case .behind(let latest):
                         // Named, and nothing more. Pressing "check" is a request to be told, not a
                         // request to open a browser — the Releases link below is right there, and
@@ -158,10 +139,13 @@ final class AboutSettingsViewController: NSViewController {
                     case .current:
                         self.status.stringValue = "Pane is up to date"
                     case .unknown:
+                        // Named as what happened, not explained (decision 76). "Could not check" is
+                        // the fact; whether it was DNS, a rate limit or a captive portal is not
+                        // something the reader can act on differently.
                         self.status.stringValue = "Could not check for updates"
                     }
                 }
             }
-        }.resume()
+        }
     }
 }

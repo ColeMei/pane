@@ -294,6 +294,19 @@ public struct Settings: Codable, Equatable, Sendable {
     /// that either behaviour was wrong. This is the explicit control it was asking for.
     public var showOnEverySpace: Bool
 
+    /// Whether Pane asks GitHub, about once a day on summon, whether a newer release exists.
+    ///
+    /// **This is the switch on the network call, not on the notice.** Off means no request leaves
+    /// the machine; the About tab's button still works, because pressing it is asking.
+    ///
+    /// On by default, and that is a deliberate reversal of decision 94's *nothing on launch,
+    /// nothing scheduled*. The reason it changes: Pane is unsigned and installed by hand or by a
+    /// cask, so a user on an old build has no way to find out that the thing annoying them was
+    /// fixed a month ago — and the release they most need to hear about is the one they are not
+    /// running. What is kept from 94 is everything else: nothing is downloaded, nothing is
+    /// installed, nothing is opened, and no request is made on launch or on a timer.
+    public var checkForUpdates: Bool
+
     // MARK: Defaults
 
     public init(
@@ -314,7 +327,8 @@ public struct Settings: Codable, Equatable, Sendable {
         textSize: Double = 15,
         translucentPanes: Bool = true,
         hideFromScreenCapture: Bool = false,
-        showOnEverySpace: Bool = true
+        showOnEverySpace: Bool = true,
+        checkForUpdates: Bool = true
     ) {
         self.schemaVersion = schemaVersion
         self.vaultPath = vaultPath
@@ -334,6 +348,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.translucentPanes = translucentPanes
         self.hideFromScreenCapture = hideFromScreenCapture
         self.showOnEverySpace = showOnEverySpace
+        self.checkForUpdates = checkForUpdates
     }
 
     /// Every key is optional on the way in. This file is meant to be hand-edited, which means it
@@ -375,6 +390,8 @@ public struct Settings: Codable, Equatable, Sendable {
             try c.decodeIfPresent(Bool.self, forKey: .hideFromScreenCapture) ?? d.hideFromScreenCapture
         showOnEverySpace =
             try c.decodeIfPresent(Bool.self, forKey: .showOnEverySpace) ?? d.showOnEverySpace
+        checkForUpdates =
+            try c.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? d.checkForUpdates
 
         // Clamp rather than reject: a hand-typed 0 or 9999 should land somewhere sensible.
         textSize = min(max(textSize, Settings.textSizeRange.lowerBound), Settings.textSizeRange.upperBound)
