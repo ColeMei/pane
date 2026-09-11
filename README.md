@@ -163,8 +163,11 @@ Anything else in the file is ordinary CSS against the editor's own classes, and 
 ## Privacy
 
 Pane requests **no privacy permissions at all** — the global hotkey needs no Accessibility access.
-No telemetry, no account, no server. The only network call it ever makes is checking for a new
-release, and only when you press the button.
+No telemetry, no account, no server. The only network call it ever makes is asking GitHub whether
+a newer release exists — when you press the button under Settings → About, and once a day when you
+summon the pane, so you find out that something you reported has been fixed. It never downloads,
+installs or opens anything, and nothing about you or your machine is sent. Turn the daily one off
+with **Check for updates** in Settings → General; the button still works.
 
 ## Build from source
 

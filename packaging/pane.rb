@@ -52,8 +52,10 @@ cask "pane" do
 
     Pane requests no privacy permissions at all: the global hotkey goes through
     RegisterEventHotKey, which needs no Accessibility access. The only request it
-    ever makes to the network is the version check under Settings > About, and
-    only when you press that button. Your notes are plain .md files in
-    ~/Documents/Pane.
+    ever makes to the network is asking GitHub whether a newer release exists --
+    when you press the button under Settings > About, and once a day when you
+    summon the pane. It downloads and installs nothing, and sends nothing about
+    you. Switch the daily one off under Settings > General. Your notes are plain
+    .md files in ~/Documents/Pane.
   EOS
 end
