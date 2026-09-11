@@ -613,14 +613,37 @@ function buildDecorations(view: EditorView): DecorationSet {
           // right of where the stylesheet put it, a third-level one two space-widths, and the error
           // compounded with depth. Level one was right, which is why this survived the measuring
           // pass: it is the one level with nothing in front of the marker.
+          //
+          // **Only where that span really is whitespace**, and a line has room for one marker.
+          //
+          // `1. 1. three` is a nested list *on one line* — legal CommonMark, and what a person
+          // typing a price into an item used to get before decision 135 escaped it. The inner
+          // `ListMark`'s "indentation" is then the outer marker, and hiding it unconditionally ate
+          // the parent's number: the line drew a single `1. ` at level two, which reads as the
+          // marker having been re-rendered rather than as two lists. Decision 121's rule, third
+          // construct in this file to meet it — a marker may only be hidden where something is
+          // shown in its place.
+          //
+          // Both cannot be drawn. A marker box is 16px wide with a 16px pull that puts it in the
+          // gutter, and there is one gutter: two boxes paint **exactly on top of each other**
+          // (measured, both at x=46), and leaving the inner one boxed and the outer one literal
+          // inverts them on screen — the box pulls left, the literal text does not, so `1. 1.`
+          // draws as `1.1.` with the inner marker first. So the **outer** marker keeps the slot,
+          // being the one the line's indent is measured from, and the inner one is left as the
+          // characters it is: no box, no widget, nothing hidden. Same answer decision 121 gave an
+          // image — markdown Pane has chosen not to interpret renders as the markdown it is.
           const lineStart = doc.lineAt(node.from);
+          //
+          // `>` counts as indentation and a list marker does not. A quote is a container rather
+          // than a kind (decision 100), so `> - one` is one marker behind a bar and the bar is
+          // hidden by `QuoteMark` anyway; a marker in front of a marker is the nesting above.
           if (node.from > lineStart.from) {
+            if (!/^[ \t>]*$/.test(doc.sliceString(lineStart.from, node.from))) return;
             decorations.push(hide.range(lineStart.from, node.from));
           }
 
           const text = doc.sliceString(node.from, node.to);
           const ordered = /\d/.test(text);
-
 
           // A task item already has a checkbox standing in for its marker. Drawing a bullet as well
           // gives every to-do two markers, which is not what frame 1b shows.

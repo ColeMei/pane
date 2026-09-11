@@ -741,6 +741,28 @@ export function runListStructure(view, doc) {
   r.check("a list inside a quote is still a list", 1, i.renderedDepth(1));
   r.check("and the line is still a quote", true, i.classes(1).includes("pane-line-quote"));
 
+  // --- two markers on one line, and a numbered to-do (decision 135) ------------------------------
+  //
+  // Both of these are documents another tool can hand us, so they are loaded rather than typed —
+  // the input rule above stops Pane writing the first one, and cannot stop it arriving.
+
+  // A line has one marker slot, so a one-line nesting draws the **outer** marker in it and leaves
+  // the inner one literal. Both boxed paint on top of each other — measured, both at x=46 — and
+  // boxing the inner one instead inverts them, because a box pulls into the gutter and text does
+  // not: `1. 1.` came out as `1.1.` with the inner marker in front.
+  const boxed = (n, sel) => i.lineEl(n).querySelectorAll(sel).length;
+
+  d.load("1. 1. three\n\npara\n");
+  d.at("para");
+  r.check("a list nested on one line reads as its own characters", "1. 1. three", i.visibleText(1));
+  r.check("and boxes one marker, not two", 1, boxed(1, ".pane-list-number"));
+
+  d.load("- * three\n\npara\n");
+  d.at("para");
+  r.check("the bullet equivalent keeps its inner marker as text", "* three",
+    i.visibleText(1).replace("•", ""));
+  r.check("and boxes one bullet, not two", 1, boxed(1, ".pane-list-marker"));
+
   // --- the raw source under the caret ------------------------------------------------------------
 
   d.load(BULLETS);
