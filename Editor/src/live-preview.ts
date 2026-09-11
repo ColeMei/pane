@@ -176,11 +176,19 @@ const numberMark = Decoration.mark({ class: "pane-list-number" });
  * the box and `min-width` would grow it and push the item's words 3px right on reveal. */
 const rawTaskMark = Decoration.mark({ class: "pane-syntax pane-syntax-taskmark" });
 
+/** The same, for a to-do inside a **numbered** item, where the number already has the line's one
+ * marker slot — so this stands in the text flow after it rather than in the slot. See `TaskWidget`. */
+const rawTaskMarkInFlow = Decoration.mark({
+  class: "pane-syntax pane-syntax-taskmark pane-syntax-taskmark--inflow",
+});
+
 /** A rendered task checkbox standing in for the literal `[ ]` or `[x]` in the buffer. */
 class TaskWidget extends WidgetType {
   constructor(
     readonly done: boolean,
-    readonly pos: number
+    readonly pos: number,
+    /** The item is numbered, so the number holds the line's marker slot and this box does not. */
+    readonly inFlow = false
   ) {
     super();
   }
@@ -188,12 +196,14 @@ class TaskWidget extends WidgetType {
   eq(other: TaskWidget) {
     // Position matters: two checkboxes in the same state are otherwise indistinguishable, and
     // CodeMirror would reuse the DOM node and send clicks to the wrong line.
-    return other.done === this.done && other.pos === this.pos;
+    return other.done === this.done && other.pos === this.pos && other.inFlow === this.inFlow;
   }
 
   toDOM() {
     const box = document.createElement("span");
-    box.className = `pane-task ${this.done ? "pane-task--done" : "pane-task--todo"}`;
+    box.className = `pane-task ${this.done ? "pane-task--done" : "pane-task--todo"}${
+      this.inFlow ? " pane-task--inflow" : ""
+    }`;
     // Done is a **fill**, drawn in CSS, not a tick glyph. A ✓ set in the body font is a character
     // with the body font's own optical centre and side bearings, so it never sits square in a box
     // — and it has to be re-tuned every time the box size changes, which is decision 82's class.
@@ -568,6 +578,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         if (name === "TaskMarker") {
+          // A numbered to-do keeps its number (see `ListMark` below), and a line has one marker
+          // slot: the number takes it, being first, and the box stands in the flow after it. Both
+          // in the slot and they paint on top of each other — measured, number 24..40 against box
+          // 25..39, and it shipped that way in the first draft of decision 135 because the
+          // assertion counted the two elements instead of asking where they landed. A bullet's
+          // to-do is untouched: there the box *is* the item's marker.
+          const inFlow = /^[ \t]*\d+[.)][ \t]/.test(doc.lineAt(node.from).text);
           if (isActive) {
             // The raw `[ ]` goes in the marker box, exactly as a revealed `-` or `1.` does — and
             // for the same reason. A bullet and a number reveal without moving anything, because
@@ -576,7 +593,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             // every word of it about 24px right. The only list kind that moved when you looked at
             // it. `[ ]` is around 13px at the default size, so it fits the box it is borrowing;
             // wider, it overflows into the gap rather than widening (decision 122).
-            decorations.push(rawTaskMark.range(node.from, node.to));
+            decorations.push((inFlow ? rawTaskMarkInFlow : rawTaskMark).range(node.from, node.to));
             if (doc.sliceString(node.to, node.to + 1) === " ") {
               decorations.push(hide.range(node.to, node.to + 1));
             }
@@ -585,7 +602,10 @@ function buildDecorations(view: EditorView): DecorationSet {
           const text = doc.sliceString(node.from, node.to);
           const done = /x/i.test(text);
           decorations.push(
-            Decoration.replace({ widget: new TaskWidget(done, node.from) }).range(node.from, node.to)
+            Decoration.replace({ widget: new TaskWidget(done, node.from, inFlow) }).range(
+              node.from,
+              node.to
+            )
           );
           // And the single space after `]`, which would otherwise push the text 4px past where
           // every other list's text starts. The checkbox's own 16px slot is the gap.
@@ -655,7 +675,15 @@ function buildDecorations(view: EditorView): DecorationSet {
           // literal `[ ]` dropped out of the marker box to the text column. Decision 121's own
           // rule, broken one decision later. `[ \t]` rather than `\s`, because a newline is not a
           // space and the parser does not accept one either.
-          if (/^[ \t]*\[[ xX]\][ \t]/.test(doc.sliceString(node.to, Math.min(node.to + 6, doc.length)))) {
+          // **A bullet, and only a bullet.** A number is not redundant with a checkbox: `1. [ ] x`
+          // is a numbered to-do, and hiding the `1.` drew it as a bare checkbox with the number
+          // gone — on bytes `checkboxInputRule` creates itself, from `1. ` followed by `[] `. A
+          // bullet and a checkbox both say only "an item", so one can stand in for the other; a
+          // number also says *which* item, and nothing else on the line says it.
+          if (
+            !ordered &&
+            /^[ \t]*\[[ xX]\][ \t]/.test(doc.sliceString(node.to, Math.min(node.to + 6, doc.length)))
+          ) {
             decorations.push(hide.range(node.from, node.to));
             hideSpaceAfter(node.to);
             return;

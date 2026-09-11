@@ -276,6 +276,16 @@
    * column, so the only gap any marker had was whatever its own glyph left inside the box — 9.2px
    * for a bullet and 1.4px for a number, measured. The reference's is 7.5px for all of them. */
   --list-marker-gap: 7.5px;
+  /* 14px, the reference's figure, measured off a screenshot of both panes side by side rather
+   * than tuned: 15 then 13 then 11 were all guesses, and the report after each was that the box
+   * looked wrong. Centred in the 16px marker box it spans the box almost exactly, which is what
+   * makes a checkbox read as the same kind of object as a bullet rather than as a smaller one.
+   *
+   * **A token rather than a local.** It lived on `.pane-task`, which is fine until something that
+   * is not a checkbox has to line up with one — the revealed `[ ]` of a numbered to-do owes its
+   * advance to this number, and a `var()` that resolves on the wrong element silently drops the
+   * whole declaration. */
+  --checkbox-size: 14px;
 }
 
 .pane-list-marker,
@@ -341,6 +351,22 @@
   text-align: center;
   margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
   margin-right: var(--list-marker-gap);
+}
+
+/* The same, revealed, inside a **numbered** item — see `.pane-task.pane-task--inflow`. No pull,
+ * and a right margin derived so the advance matches the rendered box's: the checkbox is
+ * `--checkbox-size` wide plus a gap, this one is `--list-marker-box` wide, so the difference is
+ * what it owes. Written as a sum rather than as a number, decision 82, or the next change to
+ * either box moves the item's words on reveal.
+ *
+ * **Two classes deep on purpose.** A single-class rule here would tie with `.pane-syntax-taskmark`
+ * above and be decided by source order, which is decision 71's trap and has now cost this codebase
+ * four separate bugs. */
+.pane-syntax-taskmark.pane-syntax-taskmark--inflow {
+  margin-left: 0;
+  margin-right: calc(
+    var(--checkbox-size) + var(--list-marker-gap) - var(--list-marker-box)
+  );
 }
 
 /* A revealed list marker sits in the same box the rendered one does, or the line jumps 16px right
@@ -571,11 +597,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* 14px, the reference's figure, measured off a screenshot of both panes side by side rather
-   * than tuned: 15 then 13 then 11 were all guesses, and the report after each was that the box
-   * looked wrong. Centred in the 16px marker box it spans the box almost exactly, which is what
-   * makes a checkbox read as the same kind of object as a bullet rather than as a smaller one. */
-  --checkbox-size: 14px;
   width: var(--checkbox-size);
   height: var(--checkbox-size);
   flex: none;
@@ -611,6 +632,23 @@
   line-height: 1;
   cursor: pointer;
   vertical-align: top;
+}
+
+/* A to-do inside a **numbered** item.
+ *
+ * A line has one marker slot, and the number has it — it comes first and it is what the line's
+ * indent is measured from (decision 135). So the box stands in the text flow after the number
+ * rather than being pulled into the slot: no left pull, its own gap on the right, and the item's
+ * words start after both. With the pull left on, the two painted on top of each other — measured,
+ * number at 24..40 and box at 25..39 — which is what shipped in this fix's first draft, because
+ * the assertion that was supposed to catch it counted elements rather than measuring them.
+ *
+ * A bullet's to-do keeps the slot and is untouched: there the box *is* the item's marker, which
+ * is why the bullet is hidden for it and a number is not. Two classes deep for decision 71's
+ * reason — `.pane-task` above is one class, and a tie here would be settled by source order. */
+.pane-task.pane-task--inflow {
+  margin-left: 0;
+  margin-right: var(--list-marker-gap);
 }
 
 /* Done is the box filled in, not a tick in it.

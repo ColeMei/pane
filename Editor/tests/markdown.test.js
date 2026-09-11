@@ -763,6 +763,37 @@ export function runListStructure(view, doc) {
     i.visibleText(1).replace("•", ""));
   r.check("and boxes one bullet, not two", 1, boxed(1, ".pane-list-marker"));
 
+  // A checkbox stands in for a bullet, which says only "an item". A number also says which item.
+  //
+  // **Measured, not counted.** The first draft of this asserted that both elements were present,
+  // found them, and passed — while they were painting on top of each other at 24..40 and 25..39.
+  // The number holds the line's one slot and the box stands in the flow after it.
+  const rect = (n, sel) => {
+    const el = i.lineEl(n).querySelector(sel);
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { left: Math.round(b.left), right: Math.round(b.right) };
+  };
+
+  d.load("1. [ ] one\n2. [x] two\n\npara\n");
+  d.at("para");
+  r.check("a numbered to-do keeps its number", "1.",
+    i.lineEl(1).querySelector(".pane-list-number")?.textContent.trim());
+  r.check("the second one counts on", "2.",
+    i.lineEl(2).querySelector(".pane-list-number")?.textContent.trim());
+  r.check("and its box is clear of the number, not on top of it", true,
+    rect(1, ".pane-task").left >= rect(1, ".pane-list-number").right);
+  r.check("a ticked numbered to-do is clear too", true,
+    rect(2, ".pane-task").left >= rect(2, ".pane-list-number").right);
+
+  // The bullet's to-do is untouched: there the box *is* the item's marker, so it keeps the slot.
+  d.load("- [ ] one\n1. [ ] two\n\npara\n");
+  d.at("para");
+  r.check("a bulleted to-do draws no bullet beside its box", 0,
+    i.lineEl(1).querySelectorAll(".pane-list-marker").length);
+  r.check("and its box is still in the marker slot", true,
+    rect(1, ".pane-task").left < rect(2, ".pane-task").left);
+
   // --- the raw source under the caret ------------------------------------------------------------
 
   d.load(BULLETS);
