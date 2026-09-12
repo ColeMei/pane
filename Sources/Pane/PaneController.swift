@@ -1552,6 +1552,13 @@ extension PaneController: EditorWebViewDelegate {
                 [settings.value.vaultURL.appendingPathComponent(filename)]
             )
 
+        case .openLink(let target):
+            // Decline quietly. There is nothing to say that the note does not already say — the
+            // link is on screen — and decision 76's test is whether a string names what happened.
+            // "Nothing happened" does not.
+            guard let url = LinkTarget.resolve(target) else { return }
+            NSWorkspace.shared.open(url)
+
         case .openSettings:
             onOpenSettings?()
 

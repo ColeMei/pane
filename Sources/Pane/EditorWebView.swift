@@ -27,6 +27,10 @@ enum PaneMessage {
     /// how many rows survived the filter — and the pane has to grow to hold it.
     case actionsOpen(open: Bool, height: CGFloat)
     case revealInFinder
+    /// ⌘-click on a link (decision 138). Carries the link node's **raw text**, deliberately not a
+    /// URL: the page decides what is a link, `LinkTarget` decides what may be opened, and keeping
+    /// those apart is what puts the half that can be wrong quietly somewhere it can be tested.
+    case openLink(target: String)
     /// ⌘K row fifteen (decision 103): rename the file behind this note by hand.
     case renameFile
     case openSettings
@@ -103,6 +107,8 @@ enum PaneMessage {
             )
         case "revealInFinder":
             self = .revealInFinder
+        case "openLink":
+            self = .openLink(target: string("target"))
         case "renameFile":
             self = .renameFile
         case "copyAsMarkdown":

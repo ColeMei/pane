@@ -71,6 +71,11 @@ type OutboundMessage =
   | { type: "switcherOpen"; open: boolean; height: number }
   | { type: "actionsOpen"; open: boolean; height: number }
   | { type: "revealInFinder" }
+  /**
+   * ⌘-click on a link (decision 138). Carries the node's raw text, not a URL: whether that text may
+   * be opened at all is `LinkTarget.resolve`'s question, in PaneKit where it is tested.
+   */
+  | { type: "openLink"; target: string }
   /** ⌘K row fifteen (decision 103). Swift owns the vault, so the page can only ask. */
   | { type: "renameFile" }
   | { type: "openSettings" }
@@ -1177,7 +1182,7 @@ function baseExtensions(): Extension[] {
     markdownLanguage.data.of({ closeBrackets: { brackets: ["(", "[", "`"] } }),
     closeBrackets(),
 
-    livePreview(),
+    livePreview((target) => send({ type: "openLink", target })),
     findHighlighting(),
     // Ordered lists count themselves. A filter that writes to the document, so it declares the
     // transactions it is *for* rather than the ones it is against — see the file's own note, and

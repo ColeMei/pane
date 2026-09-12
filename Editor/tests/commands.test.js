@@ -1031,7 +1031,7 @@ export function run(view, bar, doc) {
   let checked = 0;
 
   for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips, runListKinds,
-                       runFooterCount]) {
+                       runFooterCount, runLinkOpening]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);
@@ -1077,5 +1077,151 @@ export function run(view, bar, doc) {
     }
   }
 
+  return { checked, failures };
+}
+
+/**
+ * ⌘-click follows a link — decision 138.
+ *
+ * The invariant this is really guarding is one sentence: **what opens is exactly what renders as
+ * `.pane-link`.** So the first half asserts every form by hand, and the second half sweeps the
+ * painted `.pane-link` spans and requires every one of them to open — which is the assertion that
+ * would have caught decision 121's empty-span fault a release early, and is the one that will fail
+ * if a new construct is given the accent without being given the gesture.
+ *
+ * Asserted on the **message**, like the switcher's height cases: whether the browser actually opens
+ * is `LinkTarget`'s question and is tested in PaneKit. What this owns is which text gets handed
+ * over, and from where.
+ */
+export function runLinkOpening(view, doc) {
+  const failures = [];
+  let checked = 0;
+
+  const check = (name, want, got) => {
+    checked += 1;
+    if (got !== want) failures.push({ case: `link · ${name}`, want, got });
+  };
+
+  const sent = [];
+  const host = (window.webkit ??= {});
+  const handlers = (host.messageHandlers ??= {});
+  const real = handlers.pane;
+  handlers.pane = { postMessage: (m) => { sent.push(m); real?.postMessage?.(m); } };
+
+  const set = (text) => {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+    // Park the caret clear of every link: the caret's own line goes raw (decision 57), which drops
+    // the `.pane-link` marks the sweep below counts.
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+  };
+
+  /** ⌘-click at a document offset, and return the target that was sent — or null. */
+  const cmdClickAt = (pos, { meta = true } = {}) => {
+    sent.length = 0;
+    const at = view.coordsAtPos(pos);
+    if (!at) return "no coords";
+    const event = new MouseEvent("mousedown", {
+      bubbles: true, cancelable: true, metaKey: meta, button: 0,
+      clientX: (at.left + at.right) / 2, clientY: (at.top + at.bottom) / 2,
+    });
+    view.contentDOM.dispatchEvent(event);
+    const message = sent.find((m) => m.type === "openLink");
+    return message ? message.target : null;
+  };
+
+  const DOC = [
+    "labelled [Anthropic](https://www.anthropic.com) here",
+    "autolink <https://example.com/one>",
+    "bare https://example.com/two",
+    "host www.example.com stop",
+    "address a@b.com stop",
+    "image ![alt](https://example.com/pic.png) stop",
+    "reference [text][ref] stop",
+    "shortcut [ref] stop",
+    "folded [TEXT][Ref] stop",
+    "dangling [text][nope] stop",
+    "plain prose with no link at all",
+    "",
+    "[ref]: https://example.com/def",
+    "",
+  ].join("\n");
+  set(DOC);
+
+  const at = (needle, offset = 1) => DOC.indexOf(needle) + offset;
+
+  // The three forms the report named.
+  check("a label carries its target", "https://www.anthropic.com", cmdClickAt(at("Anthropic")));
+  check("an autolink opens", "https://example.com/one", cmdClickAt(at("https://example.com/one")));
+  check("a bare url opens", "https://example.com/two", cmdClickAt(at("https://example.com/two")));
+
+  // The two the report did not think of, and the reason `LinkTarget.normalise` exists.
+  check("a www host opens", "www.example.com", cmdClickAt(at("www.example.com")));
+  check("an address opens", "a@b.com", cmdClickAt(at("a@b.com")));
+
+  // Clicking the target half of a link, not its label, is the same link.
+  check("the raw target is the same link", "https://www.anthropic.com",
+        cmdClickAt(at("https://www.anthropic.com")));
+
+  // Decision 121: an image renders as its own markdown, so nothing in it is a link.
+  check("an image url is text", null, cmdClickAt(at("https://example.com/pic.png")));
+  check("image alt text is text", null, cmdClickAt(at("alt](")));
+
+  // A reference link's target lives in a definition line, so it is looked up rather than declined
+  // — it is painted with the accent like any other link, and the note does contain its target.
+  check("a reference link resolves", "https://example.com/def", cmdClickAt(at("text][ref]")));
+  check("a definition's target opens", "https://example.com/def",
+        cmdClickAt(at("https://example.com/def")));
+
+  // The shortcut spelling carries no LinkLabel at all, and CommonMark folds case when it matches
+  // one label against another.
+  check("a shortcut reference resolves", "https://example.com/def", cmdClickAt(at("[ref] stop") + 2));
+  check("a label matches however it is cased", "https://example.com/def",
+        cmdClickAt(at("TEXT][Ref]")));
+
+  // No definition in the note means no target in the note. Nothing to open, so nothing happens.
+  check("a reference with no definition does nothing", null, cmdClickAt(at("text][nope]")));
+
+  check("prose is not a link", null, cmdClickAt(at("plain prose")));
+
+  // The report's third bullet: the caret's own line shows raw source (decision 57), so the label
+  // and the target are both on screen as themselves. Both halves are the same link.
+  {
+    const label = at("Anthropic");
+    view.dispatch({ selection: { anchor: label } });
+    check("on the caret's own line, the label opens", "https://www.anthropic.com",
+          cmdClickAt(label));
+    check("and so does the target beside it", "https://www.anthropic.com",
+          cmdClickAt(at("https://www.anthropic.com")));
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+  }
+
+  // Without the modifier nothing is sent at all, and CodeMirror keeps the click.
+  check("a plain click sends nothing", null, cmdClickAt(at("Anthropic"), { meta: false }));
+
+  // The invariant, swept over what was actually painted rather than over the tree.
+  {
+    const spans = [...view.contentDOM.querySelectorAll(".pane-link")];
+    const missed = [];
+    for (const span of spans) {
+      const box = span.getBoundingClientRect();
+      if (box.width === 0) { missed.push(`${span.textContent} (empty span)`); continue; }
+      sent.length = 0;
+      view.contentDOM.dispatchEvent(new MouseEvent("mousedown", {
+        bubbles: true, cancelable: true, metaKey: true, button: 0,
+        clientX: box.left + box.width / 2, clientY: box.top + box.height / 2,
+      }));
+      if (!sent.some((m) => m.type === "openLink")) missed.push(span.textContent);
+    }
+    // Exactly one exception, named rather than tolerated: `[text][nope]` has no definition in the
+    // note, so there is no target to open. It is painted as a link because `@lezer/markdown` does
+    // not track definitions — CommonMark says an unresolved reference is not a link at all — and
+    // that is a rendering question for another day, not something this gesture can fix.
+    check("every painted link opens, bar the one with no target", "[nope]", missed.join(", "));
+    // Guards the sweep itself: if the accent stopped being painted, the loop above would pass by
+    // having nothing to do. Six constructs carry `.pane-link` in this fixture.
+    check("and the sweep had links to sweep", true, spans.length >= 9);
+  }
+
+  handlers.pane = real;
   return { checked, failures };
 }

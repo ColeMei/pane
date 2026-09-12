@@ -17,6 +17,7 @@ runRecentlyDeletedTests()
 runMarkdownExportTests()
 runAutoSizingTests()
 runReleaseCheckTests()
+runLinkTargetTests()
 runBuildProfileTests()
 runWelcomeNoteTests()
 

@@ -20,7 +20,15 @@
 
 import { syntaxTree } from "@codemirror/language";
 import { endOfOwnContent } from "./blocks";
-import { type Extension, type Range, RangeSet, StateField, Transaction } from "@codemirror/state";
+import type { SyntaxNode } from "@lezer/common";
+import {
+  type EditorState,
+  type Extension,
+  type Range,
+  RangeSet,
+  StateField,
+  Transaction,
+} from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -956,6 +964,137 @@ const blankLineClickHandler = EditorView.domEventHandlers({
   },
 });
 
+/**
+ * The target a ⌘-click at this position should open, or null — decision 138.
+ *
+ * **The rule is: what opens is exactly what renders as `.pane-link`.** Not a second opinion about
+ * what a link is, because two implementations of one question is decision 100's fault, and the
+ * question was already answered a release ago by decision 121's guard a few hundred lines up. So
+ * this walks the same tree and honours the same three exclusions:
+ *
+ * - a `URL` inside an `Image` is **literal text**, not a link — Pane does not interpret images, so
+ *   `![alt](url)` renders every character of itself and nothing there is clickable;
+ * - everything else that got the accent — `[label](target)`, `<https://x>`, a bare `https://`,
+ *   `www.` or address, and the target half of a `[ref]: target` definition — opens.
+ *
+ * A **reference** link (`[text][ref]`, or the shortcut `[ref]`) has no `URL` child at all: its
+ * target is a `[ref]: target` line elsewhere in the note. The first draft declined those, and the
+ * sweep in `commands.test.js` failed on exactly that — which was the right answer, because a
+ * reference link is painted with the accent and a thing that looks like a link and does nothing is
+ * what issues #1 and #2 were both about. So the definition is looked up instead.
+ *
+ * What it returns is the raw text of the node. Whether that text may be *opened* is
+ * `LinkTarget.resolve`'s question, in PaneKit, where it can be tested.
+ */
+export function linkTargetAt(state: EditorState, pos: number): string | null {
+  const text = (from: number, to: number) => state.doc.sliceString(from, to);
+
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent) {
+    // Checked before `Link`, and before the `URL` branch, because an image is the one construct
+    // whose URL is on screen as itself and is deliberately not a link.
+    if (node.name === "Image") return null;
+
+    if (node.name === "URL") {
+      if (node.parent?.name === "Image") return null;
+      return text(node.from, node.to);
+    }
+
+    if (node.name === "Link" || node.name === "Autolink") {
+      const url = node.getChild("URL");
+      return url ? text(url.from, url.to) : referenceTarget(state, node);
+    }
+  }
+  return null;
+}
+
+/**
+ * A label, as CommonMark compares two of them: case-folded, with runs of whitespace collapsed.
+ *
+ * `[Ref]` and `[ref]` are the same reference, and the spec says so — matching on the literal would
+ * work for every label anybody types by hand and fail on the one that was pasted.
+ */
+function labelKey(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** The text of a link's first bracket group — `ref` from `[ref]` and from `[ref][]`. */
+function firstBracketText(state: EditorState, link: SyntaxNode): string {
+  const marks = link.getChildren("LinkMark");
+  if (marks.length < 2) return "";
+  return state.doc.sliceString(marks[0].to, marks[1].from);
+}
+
+/**
+ * The target of a reference link, looked up in the note's own definitions.
+ *
+ * Three spellings reach here and they differ only in where the label is: `[text][ref]` carries a
+ * `LinkLabel` child, `[ref][]` carries an empty one, and the shortcut `[ref]` carries none at all.
+ * All three fall back to the first bracket group, which is the label in the two cases where the
+ * explicit one is missing or empty.
+ *
+ * A definition that does not exist returns null and the click does nothing — correct, because
+ * there is no target in the note to open. The lookup is a whole-tree walk, which is fine for
+ * something that runs once per ⌘-click and never on a keystroke.
+ */
+function referenceTarget(state: EditorState, link: SyntaxNode): string | null {
+  const label = link.getChild("LinkLabel");
+  const explicit = label ? state.doc.sliceString(label.from + 1, label.to - 1) : "";
+  const key = labelKey(explicit || firstBracketText(state, link));
+  if (!key) return null;
+
+  let found: string | null = null;
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (found !== null || node.name !== "LinkReference") return;
+      const name = node.node.getChild("LinkLabel");
+      const url = node.node.getChild("URL");
+      if (!name || !url) return;
+      if (labelKey(state.doc.sliceString(name.from + 1, name.to - 1)) === key) {
+        found = state.doc.sliceString(url.from, url.to);
+      }
+    },
+  });
+  return found;
+}
+
+/**
+ * ⌘-click follows a link; a plain click still places the caret.
+ *
+ * The gesture is the reference's, measured rather than assumed: Raycast Notes opens the browser on
+ * ⌘-click, does nothing on hover, and shows a link popover on a *plain* click — the third of those
+ * is deliberately not copied, because its Edit link / Unlink actions only mean something in an
+ * editor whose links are nodes with an href. Pane's link is text (decision 5), so there is nothing
+ * to unlink, and a popover would be new chrome against decision 22 besides.
+ *
+ * No hover affordance, for the same reason it was not worth building: the page receives no
+ * `mousemove` in Pane's real configuration (decision 120) and Swift's `setPointer` carries no
+ * modifier state, so lighting a link under a held ⌘ would mean extending that channel. The
+ * reference does nothing on hover either.
+ *
+ * A click, unlike a move, *is* delivered (decision 107) — measured again for this on the shipping
+ * debug build, where a ⌘-click on all three link forms moved the caret and did nothing else.
+ */
+const linkClickHandler = (open: (target: string) => void) =>
+  EditorView.domEventHandlers({
+    mousedown(event, view) {
+      if (!event.metaKey || event.button !== 0) return false;
+
+      // Precise, like the blank-line handler above: a ⌘-click in the empty space below the note
+      // must not resolve to the nearest link on the last line.
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (pos === null) return false;
+
+      const target = linkTargetAt(view.state, pos);
+      if (target === null) return false;
+
+      // Only once a target is in hand, so a ⌘-click on ordinary prose keeps whatever CodeMirror
+      // would have done with it.
+      event.preventDefault();
+      open(target);
+      return true;
+    },
+  });
+
 const taskClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
     const target = event.target as HTMLElement | null;
@@ -1021,8 +1160,8 @@ export function caretBlankLineSlack(view: EditorView): number {
  * A StateField would have been the other option, but the decorations depend on the *viewport*, which
  * a StateField cannot see. Hence a ViewPlugin.
  */
-export function livePreview(): Extension {
-  return [livePreviewPlugin, blankLineClickHandler, taskClickHandler];
+export function livePreview(openLink: (target: string) => void): Extension {
+  return [livePreviewPlugin, blankLineClickHandler, taskClickHandler, linkClickHandler(openLink)];
 }
 
 // Re-exported so the unused-import checker does not hide a genuine mistake if this is refactored.
