@@ -1019,9 +1019,9 @@ function labelKey(raw: string): string {
 
 /** The text of a link's first bracket group — `ref` from `[ref]` and from `[ref][]`. */
 function firstBracketText(state: EditorState, link: SyntaxNode): string {
-  const marks = link.getChildren("LinkMark");
-  if (marks.length < 2) return "";
-  return state.doc.sliceString(marks[0].to, marks[1].from);
+  const [open, close] = link.getChildren("LinkMark");
+  if (!open || !close) return "";
+  return state.doc.sliceString(open.to, close.from);
 }
 
 /**
