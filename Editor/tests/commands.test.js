@@ -1216,7 +1216,16 @@ export function runLinkOpening(view, doc) {
     // note, so there is no target to open. It is painted as a link because `@lezer/markdown` does
     // not track definitions — CommonMark says an unresolved reference is not a link at all — and
     // that is a rendering question for another day, not something this gesture can fix.
-    check("every painted link opens, bar the one with no target", "[nope]", missed.join(", "));
+    //
+    // **The name it is missed under used to be `[nope]`, and that was an artifact of this loop.**
+    // Every click here moves the selection, which rebuilds the decorations, so `spans` is a list
+    // collected before the first click and read after the last — and the entries whose lines got
+    // re-revealed along the way were detached elements by then, reporting `w=0` at the origin. The
+    // one for this construct was the label half alone. Since a range selection stopped revealing
+    // the source of everything it spans, the loop no longer churns the DOM under itself and the
+    // construct is what it renders as: one span, `text[nope]`, still the only one that opens
+    // nothing. Same exception, honestly named.
+    check("every painted link opens, bar the one with no target", "text[nope]", missed.join(", "));
     // Guards the sweep itself: if the accent stopped being painted, the loop above would pass by
     // having nothing to do. Six constructs carry `.pane-link` in this fixture.
     check("and the sweep had links to sweep", true, spans.length >= 9);

@@ -1468,13 +1468,184 @@ export function runDegradation(view, doc) {
   return { checked: r.checked, failures: r.failures };
 }
 
+// ------------------------------------------------------------------------------------------------
+// What a selection reveals, and what it draws
+// ------------------------------------------------------------------------------------------------
+
+/**
+ * Decision 77 settled the sentence and applied it to half the problem: *"a range selection is not a
+ * place you are standing, it is a thing you have marked."* Everything that was not height-changing
+ * kept following whatever a selection *touched*, so ⌘A turned the whole note back into its source —
+ * the heading's hashes, the `**`, the backticks, the quote's `>` and every list marker at once.
+ *
+ * It was also three visible defects in one. A revealed list marker is an `inline-block`, because it
+ * has to hold the marker column; an `inline-block` is an atomic inline box, so the selection crossing
+ * it paints a rectangle at its `line-height` rather than at the font's painted height. Measured off
+ * the shipped build's pixels: the marker's rectangle 20pt tall against the text's 15pt, sharing a
+ * bottom edge, with the marker's own `margin-right` unpainted between them — two and three
+ * mismatched rectangles a line where the reference draws one. That is decision 101's mechanism one
+ * construct over: 101 stepped the *rendered* markers out of the selection and said in so many words
+ * that the raw one "is real text with no rule here", which stopped being true at decision 122.
+ *
+ * So the reveal follows a range only while that range stays inside one line. This section is the
+ * gate on it, plus the two declarations no harness here can reach.
+ */
+export function runSelectionReveal(view, doc) {
+  const r = recorder("selection reveal");
+  const d = driver(view, doc);
+  const i = inspector(view, doc);
+  // The probe's window is never key, and `activeLines` correctly reports nothing while unfocused —
+  // which would make every case below pass for the wrong reason.
+  Object.defineProperty(view, "hasFocus", { get: () => true, configurable: true });
+
+  const ES = view.state.selection.constructor;
+  const select = (from, to) => view.dispatch({ selection: { anchor: from, head: to } });
+  const selectAll = () => select(0, view.state.doc.length);
+  const at = (needle, offset = 0) => view.state.doc.toString().indexOf(needle) + offset;
+  const lines = () =>
+    [...doc.querySelectorAll(".cm-line")].map((el) => el.textContent).join("⏎");
+
+  const NOTE = [
+    "# Heading one",
+    "",
+    "Some **bold** and `code` and *em* here.",
+    "",
+    "> quoted line",
+    "",
+    "1. [ ] numbered todo",
+    "- * two bullets",
+    "",
+  ].join("\n");
+
+  // --- a selection that spans lines renders, it does not reveal ----------------------------------
+
+  d.load(NOTE);
+  selectAll();
+  // The hashes' own space stays, exactly as it does with the pane blurred: `HeadingMark` hides the
+  // marker and not the space after it, which is the rendering this has always had.
+  // The task's `[ ]` is a widget, so it contributes no text; the hashes' own space stays, exactly
+  // as it does with the pane blurred — `HeadingMark` hides the marker and not the space after it.
+  r.check("⌘A leaves the note rendered",
+    " Heading one⏎⏎Some bold and code and em here.⏎⏎quoted line⏎⏎1. numbered todo⏎* two bullets⏎",
+    lines());
+
+  r.check("⌘A reveals no raw list marker", 0, doc.querySelectorAll(".pane-syntax-listmark").length);
+  r.check("⌘A reveals no raw task marker", 0, doc.querySelectorAll(".pane-syntax-taskmark").length);
+  // The other half of the same claim: the markers are still *there*, drawn. A rule that hid them
+  // outright would satisfy the two above and be a different bug.
+  r.check("⌘A still draws the numbered item's number", "1.", i.marker(7));
+  r.check("⌘A still draws its checkbox", true, !!i.lineEl(7).querySelector(".pane-task"));
+  r.check("⌘A still draws the bullet", "•", i.marker(8));
+
+  // A selection that merely reaches into a second line is the same case, and this is the one a
+  // person makes by dragging rather than by pressing a key.
+  d.load(NOTE);
+  select(at("numbered"), at("two bullets"));
+  r.check("a drag into the next line stops revealing too", "1.", i.marker(7));
+
+  // --- a selection inside one line still reveals -------------------------------------------------
+
+  d.load(NOTE);
+  select(at("numbered"), at("numbered") + 8);
+  r.check("a selection inside one line still reveals its marker", "raw:1. ", i.marker(7));
+  r.check("and its task marker", true,
+    !!i.lineEl(7).querySelector(".pane-syntax-taskmark"));
+  // Decision 57's rule, unchanged: an inline construct reveals when the selection is inside it.
+  d.load(NOTE);
+  select(at("bold"), at("bold") + 4);
+  r.check("an inline construct still reveals inside one line", true,
+    i.lineEl(3).textContent.includes("**bold**"));
+  r.check("and its neighbours on the same line stay rendered", false,
+    i.lineEl(3).textContent.includes("`code`"));
+
+  // --- the caret is untouched --------------------------------------------------------------------
+
+  d.load(NOTE);
+  d.at("numbered");
+  r.check("a caret still reveals its marker", "raw:1. ", i.marker(7));
+
+  // --- and nothing moves when the reveal drops ---------------------------------------------------
+
+  // The payoff of the raw marker sitting in the rendered marker's own box (decision 108): a drag
+  // that crosses out of the line changes what the marker is drawn as and must not move the item's
+  // words. Measured rather than argued, because this is the shape of fault decision 122 shipped.
+  //
+  // `wordEdge`, not `textEdge`: decision 122's lesson, and it would have read as a pass here too.
+  // `textEdge` answers where the line's first non-marker *node* begins, and it does not skip the
+  // revealed task marker — so it reports the marker box in one state and the words in the other,
+  // which is 48 against 69 and looks like a 21px jump that is not there.
+  d.load(NOTE);
+  select(at("numbered"), at("numbered") + 3);
+  const revealed = i.wordEdge(7, "numbered");
+  select(at("numbered"), at("two bullets"));
+  r.check("the item's words do not move when the reveal drops", revealed, i.wordEdge(7, "numbered"));
+
+  // --- no caret while text is selected ------------------------------------------------------------
+
+  d.load(NOTE);
+  d.at("numbered");
+  r.check("a caret carries no data-ranged", false, view.dom.hasAttribute("data-ranged"));
+  select(at("numbered"), at("numbered") + 8);
+  r.check("a range carries data-ranged", true, view.dom.hasAttribute("data-ranged"));
+  selectAll();
+  r.check("⌘A carries data-ranged", true, view.dom.hasAttribute("data-ranged"));
+  // The source writes this as `every range is non-empty` rather than `the main range is`, so that a
+  // mixed multi-range would keep the carets belonging to its empty ranges — which is what AppKit
+  // does. **That branch is unreachable in Pane and this is the proof**: `allowMultipleSelections` is
+  // never enabled, so a second range does not survive being dispatched. Asserted rather than left
+  // implied, because `every` reads like a tested distinction and is not one.
+  view.dispatch({ selection: ES.create([ES.range(0, 5), ES.cursor(20)]) });
+  r.check("a second range does not survive — Pane has no multi-cursor", 1,
+    view.state.selection.ranges.length);
+  d.at("numbered");
+
+  // --- two declarations this harness cannot reach --------------------------------------------------
+
+  const rules = [...doc.styleSheets]
+    .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } });
+
+  // A guard on the declaration, decision 122's shape, because the paint is out of reach from here.
+  // `.cm-cursor` is drawn by `drawSelection`'s cursor layer, which draws one per range head whether
+  // the range is empty or not and offers no option — so the only lever is CSS, and CSS cannot see
+  // the selection, which is what `data-ranged` above is for.
+  const caretRule = rules.find((rule) => rule.selectorText === ".cm-editor[data-ranged] .cm-cursor");
+  r.check("no caret is drawn while text is selected", "none",
+    caretRule ? caretRule.style.getPropertyValue("display") : "no rule");
+
+  // The selection here is the **browser's**, not CodeMirror's (see the note in markdown.css), and on
+  // blur only the *window* resigns key: the content element keeps DOM focus, so the DOM selection
+  // survives and `::selection` keeps painting a note you have clicked away from. No harness can see
+  // it — a real `contentDOM.blur()` clears the DOM selection and nothing paints, so the state only
+  // exists in a window that has lost key with its editor still focused. Reproduced by hand against
+  // the shipped build; pinned here as the rule that fixes it.
+  const blurRule = rules.find(
+    (rule) => rule.selectorText === ".cm-editor:not(.cm-focused) .cm-line ::selection, " +
+                                   ".cm-editor:not(.cm-focused) .cm-line::selection, " +
+                                   ".cm-editor:not(.cm-focused) .cm-content ::selection"
+  );
+  r.check("an unfocused pane paints no selection", "transparent",
+    blurRule ? blurRule.style.getPropertyValue("background-color") : "no rule");
+
+  // Third declaration, same reason. A blank line's `line-height: 8px` sets the line box and not the
+  // inline box's content area, which stays the font's em box and overflows about 5px each way — so
+  // WebKit started the *next* line's selection below that overflow and painted it 14pt against the
+  // 18pt of a line with no blank above it. Measured off the shipped build's pixels; `getClientRects`
+  // reports 18 for every one of them, so nothing in this harness can see the difference.
+  const blankRule = rules.find((rule) => rule.selectorText === ".cm-line.pane-line-blank");
+  r.check("a blank line clips, so it does not shorten the line below it", "hidden",
+    blankRule ? blankRule.style.getPropertyValue("overflow") : "no rule");
+
+  delete view.hasFocus;
+  return { checked: r.checked, failures: r.failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
   // An instrument reports; it does not fall over. A section that throws is itself a finding, and
   // the sections after it still have to run.
   for (const suite of [runTypedLists, runListStructure, runListGeometry, runLineBreaks,
-                       runConstructs, runDegradation]) {
+                       runConstructs, runDegradation, runSelectionReveal]) {
     try {
       const result = suite(view, doc, bar);
       checked += result.checked;

@@ -26,6 +26,7 @@ import {
   type Extension,
   type Range,
   RangeSet,
+  type SelectionRange,
   StateField,
   Transaction,
 } from "@codemirror/state";
@@ -322,14 +323,43 @@ function caretLines(view: EditorView): Set<number> {
  */
 let caretArrivedByEdit = false;
 
+/**
+ * The selection ranges that count as **where you are working**: the ones confined to a single line.
+ *
+ * Decision 77 settled the sentence and applied it to half the problem — *"a range selection is not a
+ * place you are standing, it is a thing you have marked"* — and keyed the height-changing reveals off
+ * the caret for exactly that reason. Everything else kept following whatever a selection *touched*,
+ * so ⌘A revealed the source of the entire note: measured on a six-line note, the heading's `#`, the
+ * `**`, the backticks, the `*em*`, the quote's `>` and the task's `-` all came back at once, and the
+ * document you had just selected was no longer the document you had been reading.
+ *
+ * That is also three visible defects in one: a revealed list marker is an `inline-block` (it has to
+ * be, to hold the marker column), so each one paints its own selection rectangle at `line-height`
+ * rather than at the font's painted height — measured on the shipped build at 20pt against the text's
+ * 15pt, sharing a bottom edge, with the marker's own `margin-right` left unpainted between them. So a
+ * select-all drew two or three mismatched rectangles a line instead of one. That is decision 101's
+ * mechanism, one construct over: 101 stepped the *rendered* markers out of the selection and said in
+ * so many words that the raw one "is real text with no rule here" — true when it was written, and
+ * untrue from decision 122, which put the raw marker in a box.
+ *
+ * A range inside one line still reveals, and that is the point of drawing the line here rather than
+ * at "is there a selection at all": dragging across a word in a list item must not change what the
+ * item is drawn as under the pointer. Crossing into a second line does change it, once, and the
+ * markers keep their box either way (see `rawListMark`), so nothing moves horizontally when it does.
+ */
+function workingRanges(view: EditorView): readonly SelectionRange[] {
+  if (!view.hasFocus) return [];
+  const doc = view.state.doc;
+  return view.state.selection.ranges.filter(
+    (range) => doc.lineAt(range.from).number === doc.lineAt(range.to).number
+  );
+}
+
 function activeLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
-  if (!view.hasFocus) return lines;
   const doc = view.state.doc;
-  for (const range of view.state.selection.ranges) {
-    const first = doc.lineAt(range.from).number;
-    const last = doc.lineAt(range.to).number;
-    for (let n = first; n <= last; n++) lines.add(n);
+  for (const range of workingRanges(view)) {
+    lines.add(doc.lineAt(range.from).number);
   }
   return lines;
 }
@@ -376,8 +406,11 @@ function buildDecorations(view: EditorView): DecorationSet {
   const tree = syntaxTree(view.state);
 
   /// The selection itself, for constructs that reveal on the *caret* rather than on the line —
-  /// decision 57. Empty while unfocused, for the same reason `activeLines` is empty then.
-  const selections = view.hasFocus ? view.state.selection.ranges : [];
+  /// decision 57. Empty while unfocused, for the same reason `activeLines` is empty then, and
+  /// narrowed to single-line ranges for the reason `workingRanges` gives: an inline construct a
+  /// select-all merely spans is not one you are editing, and revealing every `**` in the note is
+  /// the same fault as revealing every list marker.
+  const selections = workingRanges(view);
   const touches = (from: number, to: number) =>
     selections.some((range) => range.from <= to && range.to >= from);
 
@@ -1155,13 +1188,41 @@ export function caretBlankLineSlack(view: EditorView): number {
 }
 
 /**
+ * `data-ranged` on the editor while every selection range has something in it.
+ *
+ * A native macOS text view draws no insertion point while text is selected — the selection *is* where
+ * you are, and a caret beside it is a second answer to the same question. `drawSelection` draws one
+ * per range head whether the range is empty or not and offers no option, so ⌘A left an amber bar
+ * parked at the end of the note under a highlight covering the whole of it. The reference draws none;
+ * measured in the probe, ours is `display: block` at y=202..220 with the document selected.
+ *
+ * `every`, not `some`: a mixed multi-range selection keeps the carets belonging to its empty ranges,
+ * which is what AppKit does too. Pane has no multi-cursor UI today, so in practice this reads "the
+ * selection is not collapsed" — written for the general case because the narrow one is free.
+ *
+ * An attribute rather than a class on the content, because the cursor layer is a sibling of
+ * `.cm-content` under `.cm-scroller`: the only ancestor both share is `.cm-editor`, which is what
+ * `editorAttributes` sets.
+ */
+const rangedSelectionAttribute = EditorView.editorAttributes.of((view) => {
+  const ranges = view.state.selection.ranges;
+  return ranges.every((range) => !range.empty) ? { "data-ranged": "" } : null;
+});
+
+/**
  * Live preview, as one extension.
  *
  * A StateField would have been the other option, but the decorations depend on the *viewport*, which
  * a StateField cannot see. Hence a ViewPlugin.
  */
 export function livePreview(openLink: (target: string) => void): Extension {
-  return [livePreviewPlugin, blankLineClickHandler, taskClickHandler, linkClickHandler(openLink)];
+  return [
+    livePreviewPlugin,
+    rangedSelectionAttribute,
+    blankLineClickHandler,
+    taskClickHandler,
+    linkClickHandler(openLink),
+  ];
 }
 
 // Re-exported so the unused-import checker does not hide a genuine mistake if this is refactored.

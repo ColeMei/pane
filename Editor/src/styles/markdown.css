@@ -64,6 +64,12 @@
   border-left: 2px solid var(--accent);
 }
 
+/* No caret while text is selected — `data-ranged` in live-preview.ts, and the reasoning is there.
+ * `.cm-dropCursor` is deliberately not here: it answers a drag, not the selection. */
+.cm-editor[data-ranged] .cm-cursor {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cm-editor.cm-focused > .cm-scroller > .cm-cursorLayer {
     animation: none;
@@ -126,6 +132,32 @@
   background: color-mix(in oklab, var(--accent) 30%, transparent) !important;
 }
 
+/* A pane you have clicked away from keeps no selection on screen.
+ *
+ * The comment above says the unfocused state "matters as much as the focused" and then paints it at
+ * full strength, which is the fault: ⌘A, click into another app, and the whole note stays washed
+ * amber while the decorations correctly rebuild around it — reported as a stale highlight, and
+ * reproduced by hand against the shipped build. The reference drops its selection outright on blur,
+ * not to a grey.
+ *
+ * **The cause is that this selection is the browser's, not CodeMirror's** (see above). Only the
+ * *window* resigns key: the content element keeps DOM focus, so the DOM selection survives and
+ * `::selection` keeps painting. `view.hasFocus` reads `document.hasFocus()` and goes false — which is
+ * why the markers re-render — but nothing about the paint was ever told. No suite could see it
+ * either: a real `contentDOM.blur()` in the probe clears the DOM selection and nothing paints, so the
+ * only way to this state is a window losing key with its editor still focused.
+ *
+ * `cm-focused` is the class CodeMirror already maintains for it, and (0,3,0) clears the
+ * `Prec.highest` `!important` rule this is fighting — see the note above on why that matters here. */
+.cm-editor:not(.cm-focused) .cm-line ::selection,
+.cm-editor:not(.cm-focused) .cm-line::selection,
+.cm-editor:not(.cm-focused) .cm-content ::selection {
+  /* The longhand, though the rule above it is a shorthand: `background: transparent` serialises
+   * back as `background: none` — the image half — so a guard asking what colour this declares reads
+   * "none" and cannot tell a cleared background from a cleared image. The colour is the subject. */
+  background-color: transparent !important;
+}
+
 /* A collapsed blank line takes no highlight.
  *
  * A blank line between two blocks is drawn as an 8px strip (decision 55), and selecting across one
@@ -170,6 +202,22 @@
 .cm-line.pane-line-blank {
   height: var(--blank-line-height);
   line-height: var(--blank-line-height);
+  /* **And it has to clip, or it steals 4pt off the selection of the line below it.**
+   *
+   * `line-height: 8px` sets the line *box* to 8px; it does not shrink the inline box's content
+   * area, which stays the font's em box — about 18px at this size — centred on that 8px box. So a
+   * line drawn 8px tall overflows roughly 5px above and below, invisibly, because it has nothing in
+   * it to paint. WebKit's selection painting is not blind to it: the next line's selection starts
+   * *below* the overflow, so a paragraph preceded by a blank line painted a 14pt rectangle against
+   * the 18pt of one that was not. Measured on the shipped build, three consecutive lines at 18.0
+   * against two after blanks at 14.0, and every one of them 18.0 with this here.
+   *
+   * `overflow: hidden`, not `display: flow-root` — that was the other candidate and it was tried:
+   * flow-root leaves the figures at 14, so what matters is the clipping and not the new formatting
+   * context. Nothing is lost by clipping a line whose content is one `<br>`; the caret is drawn in
+   * `.cm-cursorLayer`, a sibling, and a blank line the caret is standing in is exempt from this
+   * class entirely (decisions 44, 89, 132). */
+  overflow: hidden;
 }
 
 /* The space between two blocks with no blank line between them — decision 55, applied by
@@ -339,6 +387,22 @@
 .pane-task {
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* **And `user-select` only works for two of those three.** The bullet and the checkbox are widgets —
+ * `contenteditable="false"`, empty text, a `cm-widgetBuffer` either side — so the property does what
+ * it says. A rendered number is not a widget: it is a mark over the document's own `1. `, kept as
+ * real text on purpose (see `.pane-list-number` above, and `.pane-syntax-listmark` for what a box
+ * without it did to typing), and WebKit ignores `user-select: none` for live text inside a
+ * contenteditable. So the rule above read as covering all three and covered two, from the day it
+ * landed: measured on the shipped build, a selected number painted a 20pt box against the text's
+ * 15pt beside it — decision 101's own numbers, in the one case it thought it had fixed.
+ *
+ * Nothing else will do it. The box has to stay `inline-block` to hold the marker column, so its
+ * rectangle is a `line-height` tall whenever it paints; the only lever left is not painting.
+ * Same shape as the blank-line rule above, and the same specificity, for the same reason. */
+.cm-editor .cm-line .pane-list-number::selection {
+  background-color: transparent !important;
 }
 
 /* A revealed task marker: fixed width, because it carries no trailing space to strand and `[x]`
