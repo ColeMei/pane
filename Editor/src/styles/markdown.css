@@ -39,6 +39,38 @@
   padding: 0;
 }
 
+/* Every line's selection is painted at that line's own line box, and this zero-width strut is what
+ * makes that true of a line with nothing but text in it.
+ *
+ * WebKit paints a selection over the union of the inline boxes on the line, so what a line *contains*
+ * decided how tall its highlight was. Measured on the shipped build, at 15px text: a plain paragraph
+ * 18.0pt — the font's own painted height — against a checkbox item at 19.0, a numbered item at 20.0
+ * and a bulleted one at 20.5, because each marker is an inline box of its own and the tallest wins.
+ * Four heights down one note, all of them correct and none of them agreeing, which is the second half
+ * of what "the selection looks wrong" meant.
+ *
+ * Matching them downward is not available — 18 is a font metric this stylesheet does not get to set,
+ * which is what decision 101 concluded and decision 82 is about — so they match *upward*, onto the
+ * line box, which is the tallest of them and the one number every line already has. `1lh` resolves
+ * per element, so a heading's line uses the heading's line-height and a code line uses the code
+ * line's; nothing here is a constant.
+ *
+ * **It costs nothing.** Measured against the same document with and without: every one of the
+ * fourteen line heights identical, and `view.contentHeight` 232.25 either way — the strut is
+ * top-aligned inside a box that is already at least this tall, and zero-width, so nothing moves.
+ *
+ * The exception is a line the stylesheet has deliberately collapsed. There the strut *does* overflow,
+ * and an overflowing inline box shortens the selection of the line below it — the blank-line fault
+ * below, which is where that was measured. All three collapsed kinds clip: `.pane-line-blank` and
+ * `.cm-line.pane-line-fence` here, `.cm-line.pane-rule` already did. */
+.cm-line::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 1lh;
+  vertical-align: top;
+}
+
 /* ---- Caret -----------------------------------------------------------------------------------
  * 2px, accent. The one place accent appears constantly, because it is the single most interactive
  * thing on screen — and the reference tints its caret for the same reason.
@@ -250,6 +282,9 @@
 .cm-line.pane-line-fence {
   height: var(--blank-line-height);
   line-height: var(--blank-line-height);
+  /* Clipped for the reason `.pane-line-blank` is: a line collapsed below its own line box overflows,
+   * and WebKit starts the next line's selection below that overflow. */
+  overflow: hidden;
 }
 
 .cm-line.pane-line-h1,

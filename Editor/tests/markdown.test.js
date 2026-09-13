@@ -1543,20 +1543,46 @@ export function runSelectionReveal(view, doc) {
   select(at("numbered"), at("two bullets"));
   r.check("a drag into the next line stops revealing too", "1.", i.marker(7));
 
-  // --- a selection inside one line still reveals -------------------------------------------------
+  // --- a block marker follows the caret, an inline construct follows the line --------------------
 
+  // The first ⌘A takes the *block* (decision 65), which is usually one line — so a rule that read
+  // "a selection inside one line still reveals" brought the raw markers, and their mismatched
+  // rectangles, straight back on the press before the one this section is named after.
   d.load(NOTE);
   select(at("numbered"), at("numbered") + 8);
-  r.check("a selection inside one line still reveals its marker", "raw:1. ", i.marker(7));
-  r.check("and its task marker", true,
+  r.check("a selection inside one line does not reveal its marker either", "1.", i.marker(7));
+  r.check("nor its task marker", false,
     !!i.lineEl(7).querySelector(".pane-syntax-taskmark"));
-  // Decision 57's rule, unchanged: an inline construct reveals when the selection is inside it.
+
+  // **An inline construct is the exception, and it is measured rather than argued.** Revealing
+  // `**bold**` is wider than not revealing it, so a caret-only rule would move the text sideways the
+  // instant a drag starting inside a bold run went non-empty — under the pointer, mid-gesture. A
+  // block marker costs nothing to drop because it keeps its box either way. Both halves below.
   d.load(NOTE);
   select(at("bold"), at("bold") + 4);
   r.check("an inline construct still reveals inside one line", true,
     i.lineEl(3).textContent.includes("**bold**"));
   r.check("and its neighbours on the same line stay rendered", false,
     i.lineEl(3).textContent.includes("`code`"));
+
+  // Nothing moves under the pointer on either side of the split, which is what the split buys. The
+  // inline construct stays revealed across the caret→selection step so its line cannot reflow; the
+  // block marker stops being revealed and its line still cannot, because raw or rendered it occupies
+  // the same fixed box. The figure behind the first half — 26px, the width `**` adds to that line —
+  // is in the brief: it is the cost of the caret-only rule that was measured and then not taken, and
+  // there is nothing left in the code to assert it against.
+  d.load(NOTE);
+  d.at("bold");
+  const inlineCaret = i.wordEdge(3, "here");
+  select(at("bold"), at("bold") + 4);
+  r.check("selecting inside an inline construct moves nothing after it", inlineCaret,
+    i.wordEdge(3, "here"));
+  d.load(NOTE);
+  d.at("numbered");
+  const blockCaret = i.wordEdge(7, "numbered");
+  select(at("numbered"), at("numbered") + 8);
+  r.check("and dropping a block marker moves nothing after it", blockCaret,
+    i.wordEdge(7, "numbered"));
 
   // --- the caret is untouched --------------------------------------------------------------------
 
@@ -1634,6 +1660,22 @@ export function runSelectionReveal(view, doc) {
   const blankRule = rules.find((rule) => rule.selectorText === ".cm-line.pane-line-blank");
   r.check("a blank line clips, so it does not shorten the line below it", "hidden",
     blankRule ? blankRule.style.getPropertyValue("overflow") : "no rule");
+  // Same fault, same fix, one construct over: a collapsed fence overflows its 8px box too.
+  const fenceRule = rules.find((rule) => rule.selectorText === ".cm-line.pane-line-fence");
+  r.check("and so does a collapsed fence", "hidden",
+    fenceRule ? fenceRule.style.getPropertyValue("overflow") : "no rule");
+
+  // Fourth declaration. WebKit paints a selection over the union of the inline boxes on the line, so
+  // a line of plain text painted 18.0pt (the font's height) while a bulleted one painted 20.5 — four
+  // heights down one note, each correct on its own. They are matched upward onto the line box, which
+  // is the one number every line already has; `1lh` so a heading uses the heading's. Measured free:
+  // every line height and `view.contentHeight` identical with the strut and without it. Out of reach
+  // here for the usual reason — the probe's window is never key, so nothing paints.
+  const strutRule = rules.find((rule) => rule.selectorText === ".cm-line::before");
+  r.check("every line carries a strut to its own line box", "1lh",
+    strutRule ? strutRule.style.getPropertyValue("height") : "no rule");
+  r.check("and the strut takes no width", "0px",
+    strutRule ? strutRule.style.getPropertyValue("width") : "no rule");
 
   delete view.hasFocus;
   return { checked: r.checked, failures: r.failures };

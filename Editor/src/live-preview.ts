@@ -267,33 +267,30 @@ class BulletWidget extends WidgetType {
 }
 
 /**
- * Line numbers touched by any selection range — where raw source shows.
+ * Lines holding a **caret** — an empty selection — and nothing else. Every line-level reveal in this
+ * file keys off this one set: which markers a line shows, and which of its blank lines, fences and
+ * rules stay collapsed.
  *
- * **Nothing is active while the editor is not focused.** The caret's line reveals its source because
+ * **Nothing is revealed while the editor is not focused.** The caret's line shows its source because
  * that is where you are working; a pane you have clicked away from is not where you are working, and
  * a note left showing `**A research plan**` on one line reads as a rendering bug rather than as a
- * caret. It is also what anyone comparing Pane to the reference sees first, since the reference
- * never shows raw markup at all.
+ * caret. It is also what anyone comparing Pane to the reference sees first, since the reference never
+ * shows raw markup at all. Nothing is lost on the way back: focus returns, the line goes raw again,
+ * and the caret is still where it was (decision 11).
  *
- * This costs nothing on the way back: focus returns, the line goes raw again, and the caret is still
- * where it was (decision 11). The heights match too — the caret's blank-line exemption below keys
- * off the same set, so a blurred pane reports exactly the height `caretBlankLineSlack` was already
- * subtracting, and the window does not move on blur.
- */
-/**
- * Lines holding a **caret** — an empty selection — and nothing else.
+ * **It used to be two sets, and collapsing them is the point.** `activeLines` was every line a
+ * selection *touched*, and decision 77 carved the height-changing reveals out of it onto the caret
+ * because ⌘A un-collapsed every blank line, fence and rule at once — measured on a four-block note,
+ * the document grew 24px and every paragraph moved down. The markers were left on the old set, which
+ * is how ⌘A still turned the whole note back into its source, and how the first ⌘A — which takes the
+ * *block*, decision 65, and is therefore usually one line — kept revealing that line's markers and
+ * bringing their mismatched selection rectangles back with them. A selection is a thing you have
+ * marked, not a place you are standing; there was never a reason for the two sets to differ.
  *
- * `activeLines` is every line a selection *touches*, which is right for revealing markers and wrong
- * for anything that changes a line's height. Select the whole note and every blank line, fence and
- * rule in it un-collapses at once: measured on a four-block note, ⌘A grew the document by 24px and
- * pushed every paragraph down, which reads as the text jumping when you select it.
- *
- * Decision 44 is written in terms of "the caret's line" and that is exactly what it should have
- * keyed off. A range selection is not a place you are standing, it is a thing you have marked, and
- * `caretBlankLineSlack` already refuses to report slack for one — so with `activeLines` driving the
- * collapse, the document grew and the height Swift was told did not.
- *
- * **The rule: height-changing reveals follow the caret; the rest follow the active line.**
+ * A marker can be dropped from a selected line for free, which is what makes this safe: raw or
+ * rendered, it occupies the same fixed box (see `rawListMark`), so the item's words do not move.
+ * **An inline construct cannot** — revealing `**bold**` is 26px wider than not — which is why
+ * `inlineRevealRanges` is a separate, wider rule rather than this one.
  */
 function caretLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
@@ -324,7 +321,7 @@ function caretLines(view: EditorView): Set<number> {
 let caretArrivedByEdit = false;
 
 /**
- * The selection ranges that count as **where you are working**: the ones confined to a single line.
+ * The selection ranges an **inline** construct reveals for: the ones confined to a single line.
  *
  * Decision 77 settled the sentence and applied it to half the problem — *"a range selection is not a
  * place you are standing, it is a thing you have marked"* — and keyed the height-changing reveals off
@@ -333,35 +330,21 @@ let caretArrivedByEdit = false;
  * `**`, the backticks, the `*em*`, the quote's `>` and the task's `-` all came back at once, and the
  * document you had just selected was no longer the document you had been reading.
  *
- * That is also three visible defects in one: a revealed list marker is an `inline-block` (it has to
- * be, to hold the marker column), so each one paints its own selection rectangle at `line-height`
- * rather than at the font's painted height — measured on the shipped build at 20pt against the text's
- * 15pt, sharing a bottom edge, with the marker's own `margin-right` left unpainted between them. So a
- * select-all drew two or three mismatched rectangles a line instead of one. That is decision 101's
- * mechanism, one construct over: 101 stepped the *rendered* markers out of the selection and said in
- * so many words that the raw one "is real text with no rule here" — true when it was written, and
- * untrue from decision 122, which put the raw marker in a box.
- *
- * A range inside one line still reveals, and that is the point of drawing the line here rather than
- * at "is there a selection at all": dragging across a word in a list item must not change what the
- * item is drawn as under the pointer. Crossing into a second line does change it, once, and the
- * markers keep their box either way (see `rawListMark`), so nothing moves horizontally when it does.
+ * **Why this is not simply the caret, which is what the block markers below use.** Revealing an
+ * inline construct changes the line's width: measured on `Some **bold** and tail here.`, the word
+ * `tail` sits at x=163 with the markers shown and x=137 without them. A caret-only rule would
+ * therefore move the text 26px sideways the instant a drag *starting inside a bold run* became
+ * non-empty — under the pointer, mid-gesture, which is the cursor instability this file's header is
+ * about. A block marker has no such cost: it lives in a fixed box either way (see `rawListMark`), so
+ * `numbered` stays at x=69 whether its `1. [ ]` is raw or rendered. Two rules because the two have
+ * different costs, which is the same split decision 57 already draws.
  */
-function workingRanges(view: EditorView): readonly SelectionRange[] {
+function inlineRevealRanges(view: EditorView): readonly SelectionRange[] {
   if (!view.hasFocus) return [];
   const doc = view.state.doc;
   return view.state.selection.ranges.filter(
     (range) => doc.lineAt(range.from).number === doc.lineAt(range.to).number
   );
-}
-
-function activeLines(view: EditorView): Set<number> {
-  const lines = new Set<number>();
-  const doc = view.state.doc;
-  for (const range of workingRanges(view)) {
-    lines.add(doc.lineAt(range.from).number);
-  }
-  return lines;
 }
 
 /**
@@ -401,16 +384,12 @@ function listDepth(view: EditorView, pos: number): number {
 function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = [];
   const doc = view.state.doc;
-  const active = activeLines(view);
   const caret = caretLines(view);
   const tree = syntaxTree(view.state);
 
   /// The selection itself, for constructs that reveal on the *caret* rather than on the line —
-  /// decision 57. Empty while unfocused, for the same reason `activeLines` is empty then, and
-  /// narrowed to single-line ranges for the reason `workingRanges` gives: an inline construct a
-  /// select-all merely spans is not one you are editing, and revealing every `**` in the note is
-  /// the same fault as revealing every list marker.
-  const selections = workingRanges(view);
+  /// decision 57 — narrowed to single-line ranges for the reason `inlineRevealRanges` gives.
+  const selections = inlineRevealRanges(view);
   const touches = (from: number, to: number) =>
     selections.some((range) => range.from <= to && range.to >= from);
 
@@ -456,7 +435,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       enter: (node) => {
         const name = node.name;
         const lineNumber = doc.lineAt(node.from).number;
-        const isActive = active.has(lineNumber);
+        const isActive = caret.has(lineNumber);
 
         // `ListItem` as well as the leaf blocks, because a task item has no `Paragraph` inside it —
         // its text hangs directly off the item — so `- [ ] one` / `- [x] two` were the one kind of
@@ -924,7 +903,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.selectionSet ||
         update.viewportChanged ||
-        // Focus is in the list because losing it renders the whole document — see `activeLines`.
+        // Focus is in the list because losing it renders the whole document — see `caretLines`.
         // Without this the raw line simply stayed raw, because nothing else about the state changed.
         update.focusChanged ||
         syntaxTree(update.startState) !== syntaxTree(update.state)
