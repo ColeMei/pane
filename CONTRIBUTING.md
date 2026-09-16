@@ -35,6 +35,21 @@ These have been decided against, not overlooked:
 Multiple panes on screen at once is **deferred**, not refused: the model supports it and no entry
 point is wired, because a second pane is a second `WKWebView` and memory is a shipping constraint.
 
+## Things that are settled
+
+A few more decisions the product depends on, so a pull request does not have to discover them:
+
+- **Filenames are frozen.** A note's file is named from its creation time and its first line, and
+  after the note's first minutes it is never renamed. The title is the first line of the file.
+- **Summoning does not activate the app.** The pane is a non-activating panel; no app switch, no
+  menu bar change. The Settings window is the only thing in Pane that activates.
+- **Unsigned, and no privacy permissions requested.** A new `NS*UsageDescription` in
+  `Scripts/Info.plist` means a promise broke. The one network request is an update check, on
+  summon at most once a day, behind a checkbox.
+- **Habit-compatible shortcuts.** Every action Pane shares with Raycast Notes keeps the same key.
+- **Conflicts are detected, not merged.** Unsaved edits over a file that changed underneath go to
+  a `-conflict-<timestamp>` sibling, and the editor follows them there.
+
 ## Bugs are the most useful thing you can send
 
 Nearly every fault in this project has been found by someone using the app and reporting what they
@@ -54,6 +69,9 @@ Scripts/build-app.sh --debug   # assemble build/Pane.app
 
 **Run all four editor suites after touching anything in `Editor/src`.** They ask different
 questions and each has caught what the others could not. CI runs all five on every pull request.
+They run inside a real `WKWebView` (`Scripts/editor-probe.swift`) because most editor faults here
+are about what is painted, not what the DOM says; `pandoc -f commonmark -t html` is the independent
+oracle for what typed bytes mean.
 
 Two things about the layout worth knowing:
 
