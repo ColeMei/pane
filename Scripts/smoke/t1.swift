@@ -64,9 +64,11 @@ do {
 
 func sleepMs(_ ms: Int) { usleep(UInt32(ms) * 1000) }
 
-/// The pane at a real origin: layer 3, wider than 300, not parked. All three, or the badge matches.
+/// The pane at a real origin, on *this* Space: layer 3, wider than 300, not parked. All three, or
+/// the badge matches. On-screen windows only — `.optionAll` listed a pane on another Space as up,
+/// and every keystroke then went to the terminal (LAB, 2026-09-17).
 func paneUp() -> Bool {
-    let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as! [[String: Any]]
+    let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
     return list.contains { w in
         guard (w[kCGWindowOwnerPID as String] as? Int32) == pid, (w[kCGWindowLayer as String] as? Int) == 3,
               let b = w[kCGWindowBounds as String] as? [String: Any],
@@ -96,7 +98,7 @@ enum K {
 func hotkey() { key(K.space, hotkeyFlags) }
 
 func summon() {
-    if paneUp() { return }
+    if paneUp() && focusInPane() { return }
     hotkey()
     for _ in 0..<20 { if paneUp() { sleepMs(150); return }; sleepMs(100) }
     print("!! the pane did not come up"); exit(2)
@@ -109,8 +111,21 @@ func dismiss() {
     print("!! the pane did not park"); exit(2)
 }
 
-/// Every burst is preceded by this. A key posted with the pane parked lands in another app.
-func needPane() { if !paneUp() { print("!! pane not up before typing"); exit(2) } }
+/// The keyboard focus is in the pane: the system-wide focused element belongs to its pid.
+func focusInPane() -> Bool {
+    var el: AnyObject?
+    guard AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString, &el) == .success,
+          let e = el else { return false }
+    var p: pid_t = 0
+    AXUIElementGetPid(e as! AXUIElement, &p)
+    return p == pid
+}
+
+/// Every burst is preceded by this. A key posted with the pane parked, or up without the focus,
+/// lands in another app — and did, once, in the terminal running this driver.
+func needPane() {
+    if !paneUp() || !focusInPane() { print("!! pane not up or not focused before typing"); exit(2) }
+}
 
 func type(_ text: String) {
     needPane()
