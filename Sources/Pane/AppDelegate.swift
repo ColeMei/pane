@@ -141,7 +141,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 settings: settings,
                 // Before *Move Notes* moves anything, so what is on screen is written while the
                 // buffer still points at a file that exists (decision 73).
-                onWillMoveNotes: { [weak self] in self?.pane.flush(trigger: .noteSwitched) }
+                //
+                // And *waited for*. `flush` enqueues on the vault queue and returns; the two vault
+                // re-points either side of this one get away with that because `setVault` is on
+                // that same queue, so the enqueued write is ordered before it for free — which is
+                // what their comments say. `moveNotes` is plain `FileManager` on the main thread
+                // and joins no queue, so there the ordering has to be taken rather than inherited:
+                // without the drain the files move first, the queued write then lands in the old
+                // vault under a name no longer in it, `VaultIO.write` reads that as missing and
+                // recreates it, and the old folder is left holding the newest text while the moved
+                // copy is stale and the pane reloads showing the stale one.
+                onWillMoveNotes: { [weak self] in
+                    self?.pane.flush(trigger: .noteSwitched)
+                    self?.vault.drain()
+                }
             ) { [weak self] url in
                 guard let self else { return }
                 // Same as the hand-edited path above, and this is the one people actually use: the

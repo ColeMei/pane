@@ -211,9 +211,13 @@ final class StorageSettingsViewController: NSViewController {
                 // and it runs *after* the files have already moved, so it writes to the old vault
                 // under a name that is no longer there, `VaultIO.write` reads that as "missing" and
                 // recreates it, and you are left with a resurrected copy in the old folder holding
-                // your newest text while the moved copy is stale. Flushing first is the whole fix:
-                // the write lands in the old vault on the file that is still in it, and the move
-                // then carries it across with everything else.
+                // your newest text while the moved copy is stale.
+                //
+                // Flushing first is not quite the whole fix, and the gap survived a release
+                // (decision 140): `flush` *enqueues* on the vault queue and returns, and the loop
+                // below is `FileManager` on this thread, so the move overtook the write it was
+                // meant to wait for and the fault above happened anyway. `onWillMoveNotes` drains
+                // the queue as well as flushing it, which is what makes "first" true.
                 onWillMoveNotes?()
                 try moveNotes(from: settings.value.vaultURL, to: destination)
             }
