@@ -16,13 +16,8 @@ import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemir
 import type { Range } from "@codemirror/state";
 import type { Reveal } from "./reveal";
 
-/**
- * Block constructs are styled with **line** decorations, not marks.
- *
- * A mark wraps an inline span, and margins and padding do not apply to it — so heading sizes and
- * list indents silently did nothing until this was changed. A line decoration puts the class on
- * CodeMirror's `.cm-line` element, which is a block box and takes layout.
- */
+/** Block constructs are line decorations: a mark wraps an inline span and takes no margin or padding,
+ * so heading sizes and list indents did nothing as marks. */
 const BLOCK_LINE: Record<string, string> = {
   ATXHeading1: "pane-line-h1",
   ATXHeading2: "pane-line-h2",
@@ -77,59 +72,28 @@ const hide = Decoration.replace({});
 const ruleLine = Decoration.line({ class: "pane-rule" });
 const blankLine = Decoration.line({ class: "pane-line-blank" });
 
-/**
- * The space between two blocks the user did not separate with a blank line — decision 55.
- *
- * A tight list has no blank lines in it, so every item sat exactly one line-height below the last
- * and a five-item list read as one paragraph with bullets in it. The reference puts 8pt between
- * sibling items and between any two blocks; where the user *has* typed a blank line, that line is
- * already the gap (decision 22) and this stays out of the way.
- */
+/** The gap above a block the user did not separate with a blank line — decision 55. Where a blank
+ * line exists it is already the gap. */
 const gapLine = Decoration.line({ class: "pane-line-gap" });
 const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
-/*
- * A fence that is *showing* its backticks.
- *
- * Decision 42 collapsed both fences into "the block's own padding", and that is literally what they
- * were: an 8px strip of code-slab above the first line of code and below the last. Reveal one and
- * the strip becomes a full code line with text in it, so the padding it was standing in for
- * vanishes and ```` ```python ```` sits flush against the top edge of the slab.
- *
- * The block gets that padding back explicitly for as long as the fence is visible. It costs height
- * on the way in, which decision 42 already accepted for the reveal itself.
- */
+/* A fence showing its backticks gets the block's padding back explicitly: collapsed, the fence *is*
+ * the padding, and revealing it left ```` ```python ```` flush with the slab's top edge (decision 42,
+ * amended 2026-09-17). */
 const fenceOpenRaw = Decoration.line({ class: "pane-line-fence-open-raw" });
 const fenceCloseRaw = Decoration.line({ class: "pane-line-fence-close-raw" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
 
-/*
- * A list marker showing its source.
- *
- * `.pane-syntax` is a colour and nothing else, so a revealed marker fell back to the line's own
- * `padding-left` — while the rendered marker it replaces sits in a 16px box with a -16px margin
- * that pulls it back out into the gutter. Measured: the marker jumped **16px to the right** the
- * moment the caret landed on its line, and the whole line appeared to indent one step. Every kind
- * of list, which is what made it look like a layout bug rather than a reveal.
- *
- * The same box, so the marker stays where it was drawn. It covers the space after the marker too:
- * that space is hidden while rendered and real while raw, so without it inside the box the text
- * after the marker lands a space-width right of where it was.
- */
+/* A revealed list marker keeps the rendered marker's fixed box, space included: `.pane-syntax` alone
+ * let it jump 16px right and the text a space-width further (decisions 108, 122). */
 const rawListMark = Decoration.mark({ class: "pane-syntax pane-syntax-listmark" });
 
 /** The text of a ticked task item. */
 const doneTaskText = Decoration.mark({ class: "pane-task-done-text" });
 
-/**
- * Two constructs the markdown parser has no node for — decision 61.
- *
- * `==highlight==` is not CommonMark (Obsidian, Bear and Typora all read it) and `<u>underline</u>`
- * is markdown's escape hatch rather than markdown, so neither arrives as a tree node and both are
- * matched on the text instead. That is only safe because the match is anchored to a whole line and
- * checked against the tree afterwards: a `==` inside code is code, not a highlight.
- */
+/** `==highlight==` and `<u>` have no parser node, so they are matched on the line's text and checked
+ * against the tree — a `==` inside code is code (decision 61). */
 const TEXT_CONSTRUCTS: { pattern: RegExp; open: number; close: number; class: string }[] = [
   // No space just inside the delimiters, the same rule `**bold**` follows — without it a line like
   // "a total of == two == equals" was a highlight containing the word "two".
@@ -152,14 +116,8 @@ function insideCode(view: EditorView, pos: number): boolean {
 /** A rendered ordered-list number: `1.` as the reader sees it, not as raw syntax. */
 const numberMark = Decoration.mark({ class: "pane-list-number" });
 
-/** A revealed `[x]` or `[ ]`, in the marker box a checkbox was occupying — decision 122.
- *
- * Its own class rather than `rawListMark`'s because the two want opposite widths, and the reason
- * is what each box contains. A revealed list marker ends in a **space**, and a fixed-width box puts
- * that space in its own slack where WebKit will not place a caret after it, so the next character
- * typed goes in front of it. A task marker is `[x]` with the following space hidden separately, so
- * there is no trailing space to strand — and it needs the fixed width, because `[x]` is wider than
- * the box and `min-width` would grow it and push the item's words 3px right on reveal. */
+/** A revealed `[ ]`, in the checkbox's box — its own class because it wants a fixed width where
+ * `rawListMark` must not have one: a raw list marker ends in a space a fixed box strands (decision 122). */
 const rawTaskMark = Decoration.mark({ class: "pane-syntax pane-syntax-taskmark" });
 
 /** The same, for a to-do inside a **numbered** item, where the number already has the line's one
@@ -207,14 +165,8 @@ class TaskWidget extends WidgetType {
   }
 }
 
-/**
- * A bullet glyph replacing `-`, `*` or `+`.
- *
- * Three steps, disc → circle → square. Frame 1a draws the first two and the reference draws all
- * three; a third level that reuses the second's glyph makes two different depths look like one list
- * that has lost its indent, which is exactly when the glyph is doing its only job. Deeper than three
- * repeats the square rather than inventing a fourth shape nobody could name.
- */
+/** A bullet glyph: disc → circle → square, then square again — a third level reusing the second's
+ * glyph reads as a lost indent (frame 1a; the reference draws three). */
 class BulletWidget extends WidgetType {
   constructor(readonly depth: number) {
     super();
@@ -225,13 +177,8 @@ class BulletWidget extends WidgetType {
   }
 
   toDOM() {
-    // The shape is drawn in CSS, not set as a character — decision 122.
-    //
-    // `•`, `◦` and `▪` at body size paint 3px, 3px and 7px of ink, so the three levels of one list
-    // were three different sizes and the first was a speck beside a 14px checkbox. Scaling the
-    // font does not fix it either: each glyph has its own ink-to-em ratio, so it takes a different
-    // multiplier per level, and a multiplier that makes `•` right makes `▪` overflow its box. A
-    // drawn shape has the size it is given, at every text size, with no metrics in the way.
+    // Drawn in CSS, not a character: `•` `◦` `▪` paint 3/3/7px of ink and no multiplier fixes all three
+    // (decision 122). A real element, so the shape can be measured.
     const dot = document.createElement("span");
     dot.className = `pane-list-marker pane-bullet-${Math.min(this.depth, 3)}`;
     // A real element rather than a `::before`, so the shape can be measured. A pseudo-element has
@@ -304,12 +251,8 @@ interface Walk {
 
 function horizontalRule(node: SyntaxNodeRef, w: Walk): void {
   const lineNumber = w.doc.lineAt(node.from).number;
-  // A line decoration, so the rule spans the pane instead of underlining three characters.
-  //
-  // Off the caret's line only. Drawn, the rule is 1px tall with `color: transparent` — and
-  // it is still a real line the caret can be arrowed into, so without this exemption it is
-  // a place you can stand, type, and see nothing happen. Every other construct reveals its
-  // source under the caret; this one was the last that did not.
+  // A line decoration, off the caret's line only: drawn, the rule is a 1px line you can stand in and
+  // type into unseen (decision 42).
   if (!w.reveal.lines.has(lineNumber)) {
     w.decorations.push(ruleLine.range(w.doc.lineAt(node.from).from));
   }
@@ -330,22 +273,9 @@ function blockLines(node: SyntaxNodeRef, w: Walk): void {
       if (blockClass === "pane-line-code") w.codeLines.add(n);
     }
 
-    // A fenced block's first and last lines are its ``` fences, and on the opening one the
-    // language tag too. Neither is content: Pane has no syntax highlighting and no language
-    // picker, so `python` is a word the user has to look at that changes nothing. Collapsing
-    // both to a thin strip turns them into the block's own top and bottom padding, which is
-    // what a code block looks like everywhere it is rendered rather than edited.
-    //
-    // COLLAPSED ONLY OFF THE CARET'S LINE. Collapsed unconditionally, a fence is a 10px strip
-    // that looks exactly like the blank line usually sitting next to it and behaves nothing
-    // like it: one character typed in the opening strip stops the block being a code block,
-    // and one typed in the closing strip unbounds it so it swallows the rest of the note.
-    // Measured, both of them. The strip has to stop being invisible the moment the caret is
-    // in it, which is the same rule every other construct here already follows.
-    //
-    // The 10px reflow that costs is deliberate, and is why the blank-line pass below still
-    // refuses the same treatment: blank lines are crossed constantly with the arrow keys,
-    // whereas a fence is somewhere you arrive rarely and on purpose.
+    // Both fences and the info string are chrome, collapsed into the block's own padding — only off the
+    // caret's line: a collapsed fence is a 10px strip that looks like a blank line and unbounds the block
+    // when typed into (decisions 34, 42). Blank lines refuse the same treatment: they are crossed constantly.
     if (name === "FencedCode") {
       if (w.reveal.lines.has(first)) {
         w.decorations.push(fenceOpenRaw.range(w.doc.line(first).from));
@@ -376,18 +306,9 @@ function listItem(node: SyntaxNodeRef, w: Walk): void {
     Decoration.line({ class: `pane-line-li-${depth}` }).range(itemFirst.from)
   );
 
-  // A ⇧⏎ inside an item makes a second line that belongs to it, and it used to get no
-  // indent at all — so "- one / two" drew `two` hard against the pane's left edge while
-  // `one` sat 26px in. It takes the item's padding without the hanging indent, which is
-  // what puts it under the text rather than under the marker.
-  //
-  // **The item's own content, not its whole range.** A `ListItem` covers the list nested
-  // beneath it, so running to `node.to` stamped the outer depth onto every nested line as
-  // well: a third-level line came out carrying `li-1 li-2 li-3`, and which indent it
-  // actually got was decided by the order of four equal-specificity rules in
-  // `markdown.css`. It came out right — deepest last, so deepest wins — for a reason
-  // nobody had written down, and reordering that block would have silently un-indented
-  // every nested list in the app. Same shape as the fence-ordering bug in decision 71.
+  // A ⇧⏎ continuation line takes the item's padding without the hanging indent, so it sits under the
+  // text (108). Only the item's *own* lines: its range covers the nested list beneath it, and stamping
+  // the outer depth on every line left four equal-specificity rules deciding the indent (108, 71's trap).
   const itemLast = w.doc.lineAt(Math.min(endOfOwnContent(w.view.state, node.node), w.doc.length));
   for (let n = itemFirst.number + 1; n <= itemLast.number; n++) {
     const line = w.doc.line(n);
@@ -405,24 +326,9 @@ function listItem(node: SyntaxNodeRef, w: Walk): void {
 
 function inlineConstruct(node: SyntaxNodeRef, w: Walk): void {
   const name = node.name;
-  // An inline construct goes raw when the selection is *inside it*, not when it is anywhere
-  // on the line (decision 57). Putting the caret at the end of a paragraph used to strip the
-  // styling off every bold word in it and put four asterisks back on screen.
-  // Nothing in a note may render as nothing — decision 121, and the rule the two cases below
-  // are both instances of.
-  //
-  // A `URL` is a marker in exactly one place: a `[label](target)` link, where the label is
-  // shown *in the target's place* and hiding it is the whole point. Everywhere else the URL
-  // is the only thing there is to show, so hiding it draws the link as an empty span —
-  // reported against a pasted `https://` one, and equally true of `www.` and email
-  // autolinks, of `<https://x.com>`, and of a `[ref]: target` definition, whose line used to
-  // keep its label and lose the target that is its entire purpose.
-  //
-  // An image is the second instance, and it is settled by scope rather than by rendering:
-  // Pane does not do images. So an image is markdown Pane has decided not to interpret, and
-  // it renders as **the markdown it is** — every character, markers included. Hiding them
-  // drew `![alt](…)` as the bare word `alt`, indistinguishable from prose and with the
-  // target invisible, and drew an alt-less `![](…)` as nothing whatsoever.
+  // An inline construct goes raw when the selection is inside it, not anywhere on the line (57). A
+  // `URL` is a marker only inside `[label](target)`; everywhere else it is the only thing to show, and
+  // an image is left as the markdown it is — nothing renders as nothing (121).
   const parentName =
     name === "URL" || MARKER_NODES.has(name) ? node.node.parent?.name : undefined;
   const insideImage = parentName === "Image";
@@ -456,21 +362,12 @@ function escape(node: SyntaxNodeRef, w: Walk): void {
 function taskMarker(node: SyntaxNodeRef, w: Walk): void {
   const lineNumber = w.doc.lineAt(node.from).number;
   const isActive = w.reveal.lines.has(lineNumber);
-  // A numbered to-do keeps its number (see `ListMark` below), and a line has one marker
-  // slot: the number takes it, being first, and the box stands in the flow after it. Both
-  // in the slot and they paint on top of each other — measured, number 24..40 against box
-  // 25..39, and it shipped that way in the first draft of decision 135 because the
-  // assertion counted the two elements instead of asking where they landed. A bullet's
-  // to-do is untouched: there the box *is* the item's marker.
+  // A numbered to-do keeps its number in the line's one marker slot and the box stands in the flow
+  // after it — both in the slot painted on top of each other (decision 135).
   const inFlow = /^[ \t]*\d+[.)][ \t]/.test(w.doc.lineAt(node.from).text);
   if (isActive) {
-    // The raw `[ ]` goes in the marker box, exactly as a revealed `-` or `1.` does — and
-    // for the same reason. A bullet and a number reveal without moving anything, because
-    // their source is drawn inside the box the widget was occupying; a task's `[ ] ` was
-    // plain literal text sitting *after* that box, so putting the caret on a to-do pushed
-    // every word of it about 24px right. The only list kind that moved when you looked at
-    // it. `[ ]` is around 13px at the default size, so it fits the box it is borrowing;
-    // wider, it overflows into the gap rather than widening (decision 122).
+    // The raw `[ ]` goes in the checkbox's box, as a revealed `-` or `1.` does; as literal text after
+    // it, it pushed the words 24px right (decision 122).
     w.decorations.push((inFlow ? rawTaskMarkInFlow : rawTaskMark).range(node.from, node.to));
     if (w.doc.sliceString(node.to, node.to + 1) === " ") {
       w.decorations.push(hide.range(node.to, node.to + 1));
@@ -506,32 +403,10 @@ function taskMarker(node: SyntaxNodeRef, w: Walk): void {
 function listMark(node: SyntaxNodeRef, w: Walk): void {
   const lineNumber = w.doc.lineAt(node.from).number;
   const isActive = w.reveal.lines.has(lineNumber);
-  // The literal indentation in front of the marker goes away with it.
-  //
-  // Indent comes from the nesting depth (see `pane-line-li-N`), and the two spaces per level
-  // in the buffer were being *rendered as well* — so a second-level bullet sat a space-width
-  // right of where the stylesheet put it, a third-level one two space-widths, and the error
-  // compounded with depth. Level one was right, which is why this survived the measuring
-  // pass: it is the one level with nothing in front of the marker.
-  //
-  // **Only where that span really is whitespace**, and a line has room for one marker.
-  //
-  // `1. 1. three` is a nested list *on one line* — legal CommonMark, and what a person
-  // typing a price into an item used to get before decision 135 escaped it. The inner
-  // `ListMark`'s "indentation" is then the outer marker, and hiding it unconditionally ate
-  // the parent's number: the line drew a single `1. ` at level two, which reads as the
-  // marker having been re-rendered rather than as two lists. Decision 121's rule, third
-  // construct in this file to meet it — a marker may only be hidden where something is
-  // shown in its place.
-  //
-  // Both cannot be drawn. A marker box is 16px wide with a 16px pull that puts it in the
-  // gutter, and there is one gutter: two boxes paint **exactly on top of each other**
-  // (measured, both at x=46), and leaving the inner one boxed and the outer one literal
-  // inverts them on screen — the box pulls left, the literal text does not, so `1. 1.`
-  // draws as `1.1.` with the inner marker first. So the **outer** marker keeps the slot,
-  // being the one the line's indent is measured from, and the inner one is left as the
-  // characters it is: no box, no widget, nothing hidden. Same answer decision 121 gave an
-  // image — markdown Pane has chosen not to interpret renders as the markdown it is.
+  // The literal indentation in front of the marker goes with it — indent comes from `pane-line-li-N`,
+  // and rendering the spaces too put level two a space-width right (108). Only where that span is
+  // whitespace: on `1. 1. three` the inner marker's "indentation" is the outer marker, there is one
+  // marker slot, so the outer keeps it and the inner stays literal (135, 121).
   const lineStart = w.doc.lineAt(node.from);
   //
   // `>` counts as indentation and a list marker does not. A quote is a container rather
@@ -545,21 +420,9 @@ function listMark(node: SyntaxNodeRef, w: Walk): void {
   const text = w.doc.sliceString(node.from, node.to);
   const ordered = /\d/.test(text);
 
-  // A task item already has a checkbox standing in for its marker. Drawing a bullet as well
-  // gives every to-do two markers, which is not what frame 1b shows.
-  // The trailing space is part of the test, and leaving it out cost a marker.
-  //
-  // A `[ ]` is only a `TaskMarker` to the parser when a space follows it, so `- [ ]` at the
-  // end of a line — which is every line halfway through being deleted — has no task marker
-  // at all. Hiding the `-` there hid it in favour of nothing: the bullet vanished and the
-  // literal `[ ]` dropped out of the marker box to the text column. Decision 121's own
-  // rule, broken one decision later. `[ \t]` rather than `\s`, because a newline is not a
-  // space and the parser does not accept one either.
-  // **A bullet, and only a bullet.** A number is not redundant with a checkbox: `1. [ ] x`
-  // is a numbered to-do, and hiding the `1.` drew it as a bare checkbox with the number
-  // gone — on bytes `checkboxInputRule` creates itself, from `1. ` followed by `[] `. A
-  // bullet and a checkbox both say only "an item", so one can stand in for the other; a
-  // number also says *which* item, and nothing else on the line says it.
+  // A bullet's to-do shows the checkbox alone; a number stays, because it says *which* item (135).
+  // The trailing space is part of the test: `- [ ]` at a line end is no task marker to the parser, and
+  // hiding the `-` there hid it in favour of nothing (121).
   if (
     !ordered &&
     /^[ \t]*\[[ xX]\][ \t]/.test(w.doc.sliceString(node.to, Math.min(node.to + 6, w.doc.length)))
@@ -574,22 +437,10 @@ function listMark(node: SyntaxNodeRef, w: Walk): void {
     const after = w.doc.sliceString(node.to, Math.min(node.to + 1, w.doc.length));
     w.decorations.push(rawListMark.range(node.from, node.to + (after === " " ? 1 : 0)));
   } else if (ordered) {
-    // Its own class rather than the raw-syntax one: a rendered `1.` is content the reader is
-    // meant to see and is tinted with the accent, whereas `.pane-syntax` is the muted grey
-    // that marks characters only showing because the caret is on the line.
-    // Through the space after it, exactly as the raw mark above is. The two boxes then
-    // hold the same characters and are the same width for any number of digits, so the
-    // caret arriving on item ten no longer shifts the line — hiding the space here made
-    // the rendered box narrower than the raw one by a space.
-    //
-    // **This is load-bearing and decision 122 tried to remove it.** Centring the marker
-    // box centres its *content*, and content ending in a space leaves the visible digits
-    // about 2px left of the box's middle — enough that `1.` reads as flush with a
-    // checkbox's left edge rather than under its centre. Dropping the space fixes that and
-    // breaks two other things at once: the boxes stop matching, so a revealed `10. ` moves
-    // the line again (decision 108), and the only way to keep them matching is a fixed
-    // `width`, which is what put the caret in front of the marker's own space and turned a
-    // new item into `-a`. The space stays; the number is 2px off centre; that is the trade.
+    // Its own class: a rendered number is content the reader sees, not muted syntax. Through the space
+    // after it, so the rendered and raw boxes match for any digit count and item ten does not shift on
+    // reveal (108). Load-bearing: dropping the space centres the digits and breaks both that and the
+    // caret after a new item — the number sits ~2px left of centre on purpose (122).
     const gap = w.doc.sliceString(node.to, Math.min(node.to + 1, w.doc.length)) === " " ? 1 : 0;
     w.decorations.push(numberMark.range(node.from, node.to + gap));
   } else {
@@ -654,36 +505,9 @@ const CONSTRUCTS: Record<string, Handler> = {
 
 /** The pass over visible lines, for what has no node: blank lines, text-matched constructs, the gap above a block. */
 function linePass(w: Walk): void {
-  // Blank lines get a shorter line box.
-  //
-  // This is the difference between live preview and rendered markdown, and it is what made Pane's
-  // block rhythm visibly looser than the reference. In rendered HTML the blank line between two
-  // paragraphs *disappears* and a margin replaces it; here the user typed it, it is in the buffer,
-  // and it occupies a full 22px line box — so every gap is a whole line plus whatever margin the
-  // next block carries. Shrinking the empty line keeps the source honest (the newline is still
-  // there, the caret still goes in it) while giving the document the spacing of the thing it is
-  // pretending to be.
-  //
-  // THE CARET'S LINE IS EXEMPT, reversing what this comment used to say.
-  //
-  // It used to argue that growing the line back as the caret arrives would shift everything below it
-  // on an arrow keypress, and that cursor instability is how this approach fails. The first half is
-  // true and the second half is what made it the wrong call: the shift happens either way, and
-  // leaving it in meant it happened *while typing* instead of while navigating.
-  //
-  // What that felt like, which is how it was reported: press Return in prose, and the caret lands in
-  // a 10px box hard against the line above; type one character, the line becomes an ordinary
-  // paragraph, and the text appears 12px BELOW where the caret just was. Every Return in prose, which
-  // is the most common thing anyone does in a notes app. A caret that is not where the text lands is
-  // exactly the instability the warning was about — it just arrived through the keyboard rather than
-  // through the arrow keys.
-  //
-  // Exempting the caret's line makes typing dead stable: the line is already at its full height when
-  // the caret gets there, so the first keystroke moves nothing. The cost moves to leaving a blank
-  // line, where a 12px shift reads as the document closing up behind you rather than as the text
-  // jumping out from under the caret. It also makes the rule uniform — every line in the document now
-  // renders at its natural size under the caret, blank lines included, which is what decisions 42
-  // and 34 were already reaching for.
+  // Blank lines get a shorter line box, so the note has rendered markdown's rhythm while the newline
+  // stays in the buffer (55). The caret's own blank line is exempt — the rule and its history are
+  // `reveal.ts` (44, 89, 132).
   for (const { from, to } of w.view.visibleRanges) {
     const first = w.doc.lineAt(from).number;
     const last = w.doc.lineAt(to).number;
@@ -759,17 +583,8 @@ export function buildDecorations(view: EditorView, reveal: Reveal): DecorationSe
   /// actually starts there. The traversal below passes through every one of them anyway.
   const blockStarts = new Set<number>();
 
-  /*
-   * The space between a marker and the text goes with the marker.
-   *
-   * `ListMark` covers `-` or `1.` and `QuoteMark` covers `>`, neither of which includes the space
-   * after it — so that space was rendered, about 3px of it, and pushed the first line's text right
-   * while the block's own continuation line stayed put. Every list was three pixels out of line
-   * with itself, a task list seven because it has two such spaces, and a blockquote three.
-   *
-   * The slot the marker sits in *is* the gap. A literal space on top of it is the same "two sources
-   * for one indent" that the leading indentation already had to lose.
-   */
+  /* The space after a marker goes with the marker: `ListMark` and `QuoteMark` exclude it, and rendered
+   * it pushed the first line's text ~3px right of its own continuation (decisions 108, 122). */
   const hideSpaceAfter = (at: number) => {
     const line = doc.lineAt(at);
     let end = at;

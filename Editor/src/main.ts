@@ -160,20 +160,8 @@ function notifyEdited(view: EditorView): void {
   scheduleContentHeight();
 }
 
-/**
- * The note's name, which is its first non-blank line (decision 2), read as prose.
- *
- * Follows the first line as it is typed, not only as it is loaded. That was harmless while the
- * title bar was empty until you scrolled (decision 22) and is not now it is always there: a note
- * created with ⌘N had no title at all until it was next opened, so the pane spent the whole of the
- * writing sitting there unnamed.
- *
- * The extraction is `noteTitle`, a port of the Swift the ⌘P switcher already uses. What used to be
- * here stripped `#` and nothing else, off line 1 and no further — so a note beginning
- * `**A research plan**` put the asterisks in the title bar while the switcher showed the words, and
- * a note whose first line was blank was nameless in the bar and named in the list. Two answers to
- * "what is this note called" is one too many.
- */
+/** The note's name — its first non-blank line read as prose, one `noteTitle` for the bar and the
+ * switcher, followed as it is typed (decisions 2, 67). */
 function showTitle(lines: Iterable<string>): void {
   // "Untitled" rather than nothing, which is what an empty note showed until ⌘N stopped writing a
   // file the moment it was pressed. A pane with no title and no text reads as broken; the reference
@@ -181,17 +169,8 @@ function showTitle(lines: Iterable<string>): void {
   paneTitleEl.textContent = noteTitle(lines) || "Untitled";
 }
 
-/**
- * The footer's number, and which number it is.
- *
- * A click on it swaps the two. There is no control anywhere for this and there should not be: the
- * number *is* the control, it says which one it is in its own label, and one press puts it back.
- *
- * **And it carries no bubble.** It had one — "Show characters" — and that is the app explaining
- * itself (decision 76) over a control that is already a sentence in English. A tooltip earns its
- * place where the control is a glyph: the format bar's icons and the title bar's buttons cannot say
- * their own names. This one can, so hovering it now says nothing at all.
- */
+/** The footer's number, and which one: a press swaps it, and it carries no bubble — a number in
+ * English says its own name (decisions 124, 76). */
 let footerCount: "words" | "characters" = "words";
 
 function formatWordCount(n: number): string {
@@ -218,17 +197,9 @@ let heightFrame = 0;
 let settlePass = false;
 
 /**
- * Asks for a height at most once per frame, and at most once more after that.
- *
- * The pane visibly overshot and corrected on every new line. The loop: the web layer reports a
- * height, Swift resizes the window, the `ResizeObserver` on the pane sees that resize and reports
- * again — and the second answer differs, because CodeMirror only lays out the lines in view and
- * *estimates* the rest, so growing the window turns estimates into measurements. Report, resize,
- * re-estimate, resize.
- *
- * So the observer no longer drives this at all (it still reports drag regions, which genuinely do
- * depend on window size). Content height is asked for when the *content* changes, plus exactly one
- * settle pass afterwards to pick up CodeMirror's refined layout. Two steps, and it cannot chain.
+ * Content height is asked for when the *content* changes, plus one settle pass for CodeMirror's
+ * refined layout — never from the `ResizeObserver`, which fed a report → resize → re-estimate loop
+ * and made the pane overshoot on every new line (decision 40, amended 2026-09-17).
  */
 function scheduleContentHeight(): void {
   if (heightFrame) return;
@@ -240,22 +211,13 @@ function scheduleContentHeight(): void {
 }
 
 function reportContentHeight(): void {
-  // `view.contentHeight` is CodeMirror's laid-out document height. `editorHost.scrollHeight` was the
-  // obvious choice and always wrong: the host is `height: 100%` and the editor inside it is themed
-  // to match, so scrollHeight equals clientHeight forever and the pane reports its *current* height
-  // as its desired height — which means rule 2 could never actually fire.
-  // Minus the caret's blank-line exemption: that 12px is a rendering choice, and a window that
-  // followed it would pulse every time the caret crossed a blank line. See `caretBlankLineSlack`.
+  // `view.contentHeight`, never `scrollHeight`: the host is `height: 100%`, so scrollHeight equals
+  // clientHeight and the pane would report its current height as the one it wants. Minus the caret's
+  // blank-line slack, a rendering choice the window must not follow (`caretBlankLineSlack`).
   const content = view.contentHeight - caretBlankLineSlack(view);
 
-  // The format bar replaces the footer rather than stacking on it, so only one of them is ever laid
-  // out. Measuring whichever is visible avoids assuming which.
-  // Whichever of the three is actually laid out, found by measuring rather than by re-deriving the
-  // rule from attributes. The old version asked `data-format-bar` and otherwise took the footer —
-  // which is wrong in the third state: with ⌘F open, `.pane[data-find]` hides *both* the footer and
-  // the format bar, so it measured a `display: none` element, got 0, and dropped the whole row out
-  // of the height. The pane shrank by the find bar's height when find opened and grew back when it
-  // closed. A fourth state could not make this wrong again.
+  // Whichever of the three rows is laid out, found by measuring: with ⌘F open both the footer and
+  // the format bar are hidden, and reading an attribute measured a `display: none` row as 0 (decision 66).
   const bar = [".find", ".format-bar", ".pane__footer"]
     .map((selector) => paneEl.querySelector<HTMLElement>(selector))
     .find((element) => (element?.offsetHeight ?? 0) > 0);
@@ -276,15 +238,8 @@ function reportContentHeight(): void {
   requestAnimationFrame(() => requestAnimationFrame(reportContentHeight));
 }
 
-/**
- * Tells Swift where the window may be dragged from.
- *
- * `-webkit-app-region: drag` in `pane.css` is what the design's markup uses, and it is an
- * Electron/Tauri extension that a WKWebView ignores entirely — so the title bar would not move the
- * window at all without this. The web layer is the only place that knows where the buttons ended up
- * after layout, so it measures and Swift hit-tests: rule 3, "only a drag moves a pane", without
- * hard-coding a single button position into Swift.
- */
+/** Tells Swift where the window may be dragged from. `-webkit-app-region` is inert in a WKWebView
+ * (LAB, 2026-08-15), so the web layer measures the title bar minus its buttons and Swift hit-tests. */
 function reportDragRegions(): void {
   const box = (el: Element): Rect => {
     const r = el.getBoundingClientRect();
@@ -328,30 +283,8 @@ let formatBar: ReturnType<typeof mountFormatBar> | undefined;
 /// closes the find bar, and a `const` mounted further down would still be in its temporal dead zone.
 let find: ReturnType<typeof mountFind> | undefined;
 
-/**
- * `- []` + space becomes `- [ ] `, which is how everyone actually types a checkbox.
- *
- * Typora, Obsidian and Bear all do this, and it is the one markdown construct whose real syntax
- * nobody remembers — `[ ]` with a space inside the brackets. Getting it wrong produces literal text
- * that looks like a bug in the renderer.
- *
- * An input handler rather than a decoration, because it must change the buffer: decision 5 says what
- * is on disk is what was typed, so a checkbox the user can see has to be a checkbox on disk.
- */
-/**
- * A new bullet takes the marker the list is already using.
- *
- * `-`, `*` and `+` all mean "bullet", and they all render as one here — but CommonMark treats a
- * change of character as the *end of one list and the start of another*, so typing `* first` then
- * `- second` produces two lists that happen to sit next to each other. The rendering gives that
- * away (they are spaced as two blocks, decision 55) and nothing on screen explains why.
- *
- * So the marker is normalised to whatever the item above it uses, at the moment the space after it
- * is typed. It edits the buffer rather than the rendering, which is the only honest place for it:
- * decision 5 says the file is what you typed, and what you meant to type was another item in the
- * list you were already in. Only when there is a list directly above at the same indent — the first
- * bullet of a list is still whatever character you chose.
- */
+/** A new bullet takes the marker the list above it uses — to CommonMark a change of character
+ * starts a second list (decision 59). Only with a list directly above at the same indent. */
 function bulletInputRule(): Extension {
   return EditorView.inputHandler.of((view, from, to, text) => {
     if (text !== " ") return false;
@@ -425,27 +358,8 @@ function checkboxInputRule(): Extension {
   });
 }
 
-/**
- * A marker typed into a list item is text, not a second list.
- *
- * `1. 1. three` is, to CommonMark and to pandoc, an ordered list containing an ordered list — on
- * one line, with no indentation anywhere. So is `- * x`. That is correct markdown and it is never
- * what anybody means: a nested list is made with ⇥ (decision 108), and what a person typing `1. `
- * into an item is writing is a price, a version or a clause number. Reported as "1. 1.3 dollars
- * works and 1. 1. 3 dollars messes up", which is exactly the line between the two — a marker needs
- * the space after it, so only the second one ever nested.
- *
- * Markdown has one way to mean a literal marker and it is a backslash, so the bytes have to carry
- * one: `1\. ` and `\* `. The buffer is still what was typed in the only sense decision 5 cares
- * about — the line *means* the characters on screen — and `live-preview.ts` hides the backslash the
- * way it hides a `**`, so nothing shows it off the caret. Same family as the two rules above, which
- * already edit the buffer for the same reason (decision 59).
- *
- * Only at the **start of the item's content**, because that is the only place a marker can begin a
- * block: `- [ ] - x` and `1. a 1. b` are already plain text and an escape there would be noise
- * inserted into a note for nothing. A `> ` prefix is deliberately not a trigger — `> - x` is how a
- * list inside a quote is written, and that one does mean a list.
- */
+/** A marker typed at an item's content start is text, and the bytes say so: `1\. ` and `\* `
+ * (decision 135). `> ` is deliberately not a trigger — `> - x` means a list inside a quote. */
 function escapeNestedMarkerRule(): Extension {
   return EditorView.inputHandler.of((view, from, to, text) => {
     if (text !== " ") return false;
@@ -469,13 +383,8 @@ function escapeNestedMarkerRule(): Extension {
   });
 }
 
-/**
- * The blocks ⌘A steps through, innermost first.
- *
- * `ListItem` is in the set *and* preferred over the `Paragraph` inside it: a bullet's paragraph is
- * its text without the marker, while a task item has no paragraph at all and would otherwise select
- * a different thing from every other list. One rule for both.
- */
+/** The blocks ⌘A steps through, innermost first. `ListItem` over the `Paragraph` inside it, so a task
+ * item, which has no paragraph, selects like every other list (decision 65). */
 const SELECTABLE_BLOCKS = new Set([
   "Paragraph",
   "ATXHeading1",
@@ -494,15 +403,8 @@ const SELECTABLE_BLOCKS = new Set([
   "Blockquote",
 ]);
 
-/**
- * ⌘A selects the block you are in; press it again for the whole note.
- *
- * Typora, Obsidian and every editor with a block model do this, and it is the difference between
- * "replace this paragraph" being one keystroke and being a drag. The second press is not a special
- * case in here — when the selection already *is* the block, this declines and CodeMirror's own
- * `selectAll` takes the key, which also means ⌘A on a one-paragraph note does the obvious thing on
- * the first press.
- */
+/** ⌘A selects the block; when the selection already is the block this declines and CodeMirror's
+ * `selectAll` takes the note (decision 65). */
 function selectBlockThenAll(view: EditorView): boolean {
   const state = view.state;
   const range = state.selection.main;
@@ -550,13 +452,8 @@ const DEFAULT_SHORTCUTS: Record<string, string> = {
 
 const shortcutsCompartment = new Compartment();
 
-/**
- * The undo history, in a compartment so it can be **thrown away when the note changes**.
- *
- * Undo belongs to the note, not to the pane. Without this the one history spans every note you
- * have opened, so ⌘Z after switching walks backwards into the note before — which is not undo, it
- * is ⌘[ wearing undo's key, and it writes the previous note's text into the current note's file.
- */
+/** The undo history in a compartment, so it is thrown away when the note changes: undo belongs to
+ * the note, or ⌘Z after a switch writes the previous note into this one's file (decision 80). */
 const historyCompartment = new Compartment();
 
 /**
@@ -582,15 +479,8 @@ export function keyCaps(binding: string): string[] {
 }
 
 
-/**
- * What every ⌘K row does, keyed by the same id the panel's rows carry.
- *
- * One table, two callers: the panel runs an entry when a row is chosen, and the keymap binds the
- * same entry to that row's advertised shortcut. Written once because the alternative is a row whose
- * printed key does something subtly different from clicking it — and a shortcut printed next to an
- * action that does not do that thing is worse than no shortcut at all, which is the same reasoning
- * that made the format bar's heading dropdown a real menu.
- */
+/** What every ⌘K row does, keyed by the row's id — one table for the panel and the keymap, so a
+ * printed shortcut cannot do something different from the click (decisions 17, 68). */
 const actionHandlers: Record<string, () => boolean> = {
   newNote: () => (send({ type: "createNote", title: "" }), true),
   browseNotes: () => (toggleSwitcher(), true),
@@ -643,17 +533,9 @@ function baseExtensions(): Extension[] {
     rectangularSelection(),
     EditorView.lineWrapping,
 
-    // `addKeymap: false` because the default Enter binding is wrong for a notes app — see the
-    // high-precedence keymap below.
-    // `addKeymap: false` above; `autoCloseTags: false` here, and both are about the same thing —
-    // a key doing something nobody asked a notes app for.
-    //
-    // Markdown embeds HTML, so `markdown()` brings the HTML support in with it, and that support
-    // auto-closes tags. Typing `<div class="x">body</div>` came out as `…</div></div>`: the `>`
-    // inserted a closing tag and the one the writer then typed did not type over it. In an HTML
-    // editor that trade is worth it. Here it breaks decision 5's promise outright — the file did
-    // not hold what was typed — and the only tag Pane cares about is decision 61's `<u>`, which
-    // ⌘U writes both halves of.
+    // `addKeymap: false`: the default Enter makes a list loose instead of exiting it (`keyboard/enter.ts`).
+    // `autoCloseTags: false`: a typed `<div>` gained a second `</div>`, breaking decision 5
+    // (decision 108, amended 2026-09-17).
     markdown({
       base: markdownLanguage,
       addKeymap: false,
@@ -733,15 +615,9 @@ function baseExtensions(): Extension[] {
   ];
 }
 
-/**
- * Throws the undo stack away.
- *
- * **Out of the configuration, then back in** — and that is not ceremony. `history()` returns a
- * module-level `StateField`, so reconfiguring the compartment with a *fresh* `history()` hands back
- * the same field with the same stack still in it. Removing the field is what discards its state;
- * re-adding it calls `create` and starts empty. Reconfiguring in place looks like it works and does
- * nothing, which is this codebase's oldest genre of bug (decision 71).
- */
+/** Throws the undo stack away: out of the configuration, then back in. Reconfiguring with a fresh
+ * `history()` hands back the same field and the same stack — it looks like it works and does nothing
+ * (decision 80, amended 2026-09-17; decision 71's genre). */
 function clearHistory(): void {
   view.dispatch({ effects: historyCompartment.reconfigure([]) });
   view.dispatch({ effects: historyCompartment.reconfigure(history()) });
@@ -768,18 +644,9 @@ function toggleFormatBar(): void {
   reportDragRegions();
 }
 
-/*
- * The count swaps on a press of the number itself.
- *
- * `mousedown`, and prevented, for the reason the overlay scrim is: the count is a `<span>` outside
- * CodeMirror, so an ordinary click takes focus off the editor — and an unfocused editor renders the
- * whole note (decision 53), so reading the count would re-draw the note under the pointer and put
- * the caret's line back to rendered. Preventing the default keeps the caret exactly where it was.
- *
- * Swapped here rather than waiting for Swift to come back through `applySettings`: the round trip is
- * not synchronous, and a number that changes a frame after the press reads as a lag rather than as a
- * press. Swift's answer then arrives and agrees.
- */
+/* `mousedown`, and prevented: a click would blur the editor and decision 53 would redraw the note
+ * under the pointer. Swapped here rather than after Swift's round trip, or the number lags the press
+ * (decision 124). */
 document.getElementById("word-count")!.addEventListener("mousedown", (event) => {
   event.preventDefault();
   footerCount = footerCount === "words" ? "characters" : "words";
@@ -802,24 +669,12 @@ document.getElementById("pin")!.addEventListener("click", () =>
 document.getElementById("browse")!.addEventListener("click", () => toggleSwitcher());
 document.getElementById("open-actions")!.addEventListener("click", () => toggleActions());
 
-/*
- * Every button in the pane names itself the same way (decision 58's bubble, generalised).
- *
- * The strings carry their shortcut, and the same string becomes the accessible name — so a button
- * cannot advertise a key in one place and something else in another, which is the defect decisions
- * 47 and 49 were both instances of.
- */
+/* Every button names itself the same way: one string carries the shortcut and becomes the accessible
+ * name, so a key cannot be advertised differently in two places (decision 58). */
 mountTooltips(paneEl);
 
-/**
- * The chrome's tooltips, **read from the binding in force** rather than written out.
- *
- * They were literals — "Actions ⌘K", "Notes ⌘P", "New note ⌘N" — so rebinding Browse Notes to ⌘O
- * left the switcher button still promising ⌘P. That is decision 17's rule broken in a fourth place:
- * decision 68 fixed the ⌘K rows and the File menu and did not reach here, because a tooltip is
- * mounted once at start-up and nothing was re-reading it. `refreshChromeTooltips` is called again
- * whenever settings arrive, which is the same hook the ⌘K rows already use.
- */
+/** The chrome's tooltips read the binding in force, re-read whenever settings arrive — decision 68's
+ * rule, its fourth instance (92). */
 const CHROME_TIPS: [selector: string, label: string, action: string | null][] = [
   ["#close", "Close", null],
   ["#pin", "Unpin", "pinPane"],
@@ -872,15 +727,9 @@ let onEverySpace = true;
 const actionsEl = document.getElementById("actions") as HTMLElement;
 const switcherEl = document.getElementById("switcher") as HTMLElement;
 
-/*
- * Both overlays are placed by one calculation, whenever anything it depends on moves.
- *
- * Three things move it: the panel opening, its own height changing as a filter narrows the list,
- * and the pane's height changing — which happens *after* the panel opens, because the panel reports
- * the height it wants and Swift grows the window to it (decision 45). A `ResizeObserver` on all
- * three is one hook instead of three call sites, and setting `top` changes no size, so it cannot
- * feed itself.
- */
+/* Both overlays are placed by one calculation whenever the panel opens, its height changes, or the
+ * pane's height changes after Swift grows the window (decision 45). One `ResizeObserver`, and `top`
+ * changes no size, so it cannot feed itself. */
 function placeOverlays(): void {
   placeOverlay(switcherEl, paneEl);
   placeOverlay(actionsEl, paneEl);
@@ -925,15 +774,8 @@ const switcher = mountSwitcher({
   },
 });
 
-/**
- * The switcher and ⌘K occupy the same slot, so only one of them is ever open.
- *
- * They are absolutely positioned at the same offset with adjacent z-indexes, so opening the second
- * simply stacked it on the first — two search fields and two lists on screen at once, with the
- * keystrokes going to whichever happened to hold focus. Every entry point goes through these rather
- * than calling `toggle` directly, because "close the other one first" is not something a call site
- * should be able to forget.
- */
+/** One slot: opening either panel closes the other first, here rather than at every call site
+ * (decision 45). */
 function toggleSwitcher(): void {
   actions.close();
   switcher.toggle();
@@ -944,15 +786,8 @@ function toggleActions(): void {
   actions.toggle();
 }
 
-/*
- * Clicking outside an open overlay closes it, and never reaches the note.
- *
- * `mousedown` rather than `click`, and prevented: by the time a click completes the browser has
- * already moved focus, and focus leaving the panel's `<input>` is the whole bug — the editor took
- * the caret back while the panel stayed on screen, so the next keystroke was typed into the
- * document under it. Closing here also hands focus back to the editor, through the same
- * `onVisibilityChange` path every other close goes through.
- */
+/* Clicking outside an open overlay closes it and never reaches the note. `mousedown`, prevented: by
+ * the time a click completes focus has already left the panel's input (decision 52). */
 document.getElementById("overlay-scrim")!.addEventListener("mousedown", (event) => {
   event.preventDefault();
   actions.close();
@@ -1005,16 +840,8 @@ function matchesBinding(event: KeyboardEvent, binding: string): boolean {
 let liveShortcuts: Record<string, string> = { ...DEFAULT_SHORTCUTS };
 refreshChromeTooltips();
 
-/**
- * An open overlay's own shortcut closes it.
- *
- * Opening either panel moves focus into its `<input>`, a plain DOM node outside CodeMirror — so the
- * keymap that opened the panel never sees the second press. ⌘K opened the action panel and then did
- * nothing at all for as long as it was up. Escape still worked, which is what disguised it.
- *
- * Capture phase, and only while that overlay is open, so it cannot shadow the editor's own bindings
- * the rest of the time.
- */
+/** An open overlay's own shortcut closes it: focus is in a plain `<input>` outside CodeMirror, so the
+ * keymap never sees the second press. Capture phase, only while open (decision 45). */
 document.addEventListener(
   "keydown",
   (event) => {
@@ -1065,19 +892,8 @@ const host = {
       changes: { from: 0, to: view.state.doc.length, insert: text },
       selection: { anchor: clamped },
       scrollIntoView: true,
-      /*
-       * **Loading a note is not an edit, and ⌘Z must not be able to undo it.**
-       *
-       * This dispatch replaces the whole document, and without the annotation it went into the undo
-       * history like anything else — so the first ⌘Z in any note reversed *the load*, which is to
-       * say it emptied the document. Then the write model flushed the empty buffer to the file, in
-       * as long as it takes to notice. Measured: undo straight after opening a note, undo after an
-       * ordinary edit, and undo after switching notes all left an empty document.
-       *
-       * This has been true since the first commit — `addToHistory` has never appeared in this file
-       * — which makes it the oldest and worst bug in the product, and the only one found by someone
-       * pressing ⌘Z rather than by reading anything.
-       */
+      // Loading a note is not an edit: without this annotation the first ⌘Z undid the load, emptied the
+      // note, and the write model flushed the empty buffer (decision 80).
       annotations: Transaction.addToHistory.of(false),
     });
     // And a fresh stack, so undo cannot reach back past this note into the last one.
@@ -1096,20 +912,9 @@ const host = {
     view.focus();
   },
 
-  /**
-   * Undo describes **this sitting with the note**, so a summon starts a fresh one.
-   *
-   * Dismissing does not reload the note — the buffer and its history survive offscreen, which is
-   * what keeps a summon under 100ms. So without this, ⌘Z after a summon reaches back across the
-   * dismissal into typing that happened before it, and CodeMirror groups a continuous burst into
-   * one event: write a note in one go, dismiss, come back an hour later, press ⌘Z once, and the
-   * whole note is gone — then the write model flushes the empty buffer to the file.
-   *
-   * That is not the same bug as decision 80's, which was the *load* being undoable, and it is not
-   * fixed by fixing that one. It is the same reasoning decision 51 used for the visit history: this
-   * describes one sitting with the app, and reaching across a dismissal into text you no longer
-   * have any context for is worse than starting fresh.
-   */
+  /** Undo describes one sitting with the note: the buffer survives a dismissal offscreen, so a summon
+   * starts the history fresh rather than reaching back across it (decision 80, amended 2026-09-17;
+   * decision 51's reasoning). */
   resetHistory(): void {
     clearHistory();
   },
@@ -1199,22 +1004,8 @@ const host = {
     autoSizing = on;
   },
 
-  /**
-   * Seeds the hover state when the pane appears (decision 41).
-   *
-   * `mouseenter` fires on a pointer crossing a boundary, and summoning moves the boundary instead —
-   * so a pane that opens underneath a stationary cursor is hovered without any event ever saying
-   * so, and would sit there dimmed until the mouse twitched. Swift knows where the pointer is
-   * relative to the new frame; the web layer cannot.
-   */
-  /**
-   * The close dot alone (decision 107), from the same `NSEvent.mouseLocation` read as `setHover`.
-   *
-   * `:hover` cannot do this. Measured: with the pane over another app its window is not key, and a
-   * WKWebView in a window that is not key gets no mouse events at all — the cursor sat on the dot
-   * and the page saw zero `mousemove`s while `:hover` matched nothing. That is the same finding
-   * `setHover` exists for, applied one control down.
-   */
+  /** The close dot alone, from the same read as `setHover`: `:hover` cannot, because the page gets no
+   * mouse events with the pane over another app (decision 107). */
   setCloseHover(inside: boolean): void {
     paneEl.toggleAttribute("data-close-hover", inside);
   },
@@ -1229,13 +1020,8 @@ const host = {
     if (!inside) hideTooltip();
   },
 
-  /**
-   * Where the pointer is, from Swift — decision 120, and the same read `setHover` comes from.
-   *
-   * The page gets no mouse events in the state the pane is designed for, so this is how a control
-   * gets named without the pane having been clicked first. Sent on every move, because "which
-   * control" is a different question from "inside or outside".
-   */
+  /** Where the pointer is, from Swift, on every move: the page gets no mouse events in the state the
+   * pane lives in (decision 120). */
   setPointer(x: number, y: number): void {
     setPointer(x, y);
   },
@@ -1268,13 +1054,7 @@ const host = {
     toastEl.removeAttribute("data-fading");
     if (toastTimer) clearTimeout(toastTimer);
     if (toastFadeTimer) clearTimeout(toastFadeTimer);
-    // 1900ms is long enough to read a short sentence, short enough not to sit over the note you
-    // moved on to — and it is tuned for a **receipt**: ⌃X, a duplicate, a toggle, where you already
-    // know what happened and the toast only confirms it.
-    //
-    // `dwell` exists for the one toast that is not a receipt. An update notice is news, arriving on
-    // a summon you made to write something down, so the eye is on the caret and not up here
-    // (decision 136). News gets longer; a receipt does not need it.
+    // 1900ms reads a short receipt; `dwell` is longer for the one toast that is news (decision 136).
     toastTimer = window.setTimeout(() => {
       toastEl.setAttribute("data-fading", "");
       toastFadeTimer = window.setTimeout(() => {
@@ -1300,27 +1080,17 @@ const host = {
 
 window.paneHost = host;
 
-/*
- * Hover arrives from Swift (`setHover`), not from listeners here.
- *
- * `mouseenter`/`mouseleave` in the page only fired once the pane had been clicked: a WKWebView in a
- * window that is not key receives no mouse events at all, so the chrome stayed dim wherever the
- * pointer went — in precisely the situation decision 41 exists for, the pane sitting over another
- * app you are working in. Swift's mouse monitors see the pointer regardless of which app is active,
- * which is also the rule everywhere else here: the web layer owns no truth.
- */
+/* Hover arrives from Swift (`setHover`): the page's own `mouseenter` only fires once the pane has been
+ * clicked (decisions 41, 120). The web layer owns no truth. */
 
 // Clicking the banner acknowledges it. That is the whole dismissal affordance: a conflict banner
 // with an ✕ would be a control the user must operate before the pane looks normal again, which is
 // the interruption decision 8 rules out.
 bannerEl.addEventListener("click", () => host.hideBanner());
 
-// The draggable strip changes whenever the title bar relays out — the pane resizing, the title
-// fading in past the H1, the format bar swapping the footer out.
-// Drag regions only. This used to report content height too, which is what made the pane overshoot
-// and correct — see the note on `scheduleContentHeight`. The window's own size can never be an
-// input to how tall the content wants to be, because the width is fixed (decision 22's measure) and
-// nothing else about the note depends on the window.
+// Drag regions only, on every title-bar relayout. Never content height: the window's size is not an
+// input to how tall the content wants to be, and reporting it here is what made the pane overshoot
+// (decision 40, amended 2026-09-17).
 new ResizeObserver(() => {
   reportDragRegions();
   placeOverlays();
