@@ -45,6 +45,9 @@ export const cases: Case[] = [
   { name: "…two under `- [ ] ` — the checkbox is not counted (see note)", doc: "soft:- [ ] one|", want: "- [ ] one\n  |" },
   { name: "…and a nested item's column", doc: "soft:- one\n  - two|", want: "- one\n  - two\n    |" },
   { name: "…from a continuation line, still the item's column", doc: "soft:- one\n  more|", want: "- one\n  more\n  |" },
+  // The line ⇧⏎ leaves is whitespace only, so to CommonMark it is blank and the tree ends the item
+  // before it. It is still the item to the person who pressed the key (144).
+  { name: "…and from the whitespace-only line ⇧⏎ itself left (144)", doc: "soft:- one\n  - two\n    |", want: "- one\n  - two\n    \n    |" },
   { name: "⇧⏎ in prose is CodeMirror's plain newline", doc: "soft:hello|", want: FALLTHROUGH },
   { name: "⇧⏎ in a fence inside an item is the code's newline", doc: "soft:- one\n  ```\n  co|de\n  ```", want: FALLTHROUGH },
 ];

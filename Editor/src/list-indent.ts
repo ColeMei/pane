@@ -25,6 +25,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
+import type { SyntaxNode } from "@lezer/common";
 import type { KeyEdit } from "./keyboard/edit";
 
 /** `   1. ` — the indent, the marker, and the space between the marker and the text. */
@@ -58,9 +59,10 @@ function itemAt(state: EditorState, pos: number): Item | null {
   const node = listItemAt(state, line.from + indent.length);
   if (!node) return null;
 
+  const soft = softBreakLines(state, node);
   return {
     first: doc.lineAt(node.from).number,
-    last: doc.lineAt(Math.min(node.to, doc.length)).number,
+    last: soft.length ? soft[soft.length - 1]! : doc.lineAt(Math.min(node.to, doc.length)).number,
     indent: indent.length,
     content: indent.length + marker.length + gap.length,
   };
@@ -75,11 +77,61 @@ function listItemAt(state: EditorState, pos: number) {
 /** The line number of the item a marker-less line belongs to, or null. */
 function ownerOfContinuation(state: EditorState, lineNumber: number): number | null {
   const doc = state.doc;
-  if (doc.line(lineNumber).text.trim() === "") return null;
+  if (doc.line(lineNumber).text.trim() === "") {
+    const owner = softBreakOwner(state, lineNumber);
+    return owner ? doc.lineAt(owner.from).number : null;
+  }
   const node = listItemAt(state, doc.line(lineNumber).from);
   if (!node) return null;
   const owner = doc.lineAt(node.from).number;
   return owner === lineNumber ? null : owner;
+}
+
+/** Whitespace and nothing else — but not nothing: an empty line is blank to everyone. */
+const softBreakLine = (text: string): boolean => text.length > 0 && text.trim() === "";
+
+/**
+ * The item a whitespace-only line belongs to: the one whose last own line is directly above it
+ * (other such lines between allowed), with the line indented to that item's content column or past
+ * it. Null for any other whitespace-only line.
+ *
+ * This is the line ⇧⏎ leaves before anything is typed (108). To CommonMark it is blank, so the tree
+ * ends the item before it, and every reader of the tree — the walk, the keyboard — saw it as outside
+ * the list until the first character arrived and it became a continuation. To the person who
+ * pressed the key it was the item the whole time (144).
+ */
+export function softBreakOwner(state: EditorState, lineNumber: number): SyntaxNode | null {
+  const doc = state.doc;
+  if (!softBreakLine(doc.line(lineNumber).text)) return null;
+  let indent = Infinity;
+  let n = lineNumber;
+  for (; n >= 1 && softBreakLine(doc.line(n).text); n--) {
+    indent = Math.min(indent, /^[ \t]*/.exec(doc.line(n).text)![0].length);
+  }
+  if (n < 1) return null;
+  const last = doc.line(n);
+  // The innermost item ending on that line. Resolved at its end with a -1 bias: at a line start
+  // the innermost node is a marker or an outer item.
+  let node: SyntaxNode | null = syntaxTree(state).resolveInner(last.to, -1);
+  while (node && node.name !== "ListItem") node = node.parent;
+  if (!node || doc.lineAt(node.to).number !== last.number) return null;
+  const match = MARKER.exec(doc.lineAt(node.from).text);
+  if (!match) return null;
+  const [, lead, marker, gap] = match as unknown as [string, string, string, string];
+  return indent >= lead.length + marker.length + gap.length ? node : null;
+}
+
+/** The whitespace-only lines under an item that `softBreakOwner` gives to it, in order. */
+export function softBreakLines(state: EditorState, item: SyntaxNode): number[] {
+  const doc = state.doc;
+  const lines: number[] = [];
+  for (let n = doc.lineAt(item.to).number + 1; n <= doc.lines; n++) {
+    // By range, not identity: every resolve hands out a fresh node object.
+    const owner = softBreakOwner(state, n);
+    if (!owner || owner.from !== item.from || owner.to !== item.to) break;
+    lines.push(n);
+  }
+  return lines;
 }
 
 /**
@@ -103,7 +155,7 @@ function markerAbove(state: EditorState, first: number, indent: number) {
   return null;
 }
 
-/** Rewrites the leading whitespace of every line an item owns, blank lines left alone. */
+/** Rewrites the leading whitespace of every line an item owns, empty lines left alone. */
 function shiftEdit(state: EditorState, item: Item, delta: number): KeyEdit | null {
   if (delta === 0) return null;
   const doc = state.doc;
@@ -111,7 +163,9 @@ function shiftEdit(state: EditorState, item: Item, delta: number): KeyEdit | nul
 
   for (let n = item.first; n <= item.last; n++) {
     const line = doc.line(n);
-    if (line.text.trim() === "") continue;
+    // A whitespace-only line moves too: it is the line ⇧⏎ left, and it has to keep the item's
+    // column or it stops being the item's (144).
+    if (line.length === 0) continue;
     const leading = /^[ \t]*/.exec(line.text)![0];
     const width = Math.max(0, leading.length + delta);
     changes.push({ from: line.from, to: line.from + leading.length, insert: " ".repeat(width) });

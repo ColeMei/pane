@@ -11,6 +11,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 import { endOfOwnContent } from "./blocks";
+import { softBreakLines } from "./list-indent";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import type { Range } from "@codemirror/state";
@@ -310,7 +311,12 @@ function listItem(node: SyntaxNodeRef, w: Walk): void {
   // text (108). Only the item's *own* lines: its range covers the nested list beneath it, and stamping
   // the outer depth on every line left four equal-specificity rules deciding the indent (108, 71's trap).
   const itemLast = w.doc.lineAt(Math.min(endOfOwnContent(w.view.state, node.node), w.doc.length));
-  for (let n = itemFirst.number + 1; n <= itemLast.number; n++) {
+  const own: number[] = [];
+  for (let n = itemFirst.number + 1; n <= itemLast.number; n++) own.push(n);
+  // Plus the whitespace-only lines ⇧⏎ left under the item, which the tree ends the item before:
+  // drawn at the margin, the caret waited 47px left of where its text would land (144).
+  for (const n of softBreakLines(w.view.state, node.node)) own.push(n);
+  for (const n of own) {
     const line = w.doc.line(n);
     if (line.length === 0) continue;
     w.decorations.push(

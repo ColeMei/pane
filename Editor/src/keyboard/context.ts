@@ -19,7 +19,7 @@
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
-import { contentColumn } from "../list-indent";
+import { contentColumn, softBreakOwner } from "../list-indent";
 import { applyEdit, type Command, type KeyEdit } from "./edit";
 
 export interface NeighbourLine {
@@ -151,7 +151,8 @@ export function lineContext(state: EditorState): LineContext {
   const quoteMatch = QUOTE_ONLY.exec(line.text);
   const fenceMatch = FENCE_OPENING.exec(line.text);
 
-  const item = enclosing(state, line.from + indent, "ListItem", 1);
+  // The tree ends an item before the whitespace-only line ⇧⏎ leaves; the line is still the item's (144).
+  const item = enclosing(state, line.from + indent, "ListItem", 1) ?? softBreakOwner(state, line.number);
   let nestedItem = false;
   for (let node = item?.parent ?? null; node; node = node.parent) {
     if (node.name === "ListItem") { nestedItem = true; break; }
@@ -195,7 +196,7 @@ export function lineContext(state: EditorState): LineContext {
     nestedItem,
     fenceUnclosed,
     caret: {
-      inListItem: enclosing(state, head, "ListItem", -1) !== null,
+      inListItem: enclosing(state, head, "ListItem", -1) !== null || softBreakOwner(state, line.number) !== null,
       inBlockquote: enclosing(state, head, "Blockquote", -1) !== null,
       codeBlock: codeBlock ? { to: codeBlock.to } : null,
       notProse: ancestorNamed(state, head, NOT_PROSE, -1) !== null,

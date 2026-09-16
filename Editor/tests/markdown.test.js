@@ -1044,6 +1044,32 @@ export function runListGeometry(view, doc) {
   d.at("para");
   r.check("a ⇧⏎ continuation sits under the item's text", i.textEdge(1), i.leftEdge(2));
 
+  // Decision 144, from the report: "the caret keeps flashing at a position not aligned with the
+  // third list item". The case above loaded a continuation that already had text; nothing had ever
+  // looked at the caret in the moment between ⇧⏎ and the first character, which is the moment a
+  // person sees. Measured on the debug build through the accessibility API, 2026-09-17: caret at
+  // 580 against text at 627, then 626 once `x` was typed — 47px left, and a jump.
+  const caretX = () => round(view.coordsAtPos(view.state.selection.main.head).left);
+  const softBreaks = [
+    ["a top-level bullet", () => d.type("- one"), 1],
+    ["a numbered item", () => d.type("1. one"), 1],
+    ["a third-level bullet", () => {
+      d.type("- one"); d.press("Enter"); d.press("Tab"); d.type("two");
+      d.press("Enter"); d.press("Tab"); d.type("three");
+    }, 3],
+  ];
+  for (const [name, setup, line] of softBreaks) {
+    d.reset(); setup();
+    const text = i.textEdge(line);
+    d.press("Enter", { shiftKey: true });
+    const waiting = caretX();
+    r.check(`⇧⏎ in ${name}: the caret waits under the item's text`, text, waiting, "⇧⏎");
+    d.type("x");
+    r.check(`⇧⏎ in ${name}: the first character lands where the caret was`, waiting, i.wordEdge(line + 1, "x"), "⇧⏎ x");
+    d.press("Enter", { shiftKey: true });
+    r.check(`⇧⏎ in ${name}: a second ⇧⏎ waits there too`, text, caretX(), "⇧⏎ x ⇧⏎");
+  }
+
   return { checked: r.checked, failures: r.failures };
 }
 

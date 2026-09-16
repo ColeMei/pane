@@ -9,6 +9,7 @@
  *
  * The rules and the decisions behind them:
  *   1. undo a marker break       — a ⏎ that made a marker-only line is undone whole (90, 108)
+ *   1b. undo a soft break        — the whitespace-only line ⇧⏎ left goes the same way (144)
  *   2. join back to paragraph    — a paragraph break is deleted, not halved (90)
  *   3. leave or outdent an item  — ⌫ at an item's text start outdents, or drops the marker (108, 109)
  *   4. delete a typed marker     — a marker somebody typed loses one character, not the line (109)
@@ -27,6 +28,14 @@ function undoMarkerBreak(ctx: LineContext): KeyEdit | null {
   if (!quote && !ctx.emptyItem) return null;
   const continued = quote ? ctx.above.quoteContinued : ctx.above.listContinued;
   if (!continued) return null;
+  const aboveEnd = ctx.line.from - 1;
+  return { changes: [{ from: aboveEnd, to: ctx.line.to }], anchor: aboveEnd, userEvent: DELETE };
+}
+
+/** 1b. A whitespace-only line ⇧⏎ left in an item: take the ⇧⏎ back, not one invisible space (144). */
+function undoSoftBreak(ctx: LineContext): KeyEdit | null {
+  if (!ctx.atLineEnd || ctx.line.length === 0 || ctx.line.text.trim() !== "") return null;
+  if (!ctx.inListItem || ctx.listMarker) return null;
   const aboveEnd = ctx.line.from - 1;
   return { changes: [{ from: aboveEnd, to: ctx.line.to }], anchor: aboveEnd, userEvent: DELETE };
 }
@@ -82,7 +91,7 @@ function deleteTypedMarker(ctx: LineContext): KeyEdit | null {
   return { changes: [{ from: ctx.head - 1, to: ctx.head }], anchor: ctx.head - 1, userEvent: DELETE };
 }
 
-const table = rows(undoMarkerBreak, joinBackToParagraph, unindentListItem, deleteTypedMarker);
+const table = rows(undoMarkerBreak, undoSoftBreak, joinBackToParagraph, unindentListItem, deleteTypedMarker);
 
 export function backspace(ctx: LineContext): KeyEdit | null {
   return ctx.selectionEmpty ? table(ctx) : null;

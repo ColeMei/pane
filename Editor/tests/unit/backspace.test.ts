@@ -17,6 +17,13 @@ export const cases: Case[] = [
   { name: "…and an empty quote line", doc: "> q\n> |", want: "> q|" },
   { name: "…and a nested empty quote line", doc: ">> q\n>> |", want: ">> q|" },
   { name: "a marker with no space still counts as a break", doc: "- one\n-|", want: "- one|" },
+  // 1b. Undo a soft break (144): the whitespace-only line ⇧⏎ left goes whole, not a space a press
+  { name: "⇧⏎ left a whitespace-only line: ⌫ takes the ⇧⏎ back", doc: "- one\n  |", want: "- one|" },
+  { name: "…in a nested item", doc: "- one\n  - two\n    |", want: "- one\n  - two|" },
+  { name: "…under a numbered item", doc: "1. one\n   |", want: "1. one|" },
+  { name: "…and a second one goes back to the first", doc: "- one\n  \n  |", want: "- one\n  |" },
+  { name: "a whitespace-only line under prose is not a soft break", doc: "para\n  |", want: FALLTHROUGH },
+  { name: "a whitespace-only line short of the item's column is not one either", doc: "1. one\n |", want: FALLTHROUGH },
 
   // 2. Join back to a paragraph (90)
   { name: "caret at the start of the paragraph below a blank line", doc: "a\n\n|b", want: "a|b" },

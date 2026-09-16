@@ -24,6 +24,7 @@ export const cases: Case[] = [
   { name: "⇥ nests a task item, two columns", doc: "tab:- [ ] a\n- [ ] |b", want: "- [ ] a\n  - [ ] |b" },
   { name: "⇥ takes the item's continuation line with it", doc: "tab:- a\n- b\n  mo|re", want: "- a\n  - b\n    mo|re" },
   { name: "⇥ takes the item's children with it", doc: "tab:- a\n- |b\n  - c", want: "- a\n  - |b\n    - c" },
+  { name: "⇥ on the whitespace-only line ⇧⏎ left moves the item, and the line with it (144)", doc: "tab:- a\n- b\n  |", want: "- a\n  - b\n    |" },
   { name: "⇥ on a list's first item does nothing, and is not indentMore", doc: "tab:- |a", want: "noop" },
   { name: "⇥ on a nested first item does nothing", doc: "tab:- a\n  - |b", want: "noop" },
   // The caret stays before the inserted spaces: it maps through the change rather than being placed.
@@ -34,6 +35,7 @@ export const cases: Case[] = [
   // ⇧⇥ (108)
   { name: "⇧⇥ backs a nested bullet out to its parent's indent", doc: "shift:- a\n  - |b", want: "- a\n- |b" },
   { name: "⇧⇥ under an ordered parent goes back three columns", doc: "shift:1. a\n   - |b", want: "1. a\n- |b" },
+  { name: "⇧⇥ on the whitespace-only line ⇧⏎ left backs the item out, and the line with it (144)", doc: "shift:- a\n  - b\n    |", want: "- a\n- b\n  |" },
   { name: "⇧⇥ carries the children out", doc: "shift:- a\n  - |b\n    - c", want: "- a\n- |b\n  - c" },
   { name: "⇧⇥ on a top-level item does nothing", doc: "shift:- |a", want: "noop" },
   { name: "⇧⇥ in prose is CodeMirror's", doc: "shift:hel|lo", want: FALLTHROUGH },
