@@ -27,7 +27,7 @@ import { indentLess, indentMore } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { applyEdit, type KeyEdit } from "./keyboard/context";
+import { applyEdit, type KeyEdit } from "./keyboard/edit";
 
 /** `   1. ` — the indent, the marker, and the space between the marker and the text. */
 const MARKER = /^([ \t]*)((?:[-*+]|\d+[.)]))([ \t]+)/;

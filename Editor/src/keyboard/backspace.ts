@@ -14,7 +14,8 @@
  *   4. delete a typed marker     — a marker somebody typed loses one character, not the line (109)
  */
 
-import type { KeyEdit, LineContext } from "./context";
+import type { LineContext } from "./context";
+import { rows, type KeyEdit } from "./edit";
 import { outdentEdit } from "../list-indent";
 
 const DELETE = "delete.backward";
@@ -81,13 +82,8 @@ function deleteTypedMarker(ctx: LineContext): KeyEdit | null {
   return { changes: [{ from: ctx.head - 1, to: ctx.head }], anchor: ctx.head - 1, userEvent: DELETE };
 }
 
-const ROWS = [undoMarkerBreak, joinBackToParagraph, unindentListItem, deleteTypedMarker];
+const table = rows(undoMarkerBreak, joinBackToParagraph, unindentListItem, deleteTypedMarker);
 
 export function backspace(ctx: LineContext): KeyEdit | null {
-  if (!ctx.selectionEmpty) return null;
-  for (const row of ROWS) {
-    const edit = row(ctx);
-    if (edit) return edit;
-  }
-  return null;
+  return ctx.selectionEmpty ? table(ctx) : null;
 }
