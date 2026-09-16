@@ -105,7 +105,7 @@ const TYPED_MARKER_ONLY = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?
 const LIST_MARKER = /^([ \t]*)((?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)/;
 const LIST_CONTINUED = /^[ \t]*(?:>[ \t]*)*(?:[-*+]|\d+[.)])[ \t]/;
 const QUOTE_CONTINUED = /^[ \t]*>/;
-const FENCE_OPENING = /^[ \t]*(`{3,}|~{3,})[^`~]*$/;
+export const FENCE_OPENING = /^[ \t]*(`{3,}|~{3,})[^`~]*$/;
 const NOT_PROSE = new Set(["ListItem", "Blockquote", "FencedCode", "CodeBlock", "Table", "HTMLBlock"]);
 
 function neighbour(state: EditorState, number: number): NeighbourLine | null {

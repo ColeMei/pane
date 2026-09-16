@@ -290,7 +290,14 @@ function blockLines(node: SyntaxNodeRef, w: Walk): void {
       } else {
         w.decorations.push(fenceLine.range(w.doc.line(first).from));
       }
-      if (last > first) {
+      // Only when the last line *is* the closing fence. An unclosed block — `\`\`\`a` typed after
+      // the closing one makes it a code line and unbounds the block — has code on its last line,
+      // and collapsing that to a strip drew the text across the block's bottom edge (147).
+      let closed = false;
+      for (let child = node.node.firstChild; child; child = child.nextSibling) {
+        if (child.name === "CodeMark" && w.doc.lineAt(child.from).number === last && last > first) closed = true;
+      }
+      if (closed) {
         if (w.reveal.lines.has(last)) {
           w.decorations.push(fenceCloseRaw.range(w.doc.line(last).from));
         } else {
@@ -493,8 +500,9 @@ function marker(node: SyntaxNodeRef, w: Walk): void {
   } else if (node.to > node.from) {
     w.decorations.push(hide.range(node.from, node.to));
     // A quote's `>` takes its space with it, exactly as a list marker does — otherwise a
-    // quoted line starts 3px right of its own continuation.
-    if (name === "QuoteMark") w.hideSpaceAfter(node.to);
+    // quoted line starts 3px right of its own continuation. A heading's hashes the same: the
+    // space after `#` drew a heading 3–4px right of the paragraph under it (149).
+    if (name === "QuoteMark" || name === "HeaderMark") w.hideSpaceAfter(node.to);
   }
 }
 

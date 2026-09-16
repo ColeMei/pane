@@ -22,11 +22,16 @@ export const press = (doc: string): string => {
 };
 
 export const cases: Case[] = [
-  // 1. Out of a code block (42)
-  { name: "⇧⏎ inside a fence lands on the blank line after it", doc: "escape:```\nco|de\n```\n\nafter", want: "```\ncode\n```\n|\nafter" },
-  { name: "…making a line when the next one is not free", doc: "escape:```\nco|de\n```\nafter", want: "```\ncode\n```\n|\nafter" },
-  { name: "…and one at the end of the document", doc: "escape:```\nco|de\n```", want: "```\ncode\n```\n|" },
-  { name: "⇧⏎ on the opening fence line is still inside the block", doc: "escape:```|\ncode\n```\nx", want: "```\ncode\n```\n|\nx" },
+  // 1. Out of a code block (42, 147): a new empty line, a blank line between it and the block, and
+  // a blank line between it and whatever follows
+  { name: "⇧⏎ inside a fence lands on a new line under a blank one, above the blank line already there", doc: "escape:```\nco|de\n```\n\nafter", want: "```\ncode\n```\n\n|\n\nafter" },
+  { name: "…making the blank lines when the next line is not free", doc: "escape:```\nco|de\n```\nafter", want: "```\ncode\n```\n\n|\n\nafter" },
+  { name: "…and at the end of the document", doc: "escape:```\nco|de\n```", want: "```\ncode\n```\n\n|" },
+  { name: "⇧⏎ on the opening fence line is still inside the block", doc: "escape:```|\ncode\n```\nx", want: "```\ncode\n```\n\n|\n\nx" },
+  { name: "an unclosed fence is closed first, with the opener's own fence (147)", doc: "escape:```\nco|de", want: "```\ncode\n```\n\n|" },
+  { name: "…a tilde fence with a tilde fence", doc: "escape:~~~~\nco|de\n", want: "~~~~\ncode\n~~~~\n\n|\n" },
+  { name: "…under the caret's line, so what the open block swallowed is prose again", doc: "escape:```\nco|de\n\npara", want: "```\ncode\n```\n\n|\n\npara" },
+  { name: "…and the closing line somebody typed on is code now, so the fence goes under it", doc: "escape:```\ncode\n```a|", want: "```\ncode\n```a\n```\n\n|" },
   { name: "⇧⏎ in prose is not this row's", doc: "escape:pro|se", want: FALLTHROUGH },
 
   // 2. The exits ⏎ has, reached from ⇧⏎

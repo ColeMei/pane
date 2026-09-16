@@ -11,30 +11,47 @@
  *   3. ⇧⏎ inside an item writes a soft break at the item's content column (108)
  */
 
+import { syntaxTree } from "@codemirror/language";
+import type { SyntaxNode } from "@lezer/common";
 import type { LineContext } from "./context";
-import { delegateWhen, keyCommand } from "./context";
+import { delegateWhen, FENCE_OPENING, keyCommand } from "./context";
 import { chain, rows, type KeyEdit } from "./edit";
 import { continueMarkup, exitEmptyBlockquote, exitListToParagraph } from "./enter";
 
 const INPUT = "input";
 
-/** 1. Out of a fenced or indented code block, to the line below it. */
+/**
+ * 1. Out of a fenced or indented code block, onto a new empty line with a blank line between it
+ * and the block — and a blank line between it and whatever follows.
+ *
+ * Always a new line, never the blank one that happened to be there (147): landing on an existing
+ * blank line was a bare caret move, so decision 89 kept the line collapsed and the caret sat
+ * squashed under the fence with the text then appearing 12px lower; and that line was the break
+ * before the next paragraph, so what was typed there merged into it. An unclosed fence — one
+ * whose closing line was typed on, `\`\`\`a` — is closed first with the opener's own fence string.
+ */
 export function escapeCodeBlock(ctx: LineContext): KeyEdit | null {
-  const block = ctx.caret.codeBlock;
-  if (!block) return null;
+  if (!ctx.caret.codeBlock) return null;
   const doc = ctx.state.doc;
-  const closing = doc.lineAt(Math.min(block.to, ctx.docLength));
+  let block: SyntaxNode | null = syntaxTree(ctx.state).resolveInner(ctx.head, -1);
+  while (block && block.name !== "FencedCode" && block.name !== "CodeBlock") block = block.parent;
+  if (!block) return null;
 
-  // Already the last line of the document: there is nowhere to go, so make somewhere.
-  if (closing.number === ctx.docLines) {
-    return { changes: [{ from: ctx.docLength, insert: "\n" }], anchor: ctx.docLength + 1, userEvent: INPUT, scrollIntoView: true };
+  const first = doc.lineAt(block.from);
+  let last = doc.lineAt(Math.min(block.to, ctx.docLength));
+  let closed = block.name === "CodeBlock";
+  for (let child = block.firstChild; child; child = child.nextSibling) {
+    if (child.name === "CodeMark" && doc.lineAt(child.from).number > first.number) closed = true;
   }
-  // Land on the line below if it is free, and only add one when it is not.
-  const next = doc.line(closing.number + 1);
-  if (next.text.trim() === "") {
-    return { changes: [], anchor: next.from, userEvent: "select", scrollIntoView: true };
-  }
-  return { changes: [{ from: closing.to, insert: "\n" }], anchor: closing.to + 1, userEvent: INPUT, scrollIntoView: true };
+  // An unclosed block runs to the end of the note and has swallowed whatever was below the caret;
+  // the closing fence goes under the caret's own line, and what follows is prose again.
+  if (!closed) last = doc.line(ctx.line.number);
+
+  const fence = closed ? "" : `\n${FENCE_OPENING.exec(first.text)?.[1] ?? "\`\`\`"}`;
+  const below = last.number < ctx.docLines ? doc.line(last.number + 1) : null;
+  const separator = below && below.text.trim() !== "" ? "\n" : "";
+  const insert = `${fence}\n\n${separator}`;
+  return { changes: [{ from: last.to, insert }], anchor: last.to + fence.length + 2, userEvent: INPUT, scrollIntoView: true };
 }
 
 /** 2b. An empty *nested* item is CodeMirror's to outdent — the same command ⏎ uses. */
