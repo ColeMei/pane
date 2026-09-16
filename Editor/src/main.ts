@@ -16,7 +16,7 @@ import "./styles/switcher.css";
 import "./styles/action-panel.css";
 
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
 import {
   deleteMarkupBackward,
   markdown,
@@ -44,12 +44,12 @@ import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
 import { describe, hideTooltip, mountTooltips, setPointer } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
-import { listAwareTab } from "./list-indent";
 import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
 import { backspace } from "./keyboard/backspace";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
+import { shiftTab, tab } from "./keyboard/tab";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { renumberOrderedLists } from "./renumber";
 import { mountSwitcher, type NoteSummary } from "./switcher";
@@ -722,7 +722,8 @@ function baseExtensions(): Extension[] {
       // only ever fires with the caret in the editor — where the reflex is "put this away", not
       // "cancel something".
       { key: "Escape", run: () => (send({ type: "close" }), true) },
-      listAwareTab,
+      // ⇥ and ⇧⇥ nest and un-nest list items (`keyboard/tab.ts`); outside a list they are CodeMirror's.
+      { key: "Tab", run: chain(keyCommand(tab), indentMore), shift: chain(keyCommand(shiftTab), indentLess) },
       // After the markdown bindings above, so Backspace only deletes a bracket pair once
       // `deleteMarkupBackward` has declined the position.
       ...closeBracketsKeymap,

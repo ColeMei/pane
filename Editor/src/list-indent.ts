@@ -23,11 +23,9 @@
  * everyone except the buffer.
  */
 
-import { indentLess, indentMore } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
-import { applyEdit, type KeyEdit } from "./keyboard/edit";
+import type { KeyEdit } from "./keyboard/edit";
 
 /** `   1. ` — the indent, the marker, and the space between the marker and the text. */
 const MARKER = /^([ \t]*)((?:[-*+]|\d+[.)]))([ \t]+)/;
@@ -150,33 +148,6 @@ export function outdentEdit(state: EditorState, pos: number): KeyEdit | null {
   return shiftEdit(state, item, (parent ? parent.indent : 0) - item.indent);
 }
 
-export function indentListItem(view: EditorView): boolean {
-  const edit = indentEdit(view.state, view.state.selection.main.head);
-  if (!edit) return false;
-  applyEdit(view, edit);
-  return true;
-}
-
-export function outdentListItem(view: EditorView): boolean {
-  const edit = outdentEdit(view.state, view.state.selection.main.head);
-  if (!edit) return false;
-  applyEdit(view, edit);
-  return true;
-}
-
-export const listAwareTab = {
-  key: "Tab",
-  run: (view: EditorView) => {
-    if (itemAt(view.state, view.state.selection.main.head)) return indentListItem(view) || true;
-    return indentMore(view);
-  },
-  shift: (view: EditorView) => {
-    if (itemAt(view.state, view.state.selection.main.head)) return outdentListItem(view) || true;
-    return indentLess(view);
-  },
-};
-
-/** Where an item's text starts, for anything that needs to line a new line up under it. */
 export function contentColumn(state: EditorState, pos: number): number | null {
   const item = itemAt(state, pos);
   return item ? item.content : null;

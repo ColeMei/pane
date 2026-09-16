@@ -20,7 +20,11 @@ export interface KeyEdit {
 
 export type Command = (view: EditorView) => boolean;
 
+/** Take the key and change nothing — for a ⇥ that must not reach `indentMore` (decision 109). */
+export const NOOP: KeyEdit = { changes: [], userEvent: "noop" };
+
 export function applyEdit(view: EditorView, edit: KeyEdit): void {
+  if (edit.changes.length === 0 && edit.anchor === undefined) return;
   view.dispatch({
     changes: edit.changes,
     selection: edit.anchor === undefined ? undefined : { anchor: edit.anchor },
