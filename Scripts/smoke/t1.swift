@@ -99,9 +99,10 @@ func hotkey() { key(K.space, hotkeyFlags) }
 
 func summon() {
     if paneUp() && focusInPane() { return }
-    hotkey()
-    for _ in 0..<20 { if paneUp() { sleepMs(150); return }; sleepMs(100) }
-    print("!! the pane did not come up"); exit(2)
+    if !paneUp() { hotkey() }
+    // Up, then focused: the focus arrives a beat after the window does.
+    for _ in 0..<30 { if paneUp() && focusInPane() { sleepMs(150); return }; sleepMs(100) }
+    print("!! the pane did not come up with the focus"); exit(2)
 }
 
 func dismiss() {
@@ -124,7 +125,8 @@ func focusInPane() -> Bool {
 /// Every burst is preceded by this. A key posted with the pane parked, or up without the focus,
 /// lands in another app — and did, once, in the terminal running this driver.
 func needPane() {
-    if !paneUp() || !focusInPane() { print("!! pane not up or not focused before typing"); exit(2) }
+    for _ in 0..<10 { if paneUp() && focusInPane() { return }; sleepMs(100) }
+    print("!! pane not up or not focused before typing"); exit(2)
 }
 
 func type(_ text: String) {
@@ -395,6 +397,21 @@ func itemShiftEnterNested() {
     check(item, "⇧⏎ in a nested item lands under the item's text (108)", (read(name) ?? "").hasSuffix("- one\n  - two\n    under\n"), (read(name) ?? "").split(separator: "\n").suffix(3).joined(separator: "⏎"))
 }
 
+/// Decision 145 put the marker's space in a box of its own. The one thing no suite can see is
+/// WebKit's own insertion into contenteditable after a real keystroke — `min-width` against `width`
+/// on the marker box once turned `- ` + `a` into `-a` (LAB) — so this types for real and reads bytes.
+func itemMarkerOnlyThenType() {
+    let item = "markeronly"
+    // One note a marker: ⏎ ⏎ out of one list and into the next raced the renumbering filter.
+    for marker in ["- ", "1. ", "10. "] {
+        guard let name = freshNote(item) else { return check(item, "the note appeared", false) }
+        type("\n\n" + marker); sleepMs(400); type("a")
+        settle()
+        let last = (read(name) ?? "").split(separator: "\n").last.map(String.init) ?? ""
+        check(item, "a character typed after `\(marker)` lands after the space (145)", last == marker + "a", last)
+    }
+}
+
 func itemDeleteIntoRecentlyDeleted() {
     let item = "ctrlx"
     guard let name = freshNote(item, body: "settled body") else { return check(item, "the note appeared", false) }
@@ -436,6 +453,7 @@ let items: [(String, () -> Void)] = [
     ("escape", itemEscapedMarker),
     ("fence", itemFenceClose),
     ("softbreak", itemShiftEnterNested),
+    ("markeronly", itemMarkerOnlyThenType),
     ("ctrlx", itemDeleteIntoRecentlyDeleted),
     ("bold", itemBoldWritesMarkers),
 ]
