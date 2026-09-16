@@ -1681,13 +1681,132 @@ export function runSelectionReveal(view, doc) {
   return { checked: r.checked, failures: r.failures };
 }
 
+// ------------------------------------------------------------------------------------------------
+// No jump: a reveal must not move the words or change the line's height
+// ------------------------------------------------------------------------------------------------
+
+/**
+ * The invariant behind decisions 108, 122, 135 and 139, as a sweep rather than four cases.
+ *
+ * Every one of those was a line whose words moved, or whose height changed, the moment the caret
+ * landed on it — and every one was reported by eye, because the suite measured the construct it
+ * had been written for and no other. This measures all of them, in two classes:
+ *
+ * - **Boxed markers** — a bullet, a number, a checkbox, alone or under a quote — reveal inside the
+ *   fixed box the rendered marker occupied (`rawListMark`, decision 122), so the item's words do
+ *   not move at all. Asserted as *identical*.
+ * - **Inline constructs** reveal their markers as text, so what follows them moves right — by no
+ *   more than the width the revealed markers paint, derived from the `.pane-syntax` spans rather
+ *   than written down (decision 82) — and what precedes them does not move. A heading's `#` and a quote's `>` are the
+ *   same shape and are covered by the height half only: their marks stand at the line start with a
+ *   space the reveal also uncovers, so there is no word before them to hold still.
+ *
+ * Height is asserted for every kind, except the three that change it on purpose: a blank line
+ * (44), a fence line (42) and a horizontal rule (42).
+ */
+export function runNoJump(view, doc) {
+  const r = recorder("no jump");
+  const d = driver(view, doc);
+  const i = inspector(view, doc);
+  Object.defineProperty(view, "hasFocus", { get: () => true, configurable: true });
+
+  const away = () => d.at("PARA");
+  const revealedMarkerWidth = (n, beforeX) => {
+    let width = 0;
+    for (const el of i.lineEl(n).querySelectorAll(".pane-syntax")) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.left < beforeX) width += rect.width;
+    }
+    return width;
+  };
+
+  // --- boxed markers: identical ------------------------------------------------------------------
+  const BOXED = [
+    ["bullet", "- item word"],
+    ["nested bullet", "- outer\n  - item word"],
+    ["third-level bullet", "- a\n  - b\n    - item word"],
+    ["numbered", "1. item word"],
+    ["nested numbered", "1. a\n   1. item word"],
+    ["two-digit numbered", "9. a\n10. item word"],
+    ["task", "- [ ] item word"],
+    ["done task", "- [x] item word"],
+    ["numbered task", "1. [ ] item word"],
+    ["quoted bullet", "> - item word"],
+    ["escaped marker in an item", "1. 1\\. item word"],
+  ];
+  for (const [name, text] of BOXED) {
+    d.load(`${text}\n\nPARA\n`);
+    const n = text.split("\n").length;
+    away();
+    const hiddenX = i.wordEdge(n, "word");
+    const hiddenH = i.height(n);
+    d.at("word");
+    r.check(`${name}: the word does not move when its line reveals`, hiddenX, i.wordEdge(n, "word"), `${hiddenX} → ${i.wordEdge(n, "word")}`);
+    r.check(`${name}: the line does not change height when it reveals`, hiddenH, i.height(n));
+  }
+
+  // --- inline constructs: before holds, after moves by the markers' painted width -----------------
+  const INLINE = [
+    ["bold", "**bold**"],
+    ["emphasis", "*em*"],
+    ["strikethrough", "~~gone~~"],
+    ["inline code", "`code`"],
+    ["link", "[label](https://x.example)"],
+    ["autolink", "<https://x.example>"],
+    ["bare url", "https://x.example"],
+    ["highlight", "==mark=="],
+    ["underline", "<u>under</u>"],
+  ];
+  for (const [name, construct] of INLINE) {
+    d.load(`before ${construct} after\n\nPARA\n`);
+    away();
+    const beforeX = i.wordEdge(1, "before");
+    const afterX = i.wordEdge(1, "after");
+    const hiddenH = i.height(1);
+    const inner = construct.replace(/^[^A-Za-z]+/, "").replace(/[^A-Za-z]+$/, "").split(/[^A-Za-z]/)[0];
+    d.at(inner);
+    const shift = i.wordEdge(1, "after") - afterX;
+    const markers = revealedMarkerWidth(1, i.wordEdge(1, "after"));
+    r.check(`${name}: the word before does not move when the construct reveals`, beforeX, i.wordEdge(1, "before"));
+    // Not "by exactly the markers' width": the run between them changes width too when its style
+    // drops — bold is 2.4px wider than the same word in regular, code 4.5px narrower with its font
+    // and padding — so the shift is the markers less that change, measured here as 25.0 against
+    // 27.4 for bold. What is asserted is the direction and the bound: a reveal never pulls the
+    // words after it left, and never pushes them further than the markers it painted.
+    r.check(`${name}: the word after moves right, and by no more than the revealed markers' width`, true,
+      shift >= 0 && shift <= markers + 1, `shift ${shift.toFixed(1)}, markers ${markers.toFixed(1)}`);
+    r.check(`${name}: the line does not change height when it reveals`, hiddenH, i.height(1));
+  }
+
+  // --- height only: marks at the line start, and lines with no marks ------------------------------
+  const HEIGHT_ONLY = [
+    ["h1", "# Title word"],
+    ["h2", "## Title word"],
+    ["h3", "### Title word"],
+    ["quote", "> item word"],
+    ["nested quote", ">> item word"],
+    ["paragraph", "item word"],
+    ["code line inside a fence", "```\nitem word\n```"],
+  ];
+  for (const [name, text] of HEIGHT_ONLY) {
+    d.load(`${text}\n\nPARA\n`);
+    const n = text.split("\n").findIndex((l) => l.includes("word")) + 1;
+    away();
+    const hiddenH = i.height(n);
+    d.at("word");
+    r.check(`${name}: the line does not change height when it reveals`, hiddenH, i.height(n));
+  }
+
+  return r;
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
   // An instrument reports; it does not fall over. A section that throws is itself a finding, and
   // the sections after it still have to run.
   for (const suite of [runTypedLists, runListStructure, runListGeometry, runLineBreaks,
-                       runConstructs, runDegradation, runSelectionReveal]) {
+                       runConstructs, runDegradation, runSelectionReveal, runNoJump]) {
     try {
       const result = suite(view, doc, bar);
       checked += result.checked;
