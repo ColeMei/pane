@@ -13,7 +13,7 @@ import { syntaxTree } from "@codemirror/language";
 
 import { blockAt, blocksIn, linesOf } from "./blocks";
 import { describe } from "./tooltip";
-import type { ChangeSet, EditorState, Line } from "@codemirror/state";
+import { type ChangeSet, type EditorState, type Extension, type Line, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { EditorView } from "@codemirror/view";
 
@@ -535,6 +535,48 @@ function spansPerBlock(
  * pair of markers spanning the newline — correct, because a soft break inside a paragraph is not a
  * block boundary and emphasis crosses it happily.
  */
+/**
+ * A pair waiting for its first character — decision 148.
+ *
+ * An empty pair at a line start is a *block* to CommonMark: `~~~~` is a tilde fence, so ⇧⌘S on an
+ * empty line drew a code block; `****` is a thematic break; `====` under a paragraph is a setext
+ * underline that turns the paragraph into a heading. Every one of them is right again the moment a
+ * character sits between the markers, so at a line start the toggle inserts nothing and remembers
+ * the pair; the next character typed arrives wrapped, with the caret before the closing marker,
+ * exactly where the empty pair would have put it. Any other move — a caret move, another edit —
+ * forgets the pair. Mid-line the empty pair stays as it was: nothing there is a block.
+ */
+const setPendingWrap = StateEffect.define<{ open: string; close: string } | null>();
+
+const pendingWrap = StateField.define<{ open: string; close: string } | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setPendingWrap)) return effect.value;
+    return tr.docChanged || tr.selection ? null : value;
+  },
+});
+
+/** The pair a caret is waiting to type into, for the bar's pressed state. */
+export function pendingPair(state: EditorState): { open: string; close: string } | null {
+  return state.field(pendingWrap, false) ?? null;
+}
+
+export function pendingWrapExtension(): Extension {
+  return [
+    pendingWrap,
+    EditorView.inputHandler.of((view, from, to, text) => {
+      const pair = view.state.field(pendingWrap);
+      if (!pair || from !== to || text.includes("\n")) return false;
+      view.dispatch({
+        changes: { from, insert: pair.open + text + pair.close },
+        selection: { anchor: from + pair.open.length + text.length },
+        userEvent: "input.type",
+      });
+      return true;
+    }),
+  ];
+}
+
 function wrapPerBlock(
   view: EditorView,
   open: string,
@@ -544,13 +586,19 @@ function wrapPerBlock(
   const state = view.state;
   const { from, to } = state.selection.main;
 
-  // No selection: an empty pair at the caret, ready to type between.
+  // No selection: an empty pair at the caret, ready to type between — or, at a line start, a pair
+  // that waits for the first character (148).
   if (from === to) {
-    view.dispatch({
-      changes: { from, insert: open + close },
-      selection: { anchor: from + open.length },
-      userEvent: "input",
-    });
+    const line = state.doc.lineAt(from);
+    if (line.text.slice(0, from - line.from).trim() === "") {
+      view.dispatch({ effects: setPendingWrap.of({ open, close }) });
+    } else {
+      view.dispatch({
+        changes: { from, insert: open + close },
+        selection: { anchor: from + open.length },
+        userEvent: "input",
+      });
+    }
     view.focus();
     return;
   }
@@ -1115,6 +1163,7 @@ export function mountFormatBar(
     names: string[];
     unless: string[];
     pair?: [string, string];
+    wrap?: string;
   }[] = [];
 
   // The heading control is a dropdown, as the design draws it: H1, H2 and H3 with their shortcuts.
@@ -1180,6 +1229,7 @@ export function mountFormatBar(
         names: item.active ?? [],
         unless: item.inactiveWith ?? [],
         pair: item.activePair,
+        wrap: item.wrap,
       });
     }
     root.appendChild(button);
@@ -1214,11 +1264,14 @@ export function mountFormatBar(
       // stutter while typing.
       if (!root.offsetParent) return;
       const marks = activeMarks(view.state);
-      for (const { element, names, unless, pair } of stateful) {
+      const pending = pendingPair(view.state);
+      for (const { element, names, unless, pair, wrap } of stateful) {
+        const waiting = pending !== null && (pair ? pending.open === pair[0] : pending.open === wrap);
         const on =
-          !unless.some((n) => marks.has(n)) &&
-          (names.some((n) => marks.has(n)) ||
-            (pair ? enclosingPair(view.state, pair[0], pair[1]) !== null : false));
+          waiting ||
+          (!unless.some((n) => marks.has(n)) &&
+            (names.some((n) => marks.has(n)) ||
+              (pair ? enclosingPair(view.state, pair[0], pair[1]) !== null : false)));
         element.setAttribute("aria-pressed", String(on));
       }
     },

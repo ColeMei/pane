@@ -54,7 +54,7 @@ import { shiftTab, tab } from "./keyboard/tab";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { renumberOrderedLists } from "./renumber";
 import { mountSwitcher, type NoteSummary } from "./switcher";
-import { MARKDOWN_FORMAT_KEYS, mountFormatBar, setHeading } from "./format-bar";
+import { MARKDOWN_FORMAT_KEYS, mountFormatBar, setHeading, pendingWrapExtension } from "./format-bar";
 import { noteTitle } from "./note-title";
 import { countCharacters, countWords } from "./word-count";
 
@@ -559,6 +559,8 @@ function baseExtensions(): Extension[] {
     // it matters more here than it does there: ⌘N now leaves nothing on disk until the first write,
     // so an empty pane is genuinely a blank page rather than a file that already exists.
     placeholder("Start writing…"),
+    // First among the input rules: a pair waiting at a line start takes the first character (148).
+    pendingWrapExtension(),
     checkboxInputRule(),
     bulletInputRule(),
     escapeNestedMarkerRule(),

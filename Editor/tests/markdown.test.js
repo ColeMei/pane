@@ -1101,6 +1101,69 @@ export function runListGeometry(view, doc) {
  * rhythm with it. `runBackspace` covers the pair around a paragraph. This covers the pair around
  * everything else: headings, quotes, fences, and the ends of a document.
  */
+/**
+ * Decisions 147, 148 and 149 — one report with four parts, all about a block that did not look
+ * like the text around it: a heading 3–4px right of the paragraph under it, ⇧⌘S on an empty line
+ * drawing a code block, `\`\`\`a` typed on a closing fence drawn across the block's edge, and ⇧⏎
+ * out of a fence landing on a squashed caret.
+ */
+export function runBlockEdges(view, doc) {
+  const r = recorder("block edges");
+  const d = driver(view, doc);
+  const i = inspector(view, doc);
+  Object.defineProperty(view, "hasFocus", { get: () => true, configurable: true });
+  const key = (k, mods) => d.content.dispatchEvent(new KeyboardEvent("keydown", {
+    key: k, code: "Key" + k.toUpperCase(), keyCode: k.toUpperCase().charCodeAt(0), bubbles: true, cancelable: true, ...mods,
+  }));
+  const head = () => view.state.selection.main.head;
+
+  // 149: a heading's first letter sits where a paragraph's does.
+  d.load("# title\n\n## title\n\n### title\n\ntext\n\nPARA\n"); d.at("PARA");
+  for (const [n, level] of [[1, 1], [3, 2], [5, 3]]) {
+    r.check(`an h${level} starts where the paragraph does (149)`, i.wordEdge(7, "text"), i.wordEdge(n, "title"));
+  }
+
+  // 147: an unclosed block's last line is code, not a collapsed fence.
+  d.load("```\ncode\n```a\n\nPARA\n"); d.at("PARA");
+  r.check("a closing fence somebody typed on is a code line at code height (147)", i.height(2), i.height(3));
+  r.check("…and carries no fence class", false, i.classes(3).includes("pane-line-fence"));
+  d.at("```a", 4); d.press("Enter", { shiftKey: true }); d.type("out");
+  r.check("⇧⏎ from it closes the block and lands outside it (147)", "```\ncode\n```a\n```\n\nout\n\nPARA\n", d.text(), "```a ⇧⏎ out");
+
+  // 147: ⇧⏎ out of a closed fence lands on a line at full height, not the collapsed blank one.
+  d.load("```\ncode\n```\n\nafter\n"); d.at("code", 4);
+  d.press("Enter", { shiftKey: true });
+  const landed = view.state.doc.lineAt(head()).number;
+  r.check("⇧⏎ out of a fence lands on a line at full height (147)", true, i.height(landed) >= 20, `height ${i.height(landed)}`);
+  d.type("x");
+  r.check("…and what is typed there is its own paragraph", "```\ncode\n```\n\nx\n\nafter\n", d.text(), "⇧⏎ x");
+
+  // 148: an inline toggle at a line start inserts nothing until the first character.
+  const pending = [
+    ["⇧⌘S", () => key("s", { metaKey: true, shiftKey: true }), "~~a~~"],
+    ["⌘B", () => key("b", { metaKey: true }), "**a**"],
+    ["⌘I", () => key("i", { metaKey: true }), "*a*"],
+    ["⇧⌘M", () => key("m", { metaKey: true, shiftKey: true }), "==a=="],
+    ["⌘E", () => key("e", { metaKey: true }), "`a`"],
+    ["⌘U", () => key("u", { metaKey: true }), "<u>a</u>"],
+  ];
+  for (const [name, press, want] of pending) {
+    d.reset(); d.type("x"); d.press("Enter"); press();
+    r.check(`${name} on an empty line writes nothing (148)`, "x\n\n", d.text(), name);
+    r.check(`…and the line is not a block`, false, /pane-line-code|pane-rule|pane-line-h/.test(i.classes(3)), `${name}: ${i.classes(3)}`);
+    d.type("a");
+    r.check(`…the first character arrives wrapped`, `x\n\n${want}`, d.text(), `${name} a`);
+    r.check(`…with the caret before the closing marker`, 3 + want.length - (want.length - 1 - want.indexOf("a")), head(), `${name} a`);
+  }
+  d.reset(); d.type("x"); d.press("Enter"); key("s", { metaKey: true, shiftKey: true }); d.press("ArrowUp"); d.type("y");
+  r.check("a caret move forgets the waiting pair", "yx\n\n", d.text(), "⇧⌘S ↑ y");
+  d.reset(); d.type("ab"); key("b", { metaKey: true });
+  r.check("mid-line the empty pair still goes in at once", "ab****", d.text(), "ab ⌘B");
+  r.check("…caret between the markers", 4, head(), "ab ⌘B");
+
+  return { checked: r.checked, failures: r.failures };
+}
+
 export function runLineBreaks(view, doc) {
   const r = recorder("line breaks");
   const d = driver(view, doc);
@@ -1183,7 +1246,7 @@ export function runLineBreaks(view, doc) {
   d.at("code", 4);
   d.press("Enter", { shiftKey: true });
   d.type("after");
-  r.check("Shift-Enter leaves a closed fence", "```\ncode\n```\nafter", d.text(),
+  r.check("Shift-Enter leaves a closed fence, a blank line between (147)", "```\ncode\n```\n\nafter\n", d.text(),
     "caret after `code`, ⇧⏎ after");
 
   // A hard break is two spaces at the end of a line, and it is the one place trailing whitespace
@@ -1404,7 +1467,7 @@ export function runConstructs(view, doc) {
   d.at("y = 2", 5);
   d.press("Enter", { shiftKey: true });
   d.type("after");
-  r.check("Shift-Enter leaves a closed fence", "```python\nx = 1\ny = 2\n```\nafter",
+  r.check("Shift-Enter leaves a closed fence, a blank line between (147)", "```python\nx = 1\ny = 2\n```\n\nafter\n",
     view.state.doc.toString(), "caret at the end of the code, ⇧⏎ after");
 
   d.load("```python\nx = 1\ny = 2\n```\n\nafter\n");
@@ -1585,7 +1648,7 @@ export function runSelectionReveal(view, doc) {
   // The task's `[ ]` is a widget, so it contributes no text; the hashes' own space stays, exactly
   // as it does with the pane blurred — `HeadingMark` hides the marker and not the space after it.
   r.check("⌘A leaves the note rendered",
-    " Heading one⏎⏎Some bold and code and em here.⏎⏎quoted line⏎⏎1. numbered todo⏎* two bullets⏎",
+    "Heading one⏎⏎Some bold and code and em here.⏎⏎quoted line⏎⏎1. numbered todo⏎* two bullets⏎",
     lines());
 
   r.check("⌘A reveals no raw list marker", 0, doc.querySelectorAll(".pane-syntax-listmark").length);
@@ -1865,7 +1928,7 @@ export function run(view, bar, doc) {
   // An instrument reports; it does not fall over. A section that throws is itself a finding, and
   // the sections after it still have to run.
   for (const suite of [runTypedLists, runListStructure, runListGeometry, runLineBreaks,
-                       runConstructs, runDegradation, runSelectionReveal, runNoJump]) {
+                       runConstructs, runDegradation, runSelectionReveal, runNoJump, runBlockEdges]) {
     try {
       const result = suite(view, doc, bar);
       checked += result.checked;
