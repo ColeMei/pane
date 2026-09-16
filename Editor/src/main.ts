@@ -47,6 +47,7 @@ import { findHighlighting, mountFind } from "./find";
 import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
 import { backspace } from "./keyboard/backspace";
+import { arrowDown, arrowUp } from "./keyboard/arrows";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { shiftTab, tab } from "./keyboard/tab";
@@ -572,6 +573,9 @@ function baseExtensions(): Extension[] {
         { key: "Shift-Enter", run: shiftEnterKey },
         { key: "Enter", run: enterKey },
         { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
+        // ↑ and ↓ step over the paragraph break, which is not a place (146).
+        { key: "ArrowUp", run: arrowUp },
+        { key: "ArrowDown", run: arrowDown },
         { key: "Mod-a", run: selectBlockThenAll },
       ])
     ),

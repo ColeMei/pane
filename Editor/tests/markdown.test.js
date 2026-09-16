@@ -1104,6 +1104,22 @@ export function runListGeometry(view, doc) {
 export function runLineBreaks(view, doc) {
   const r = recorder("line breaks");
   const d = driver(view, doc);
+  const head = () => view.state.selection.main.head;
+
+  // Decision 146: ↑ and ↓ step over the paragraph break, which is not a place. Before, ↑ from the
+  // line ⏎ had just made stopped on the break for a press, a squashed caret three pixels under the
+  // text above (132), and a second press was needed to reach the line.
+  d.reset(); d.type("line 1"); d.press("Enter");
+  // Column 0, because a vertical move keeps its column; what matters is line 1, not line 2.
+  r.check("⏎ then ↑: the caret is on the line above, not on the break", 0, (d.press("ArrowUp"), head()), "line 1 ⏎ ↑");
+  r.check("…and ↓ brings it back to its own empty line", 8, (d.press("ArrowDown"), head()), "line 1 ⏎ ↑ ↓");
+  d.load("alpha\n\nbravo\n"); d.at("bravo", 2);
+  r.check("↑ from a paragraph lands in the one above at the same column", 2, (d.press("ArrowUp"), head()), "↑");
+  r.check("↓ from there lands back in the one below", 9, (d.press("ArrowDown"), head()), "↓");
+  d.load("alpha\n\n\nbravo\n"); d.at("alpha", 5);
+  r.check("↓ over a break onto the second of two blank lines stops there: that one is a place", 7, (d.press("ArrowDown"), head()), "↓ into a run");
+  d.load("```\na\n\nb\n```\n"); d.at("b");
+  r.check("↑ inside a fence stops on the blank line: it is content", 6, (d.press("ArrowUp"), head()), "↑ in a fence");
 
   d.reset();
   d.type("one");

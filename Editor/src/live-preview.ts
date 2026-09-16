@@ -20,6 +20,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 import { buildDecorations } from "./decorate";
+import { lineTextStart, paragraphBreakLine } from "./blocks";
 import { arrivedByEditAfter, revealPolicy } from "./reveal";
 import type { SyntaxNode } from "@lezer/common";
 import {
@@ -92,28 +93,19 @@ const livePreviewPlugin = ViewPlugin.fromClass(
  * state, so the checkbox has to change the same characters the user would have changed by typing.
  */
 /**
- * A click on the blank line between two paragraphs does nothing at all.
+ * A click on the paragraph break lands on the neighbour the pointer is nearer to.
  *
- * That line is a real `\n` in the file — the paragraph break itself — so the caret can perfectly
- * well stand on it, and for a long time it did. But it is drawn as an 8px strip of empty space, and
- * a strip of empty space between two paragraphs does not read as a place: it reads as the gap
- * between them. Clicking it and getting a caret you did not ask for, in a gap you were only aiming
- * *past*, is the note behaving like a text file rather than like a note. Typora and Obsidian both
- * swallow it.
+ * The break is a real `\n` in the file, drawn as an 8px strip, and a strip of empty space between
+ * two blocks reads as the gap, not as a place: a caret there is one you did not ask for, in a gap
+ * you were aiming past (89). Which line is a break is `paragraphBreakLine`'s to say, and ↑/↓ step
+ * over the same lines (`stepOverBreak`), so the caret never rests on one however it travels (146).
+ * The upper half of the strip goes to the end of the line above, the lower half to the start of
+ * the text below, which is what the reference does with a click in a margin.
  *
- * **Only a genuine separator** — an empty line with text immediately above *and* below. That is the
- * case being described and nothing else, which keeps three things working that would otherwise
- * break: a trailing blank line stays clickable, because it is where "click under the last line of
- * the note" lands; a run of blank lines stays clickable, because you may well want to delete one;
- * and a blank line inside a fenced block is content with a background, not a gap.
- *
- * Two more guards. `posAtCoords` is asked for a *precise* hit, so a click in the empty space below
- * the note returns null and falls through to CodeMirror — otherwise a note ending in a blank line
+ * Two guards. `posAtCoords` is asked for a *precise* hit, so a click in the empty space below the
+ * note returns null and falls through to CodeMirror — otherwise a note ending in a blank line
  * would swallow the most ordinary click there is. And an unfocused editor always lets the click
- * through, because swallowing it would leave the pane unfocusable by clicking in the wrong spot.
- *
- * Arrow keys still walk onto the line, and ⌫ still deletes the break (see `joinBackToParagraph`),
- * so nothing about the document has become unreachable — only the aiming has got easier.
+ * through, because handling it would leave the pane unfocusable by clicking in the wrong spot.
  */
 const blankLineClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
@@ -124,15 +116,13 @@ const blankLineClickHandler = EditorView.domEventHandlers({
 
     const doc = view.state.doc;
     const line = doc.lineAt(pos);
-    if (line.length !== 0) return false;
-    if (line.number <= 1 || line.number >= doc.lines) return false;
-    if (doc.line(line.number - 1).length === 0) return false;
-    if (doc.line(line.number + 1).length === 0) return false;
+    if (!paragraphBreakLine(view.state, line.number)) return false;
 
-    for (let node = syntaxTree(view.state).resolveInner(line.from, 1); node.parent; node = node.parent) {
-      if (node.name === "FencedCode" || node.name === "CodeBlock") return false;
-    }
-
+    // `lineBlockAt` is document-relative; `documentTop` puts it in the event's coordinates.
+    const block = view.lineBlockAt(line.from);
+    const above = event.clientY < view.documentTop + block.top + block.height / 2;
+    const target = above ? doc.line(line.number - 1).to : lineTextStart(view.state, line.number + 1);
+    view.dispatch({ selection: { anchor: target }, userEvent: "select.pointer", scrollIntoView: true });
     event.preventDefault();
     return true;
   },

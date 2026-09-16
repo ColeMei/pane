@@ -92,6 +92,30 @@ export function endOfOwnContent(state: EditorState, item: SyntaxNode): number {
 }
 
 /**
+ * The paragraph break: an empty line directly under a line that has something on it, with any line
+ * at all below it, outside code. It is the `\n` ⏎ writes between two blocks (63), and it is not a
+ * place — the caret does not rest on it by click or by ↑/↓ (146, extending 89). Everything else
+ * stays a place: a trailing blank line is where "click under the note" lands, the second of a run
+ * of blank lines is deliberate space you may want to delete, and a blank line in a fence is content.
+ */
+export function paragraphBreakLine(state: EditorState, n: number): boolean {
+  const doc = state.doc;
+  if (n <= 1 || n >= doc.lines) return false;
+  if (doc.line(n).length !== 0 || doc.line(n - 1).length === 0) return false;
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(doc.line(n).from, 1); node; node = node.parent) {
+    if (node.name === "FencedCode" || node.name === "CodeBlock") return false;
+  }
+  return true;
+}
+
+/** Where a line's own text starts: past its indent, quote marks and list marker. */
+export function lineTextStart(state: EditorState, n: number): number {
+  const line = state.doc.line(n);
+  const prefix = /^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)?/.exec(line.text);
+  return line.from + (prefix ? prefix[0].length : 0);
+}
+
+/**
  * Every block a range touches, in document order, each appearing once.
  *
  * Blank lines belong to no block and are simply absent from the result, which is the whole point:

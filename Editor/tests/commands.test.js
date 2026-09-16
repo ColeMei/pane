@@ -427,10 +427,34 @@ export function runLayout(view, doc) {
   };
   const head = () => view.state.selection.main.head;
 
+  // Decision 146 extends this: the click lands on the neighbour the pointer is nearer to — the end
+  // of the paragraph above from the upper half of the strip, the start of the one below from the
+  // lower half — rather than nowhere, and the caret never rests on the break.
+  const clickAt = (n, fraction) => {
+    const r = lineEl(n).getBoundingClientRect();
+    lineEl(n).dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true, cancelable: true,
+      clientX: Math.round(r.left + 30), clientY: Math.round(r.top + r.height * fraction),
+    }));
+  };
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "alpha\n\nbravo\n" } });
   view.dispatch({ selection: { anchor: 12 } });
   clickCentre(2);
-  check("clicking the blank line between two paragraphs does nothing", 12, head());
+  check("clicking the blank line between two paragraphs lands at the start of the one below", 7, head());
+  clickAt(2, 0.2);
+  check("…and from the upper part of the strip, at the end of the one above", 5, head());
+
+  // The report: ⏎ after the first line, nothing typed, click the gap — the caret must not appear
+  // on the break, which drawn open reads as a ⇧⏎ line nobody typed (decision 146).
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "line 1\n\n" } });
+  view.dispatch({ selection: { anchor: 8 } });
+  clickCentre(2);
+  check("the break under the caret's own empty line is not a place either", 8, head());
+  clickAt(2, 0.2);
+  check("…and its upper part goes to the end of the line above", 6, head());
+  view.dispatch({ selection: { anchor: 8 } });
+  clickCentre(3);
+  check("the caret's own empty line, below the break, still is", 8, head());
 
   // The three things that must keep working, each of which a blunter rule would have broken.
   // Asserted as "did the caret move", not as an offset: the point of each is that the click is
@@ -443,7 +467,7 @@ export function runLayout(view, doc) {
   };
 
   clickMoves("a trailing blank line is still clickable", "alpha\n", 2);
-  clickMoves("a run of blank lines is still clickable", "alpha\n\n\nbravo\n", 2);
+  clickMoves("the second of a run of blank lines is still clickable", "alpha\n\n\nbravo\n", 3);
   clickMoves("a blank line inside a fence is content, not a gap", "```\nfirst\n\nlast\n```\n", 3);
 
   // ---- A quoted list ----------------------------------------------------------------------------
