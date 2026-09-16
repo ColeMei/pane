@@ -27,6 +27,7 @@ import { indentLess, indentMore } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
+import { applyEdit, type KeyEdit } from "./keyboard/context";
 
 /** `   1. ` — the indent, the marker, and the space between the marker and the text. */
 const MARKER = /^([ \t]*)((?:[-*+]|\d+[.)]))([ \t]+)/;
@@ -105,9 +106,9 @@ function markerAbove(state: EditorState, first: number, indent: number) {
 }
 
 /** Rewrites the leading whitespace of every line an item owns, blank lines left alone. */
-function shift(view: EditorView, item: Item, delta: number): boolean {
-  if (delta === 0) return false;
-  const doc = view.state.doc;
+function shiftEdit(state: EditorState, item: Item, delta: number): KeyEdit | null {
+  if (delta === 0) return null;
+  const doc = state.doc;
   const changes = [];
 
   for (let n = item.first; n <= item.last; n++) {
@@ -117,17 +118,9 @@ function shift(view: EditorView, item: Item, delta: number): boolean {
     const width = Math.max(0, leading.length + delta);
     changes.push({ from: line.from, to: line.from + leading.length, insert: " ".repeat(width) });
   }
-  if (changes.length === 0) return false;
-
-  view.dispatch({
-    changes,
-    // `input.indent` rather than a bare selection change, so the renumbering filter treats it as
-    // the edit it is: an item that has just changed level has to start counting from 1, and its old
-    // siblings have to close the gap it left.
-    userEvent: "input.indent",
-    scrollIntoView: true,
-  });
-  return true;
+  if (changes.length === 0) return null;
+  // No anchor: the caret maps through the changes, staying on its character.
+  return { changes, userEvent: "input.indent", scrollIntoView: true };
 }
 
 /**
@@ -137,37 +130,40 @@ function shift(view: EditorView, item: Item, delta: number): boolean {
  * first item of a list has nothing to be a child of, and indenting it produces either a code block
  * or a lazy continuation depending on how far it goes. Typora and Obsidian both refuse it.
  */
-export function indentListItem(view: EditorView): boolean {
-  const state = view.state;
-  const item = itemAt(state, state.selection.main.head);
-  if (!item) return false;
+/** ⇥ on an item: nest it under the sibling above, to that sibling's content column (decision 108). */
+export function indentEdit(state: EditorState, pos: number): KeyEdit | null {
+  const item = itemAt(state, pos);
+  if (!item) return null;
 
   const sibling = markerAbove(state, item.first, item.indent);
-  if (!sibling || sibling.indent !== item.indent) return false;
+  if (!sibling || sibling.indent !== item.indent) return null;
 
-  return shift(view, item, sibling.content - item.indent);
+  return shiftEdit(state, item, sibling.content - item.indent);
 }
 
-/** ⇧⇥ — move the item back out to its parent's column, or to the margin when it has no parent. */
-export function outdentListItem(view: EditorView): boolean {
-  const state = view.state;
-  const item = itemAt(state, state.selection.main.head);
-  if (!item || item.indent === 0) return false;
+/** ⇧⇥ (and ⌫ at a nested item's text start): back out one level, to the parent's indent. */
+export function outdentEdit(state: EditorState, pos: number): KeyEdit | null {
+  const item = itemAt(state, pos);
+  if (!item || item.indent === 0) return null;
 
   const parent = markerAbove(state, item.first, item.indent - 1);
-  return shift(view, item, (parent ? parent.indent : 0) - item.indent);
+  return shiftEdit(state, item, (parent ? parent.indent : 0) - item.indent);
 }
 
-/**
- * The Tab binding: a list item first, CodeMirror's own indentation everywhere else.
- *
- * Tab outside a list still indents by `indentUnit`, which is what it means in a code block and does
- * no harm in prose. **Inside one it never falls through**, and that distinction is the whole rule:
- * `indentListItem` declining means "this item may not move", not "nobody handled the key", so
- * handing Tab on to `indentMore` put two spaces in front of a first item's marker and four in front
- * of it on the second press — which pandoc reads as an indented code block rather than a list.
- * A refusal has to consume the key.
- */
+export function indentListItem(view: EditorView): boolean {
+  const edit = indentEdit(view.state, view.state.selection.main.head);
+  if (!edit) return false;
+  applyEdit(view, edit);
+  return true;
+}
+
+export function outdentListItem(view: EditorView): boolean {
+  const edit = outdentEdit(view.state, view.state.selection.main.head);
+  if (!edit) return false;
+  applyEdit(view, edit);
+  return true;
+}
+
 export const listAwareTab = {
   key: "Tab",
   run: (view: EditorView) => {

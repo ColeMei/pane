@@ -45,7 +45,9 @@ import { mountActionPanel } from "./action-panel";
 import { placeOverlay } from "./overlay";
 import { describe, hideTooltip, mountTooltips, setPointer } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
-import { contentColumn, listAwareTab, outdentListItem } from "./list-indent";
+import { contentColumn, listAwareTab } from "./list-indent";
+import { keyCommand } from "./keyboard/context";
+import { backspace } from "./keyboard/backspace";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { renumberOrderedLists } from "./renumber";
 import { mountSwitcher, type NoteSummary } from "./switcher";
@@ -574,78 +576,6 @@ function selectBlockThenAll(view: EditorView): boolean {
   return true;
 }
 
-/**
- * Backspace undoes a paragraph break instead of turning it into a soft one.
- *
- * ⏎ writes `\n\n` (decision 63), so a plain Backspace deletes one of them and leaves the two
- * paragraphs joined into a single **soft-broken** one — which renders as two lines 20pt apart and
- * reads as the editor deciding every paragraph needs a spare line in it. Decision 78 fixed that for
- * the one position it was reported from, the caret on the empty line ⏎-at-the-end-of-a-paragraph
- * leaves you on, and **the guard it used made that the only position it covered.** Measured on the
- * running build, the other three all still produced the soft break:
- *
- *   - ⏎ in the *middle* of a paragraph puts the caret at the start of the new one, which is not an
- *     empty line — so ⌫ straight afterwards was not the inverse of the ⏎ that had just run.
- *   - The caret on the blank line *between* two paragraphs.
- *   - The caret at the start of the second paragraph.
- *
- * Worse, pressing it twice from there ate a character of the paragraph above while leaving the soft
- * break in place, so the obvious recovery made things worse.
- *
- * The rule is one rule now: **a caret at the start of a line with a blank line above it deletes the
- * break, not half of it.** The paragraphs join, which is what every block editor does and what the
- * ⏎ being undone had separated. A soft break is still one ⇧⏎ away.
- */
-function joinBackToParagraph(view: EditorView): boolean {
-  const { state } = view;
-  const range = state.selection.main;
-  if (!range.empty) return false;
-
-  const doc = state.doc;
-  const line = doc.lineAt(range.head);
-  if (range.head !== line.from) return false;
-
-  // Inside a fenced block a blank line is content, not a paragraph break, and Backspace there means
-  // delete one character, as it does in any code editor.
-  for (let node = syntaxTree(state).resolveInner(range.head, 1); node.parent; node = node.parent) {
-    if (node.name === "FencedCode" || node.name === "CodeBlock") return false;
-  }
-
-  // Standing at the start of a line with a blank one above it: the break is the two newlines
-  // *before* the caret. Line 3 at the earliest, because the deletion starts at the newline before
-  // the blank line and at line 2 that offset is -1 — the original guard said `< 2` and was saved
-  // only by an emptiness test this no longer applies.
-  if (line.number >= 3 && doc.line(line.number - 1).length === 0) {
-    const blank = doc.line(line.number - 1);
-    view.dispatch({
-      changes: { from: blank.from - 1, to: range.head },
-      selection: { anchor: blank.from - 1 },
-      userEvent: "delete.backward",
-    });
-    return true;
-  }
-
-  // Standing *on* the blank line that separates two paragraphs: the break is the newline before the
-  // caret and the one after it. Deleting only the first is what left the soft break, and pressing
-  // Backspace again then ate a character of the paragraph above while the soft break stayed.
-  if (
-    line.length === 0 &&
-    line.number >= 2 &&
-    line.number < doc.lines &&
-    doc.line(line.number - 1).length !== 0 &&
-    doc.line(line.number + 1).length !== 0
-  ) {
-    view.dispatch({
-      changes: { from: doc.line(line.number - 1).to, to: line.to + 1 },
-      selection: { anchor: doc.line(line.number - 1).to },
-      userEvent: "delete.backward",
-    });
-    return true;
-  }
-
-  return false;
-}
-
 /** Built once. It is the ⏎ binding as well, so the two keys cannot drift apart. */
 const continueMarkup = insertNewlineContinueMarkupCommand({ nonTightLists: false });
 
@@ -929,115 +859,6 @@ function softBreakInListItem(view: EditorView): boolean {
 }
 
 /**
- * ⌫ on a line holding nothing but a marker undoes the ⏎ that made it.
- *
- * Decision 90 made ⏎ and ⌫ inverses in prose, from all four positions. It did not reach the markup
- * blocks: `> quoted`, Enter, Backspace left `> quoted\n` — the marker gone and the newline still
- * there, so one keystroke undid half of one keystroke and a second was needed to finish.
- *
- * Only when the line above is the block this marker was continued *from*. A marker somebody has
- * just typed under a paragraph is not a break to undo, and Backspace there still deletes one
- * character, as it always did.
- */
-function undoMarkerBreak(view: EditorView): boolean {
-  const { state } = view;
-  const range = state.selection.main;
-  if (!range.empty) return false;
-
-  const doc = state.doc;
-  const line = doc.lineAt(range.head);
-  if (range.head !== line.to || line.number < 2) return false;
-
-  const quote = /^[ \t]*(?:>[ \t]*)+$/.test(line.text);
-  if (!quote && !EMPTY_LIST_ITEM.test(line.text)) return false;
-
-  const above = doc.line(line.number - 1);
-  const continued = quote
-    ? /^[ \t]*>/.test(above.text)
-    : /^[ \t]*(?:>[ \t]*)*(?:[-*+]|\d+[.)])[ \t]/.test(above.text);
-  if (!continued) return false;
-
-  view.dispatch({
-    changes: { from: above.to, to: line.to },
-    selection: { anchor: above.to },
-    userEvent: "delete.backward",
-  });
-  return true;
-}
-
-/**
- * ⌫ on a marker somebody typed rather than one a ⏎ wrote deletes one character.
- *
- * `deleteMarkupBackward` — CodeMirror's own, and the last link in the Backspace chain — takes the
- * whole marker off an empty list item. That is right for a marker the editor put there and wrong
- * for one the writer just typed: `hello` ⏎ `- ` ⌫ threw away both characters of the marker and the
- * blank line above it, three keystrokes undone by one. `undoMarkerBreak` has already claimed the
- * marker-only lines that a break made, so anything reaching here is typed, and Backspace on typed
- * text means one character.
- */
-function deleteTypedMarker(view: EditorView): boolean {
-  const { state } = view;
-  const range = state.selection.main;
-  if (!range.empty) return false;
-
-  const line = state.doc.lineAt(range.head);
-  if (range.head !== line.to) return false;
-  const marker = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|(?:>[ \t]*)+)$/;
-  if (!marker.test(line.text) || line.text.trim() === "") return false;
-
-  // An explicit one-character change rather than `deleteCharBackward`, which skips atomic ranges —
-  // and the rendered marker is one, so it took `- ` off whole and put us back where we started.
-  view.dispatch({
-    changes: { from: range.head - 1, to: range.head },
-    selection: { anchor: range.head - 1 },
-    userEvent: "delete.backward",
-  });
-  return true;
-}
-
-/**
- * ⌫ at the start of a list item's text takes the item out of the list.
- *
- * `deleteMarkupBackward` removes the marker and leaves the indentation standing, so `  - two`
- * became `  two` — which is a lazy continuation of the item above it, and the two items silently
- * became one. A nested item outdents instead, one level per press, which is what Typora and
- * Obsidian do and what ⇧⇥ does; the outermost level drops the marker and takes a blank line with
- * it, for the same reason `exitListToParagraph` does.
- */
-function unindentListItem(view: EditorView): boolean {
-  const { state } = view;
-  const range = state.selection.main;
-  if (!range.empty) return false;
-
-  const doc = state.doc;
-  const line = doc.lineAt(range.head);
-  const match = /^([ \t]*)((?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)/.exec(line.text);
-  if (!match) return false;
-  const [, indent, marker] = match as unknown as [string, string, string];
-  if (range.head !== line.from + indent.length + marker.length) return false;
-  // The *start of the text* means there is text. A line holding nothing but a marker belongs to
-  // `undoMarkerBreak` when a ⏎ made it, and to an ordinary Backspace when somebody typed `- ` under
-  // a paragraph — where taking the whole marker and a blank line with it deletes two keystrokes'
-  // worth on one press.
-  if (line.text.length === indent.length + marker.length) return false;
-  // `enclosingNode` rather than `inside`: the latter resolves with a -1 bias, and at the start of a
-  // top-level item that reaches the *previous* line's node — decision 78's bias rule, and it made
-  // this decline on exactly the case it exists for.
-  if (!enclosingNode(state, line.from + indent.length, "ListItem")) return false;
-
-  if (indent.length > 0) return outdentListItem(view);
-
-  const above = line.number > 1 ? doc.line(line.number - 1) : null;
-  const blank = above !== null && above.text.trim() !== "";
-  view.dispatch({
-    changes: { from: line.from, to: range.head, insert: blank ? "\n" : "" },
-    selection: { anchor: line.from + (blank ? 1 : 0) },
-    userEvent: "delete.backward",
-  });
-  return true;
-}
-
-/**
  * The shortcuts the Settings window can rebind (design frame 3c).
  *
  * Keyed by the same action names `Settings.shortcutActions` uses on the Swift side — the two lists
@@ -1215,8 +1036,9 @@ function baseExtensions(): Extension[] {
         // leaves the last link reachable at all.
         { key: "Enter", run: chain(exitEmptyBlockquote, closeOpenFence, exitListToParagraph,
                                    continueMarkup, newParagraph) },
-        { key: "Backspace", run: chain(undoMarkerBreak, joinBackToParagraph, unindentListItem,
-                                       deleteTypedMarker, deleteMarkupBackward) },
+        // ⌫ is a table over the line under the caret (`keyboard/backspace.ts`); what it declines
+        // goes to CodeMirror's own markup delete, then to a plain one-character delete.
+        { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
         { key: "Mod-a", run: selectBlockThenAll },
       ])
     ),

@@ -47,6 +47,7 @@ jobs:
       - name: Test the editor
         run: |
           set -euo pipefail
+          Scripts/test-keyboard.sh
           Scripts/test-editor.sh --skip-editor
           Scripts/test-markdown.sh --skip-editor
           Scripts/test-switcher.sh --skip-editor
