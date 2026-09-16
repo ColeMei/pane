@@ -86,9 +86,12 @@ const fenceCloseRaw = Decoration.line({ class: "pane-line-fence-close-raw" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
 
-/* A revealed list marker keeps the rendered marker's fixed box, space included: `.pane-syntax` alone
- * let it jump 16px right and the text a space-width further (decisions 108, 122). */
+/* A revealed list marker keeps the rendered marker's fixed box: `.pane-syntax` alone let it jump
+ * 16px right and the text a space-width further (decisions 108, 122). The space after it is a box
+ * of its own, the gap wide with the space at its right edge, so a caret after the space — the
+ * caret on a line holding only `1. ` — is drawn where the first character will land (145). */
 const rawListMark = Decoration.mark({ class: "pane-syntax pane-syntax-listmark" });
+const rawListGap = Decoration.mark({ class: "pane-syntax pane-syntax-listgap" });
 
 /** The text of a ticked task item. */
 const doneTaskText = Decoration.mark({ class: "pane-task-done-text" });
@@ -116,6 +119,8 @@ function insideCode(view: EditorView, pos: number): boolean {
 
 /** A rendered ordered-list number: `1.` as the reader sees it, not as raw syntax. */
 const numberMark = Decoration.mark({ class: "pane-list-number" });
+/** The space after a rendered number, in the same gap box the raw marker's space takes (145). */
+const numberGap = Decoration.mark({ class: "pane-list-gap" });
 
 /** A revealed `[ ]`, in the checkbox's box — its own class because it wants a fixed width where
  * `rawListMark` must not have one: a raw list marker ends in a space a fixed box strands (decision 122). */
@@ -248,6 +253,8 @@ interface Walk {
 
   /** The space after a marker goes with the marker; see the note on the function below. */
   hideSpaceAfter: (at: number) => void;
+  /** Where the run of spaces starting at `at` ends, on its line. */
+  spacesAfter: (at: number) => number;
 }
 
 function horizontalRule(node: SyntaxNodeRef, w: Walk): void {
@@ -438,17 +445,16 @@ function listMark(node: SyntaxNodeRef, w: Walk): void {
     return;
   }
 
+  // The marker in its box and its space in the gap box, raw and rendered alike; the two are the
+  // same shape by construction, which is what keeps item ten from shifting on reveal (108, 122, 145).
+  const spacesEnd = w.spacesAfter(node.to);
   if (isActive) {
-    // Through the space after it, so the box matches the rendered marker's — see rawListMark.
-    const after = w.doc.sliceString(node.to, Math.min(node.to + 1, w.doc.length));
-    w.decorations.push(rawListMark.range(node.from, node.to + (after === " " ? 1 : 0)));
+    w.decorations.push(rawListMark.range(node.from, node.to));
+    if (spacesEnd > node.to) w.decorations.push(rawListGap.range(node.to, spacesEnd));
   } else if (ordered) {
-    // Its own class: a rendered number is content the reader sees, not muted syntax. Through the space
-    // after it, so the rendered and raw boxes match for any digit count and item ten does not shift on
-    // reveal (108). Load-bearing: dropping the space centres the digits and breaks both that and the
-    // caret after a new item — the number sits ~2px left of centre on purpose (122).
-    const gap = w.doc.sliceString(node.to, Math.min(node.to + 1, w.doc.length)) === " " ? 1 : 0;
-    w.decorations.push(numberMark.range(node.from, node.to + gap));
+    // Its own class: a rendered number is content the reader sees, not muted syntax.
+    w.decorations.push(numberMark.range(node.from, node.to));
+    if (spacesEnd > node.to) w.decorations.push(numberGap.range(node.to, spacesEnd));
   } else {
     w.decorations.push(
       Decoration.replace({ widget: new BulletWidget(listDepth(w.view, node.from)) }).range(
@@ -591,14 +597,18 @@ export function buildDecorations(view: EditorView, reveal: Reveal): DecorationSe
 
   /* The space after a marker goes with the marker: `ListMark` and `QuoteMark` exclude it, and rendered
    * it pushed the first line's text ~3px right of its own continuation (decisions 108, 122). */
-  const hideSpaceAfter = (at: number) => {
+  const spacesAfter = (at: number) => {
     const line = doc.lineAt(at);
     let end = at;
     while (end < line.to && doc.sliceString(end, end + 1) === " ") end++;
+    return end;
+  };
+  const hideSpaceAfter = (at: number) => {
+    const end = spacesAfter(at);
     if (end > at) decorations.push(hide.range(at, end));
   };
 
-  const w: Walk = { view, doc, reveal, decorations, inlineRanges, codeLines, blockStarts, hideSpaceAfter };
+  const w: Walk = { view, doc, reveal, decorations, inlineRanges, codeLines, blockStarts, hideSpaceAfter, spacesAfter };
 
   // Only the visible ranges. A 3,000-word note must not be fully decorated to draw one screen —
   // that cost lands on every keystroke, and it is where these editors get slow.

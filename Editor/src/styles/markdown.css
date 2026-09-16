@@ -383,10 +383,16 @@
    * size for every kind of list: 9.2px after a bullet, 1.4px after a number, 3px after a checkbox.
    * Centred, all three sit on one axis and the gap after them is the box's, not the glyph's. */
   text-align: center;
-  /* Both margins, and they cancel: the marker is pulled back over its own box *and* the gap, then
-   * gives the gap back, so the widget's net advance is zero and the text stays where the line's
-   * padding put it. Pulling back without giving it back drags every list line 7.5px left. */
+  /* Pulled back over its own box *and* the gap; the gap is then given back — by the bullet's own
+   * right margin below, and by the gap box after a number — so the net advance is zero and the
+   * text stays where the line's padding put it. Pulling back without giving it back drags every
+   * list line 7.5px left. */
   margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
+}
+
+/* A bullet's space is hidden, so its gap is a margin. A number's space is real text in the gap box
+ * (`.pane-list-gap` below), the same shape as the raw marker under the caret — decision 145. */
+.pane-list-marker {
   margin-right: var(--list-marker-gap);
 }
 
@@ -485,7 +491,20 @@
   min-width: var(--list-marker-box);
   text-align: center;
   margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
-  margin-right: var(--list-marker-gap);
+}
+
+/* The marker's own space, in a box the gap wide with the space at its right edge — decision 145.
+ *
+ * The gap used to be the marker box's right margin, with the space inside the box. A caret after
+ * that space is drawn at the space's right edge, so on a line holding only `1. ` it waited 8px
+ * left of where the first character then landed; measured 39.3 against 47.5, and 37.4 for `- `.
+ * Right-aligned in a box the gap wide, the space ends exactly where the text starts. `min-width`
+ * so three spaces after a marker still paint rather than overflow into the text. */
+.pane-syntax-listgap,
+.pane-list-gap {
+  display: inline-block;
+  min-width: var(--list-marker-gap);
+  text-align: right;
 }
 
 /* Lead-in, plus the marker's box and the gap after it back, plus one step a level.

@@ -188,14 +188,13 @@ function inspector(view, doc) {
       const depth = [...bullet.classList].find((c) => c.startsWith("pane-bullet-"));
       return { "pane-bullet-1": "•", "pane-bullet-2": "◦", "pane-bullet-3": "▪" }[depth] ?? "?";
     }
-    // Trimmed: the rendered box holds the marker *and* the space after it, so that it is the same
-    // width as the raw one under the caret. What this reader is asked is which number, not how wide.
     const number = el.querySelector(".pane-list-number");
     if (number) return number.textContent.trim();
     const task = el.querySelector(".pane-task");
     if (task) return task.className.includes("--done") ? "[x]" : "[ ]";
+    // The marker and its space are two boxes (decision 145); this reader is asked for both.
     const raw = el.querySelector(".pane-syntax-listmark");
-    if (raw) return `raw:${raw.textContent}`;
+    if (raw) return `raw:${raw.textContent}${el.querySelector(".pane-syntax-listgap")?.textContent ?? ""}`;
     return "";
   };
 
@@ -213,7 +212,7 @@ function inspector(view, doc) {
   const textEdge = (n) => {
     const el = lineEl(n);
     if (!el) return null;
-    const skip = new Set(["pane-list-marker", "pane-list-number", "pane-task", "pane-syntax-listmark"]);
+    const skip = new Set(["pane-list-marker", "pane-list-number", "pane-list-gap", "pane-task", "pane-syntax-listmark", "pane-syntax-listgap"]);
     for (const node of el.childNodes) {
       if (node.nodeType === 1 && [...node.classList].some((c) => skip.has(c))) continue;
       const range = doc.createRange();
@@ -271,7 +270,7 @@ function inspector(view, doc) {
    * bottom of its line passed all of them. Reported on sight: "why are the two dots much lower". */
   const textMiddle = (n) => {
     const el = lineEl(n);
-    const skip = ["pane-list-marker","pane-list-number","pane-task","pane-syntax-listmark",
+    const skip = ["pane-list-marker","pane-list-number","pane-list-gap","pane-task","pane-syntax-listmark","pane-syntax-listgap",
                   "pane-syntax-taskmark"];
     const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let node;
@@ -1068,6 +1067,24 @@ export function runListGeometry(view, doc) {
     r.check(`⇧⏎ in ${name}: the first character lands where the caret was`, waiting, i.wordEdge(line + 1, "x"), "⇧⏎ x");
     d.press("Enter", { shiftKey: true });
     r.check(`⇧⏎ in ${name}: a second ⇧⏎ waits there too`, text, caretX(), "⇧⏎ x ⇧⏎");
+  }
+
+  // Decision 145, the same report's second half: type `1. ` and stop. The caret waited at the end of
+  // the marker's space, inside the marker box, one gap short of where the first character landed —
+  // measured 39.3 against 47.5 for `1. `, 37.4 for `- `. The checkbox was already right.
+  const markerOnly = [
+    ["`1. `", () => d.type("1. "), 1],
+    ["`- `", () => d.type("- "), 1],
+    ["`- [ ] `", () => d.type("- [ ] "), 1],
+    ["`2. ` made by ⏎", () => { d.type("1. one"); d.press("Enter"); }, 2],
+    ["`1. ` under a paragraph", () => { d.type("para"); d.press("Enter"); d.type("1. "); }, 3],
+    ["a nested `- ` made by ⏎ ⇥", () => { d.type("- one"); d.press("Enter"); d.press("Tab"); }, 2],
+  ];
+  for (const [name, setup, line] of markerOnly) {
+    d.reset(); setup();
+    const waiting = caretX();
+    d.type("x");
+    r.check(`${name} alone: the caret waits where the first character lands`, waiting, i.wordEdge(line, "x"), `${name} x`);
   }
 
   return { checked: r.checked, failures: r.failures };
