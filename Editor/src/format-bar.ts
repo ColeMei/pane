@@ -11,7 +11,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 
-import { blockAt, blocksIn, linesOf } from "./blocks";
+import { blockAt, blocksIn, containerPrefixOf, linesOf, quoteMarksOnly } from "./blocks";
 import { describe } from "./tooltip";
 import { type ChangeSet, type EditorState, type Extension, type Line, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
@@ -705,6 +705,8 @@ function blankCaretLine(state: EditorState): Line | null {
   const range = state.selection.main;
   if (!range.empty || state.selection.ranges.length > 1) return null;
   const line = state.doc.lineAt(range.head);
+  // A line of nothing but `> ` is a quote's own blank line, and a block starts on it the same way (150).
+  if (quoteMarksOnly(line.text)) return line;
   if (line.text.trim() !== "") return null;
   return blockAt(state, line.from, 1) ? null : line;
 }
@@ -840,11 +842,14 @@ function startBlockOnBlankLine(
 ): void {
   const state = view.state;
   const indent = indentOf(line.text);
-  const at = line.from + indent;
+  // After the quote marks on a quote's blank line (150): the marker is the quote's content.
+  const quoted = quoteMarksOnly(line.text);
+  const at = line.from + (quoted ? containerPrefixOf(line.text) : indent);
   const marker = markerFor(0, indent);
   const kind = kindOf(marker);
-  const above = kind && needsSeparation(state, line, kind, indent) ? "\n" : "";
-  const below = paragraphBelow(state, line.number + 1) ? "\n" : "";
+  // Inside a quote the separating line is `>`, and it goes in front of the line, not the marker.
+  const above = !quoted && kind && needsSeparation(state, line, kind, indent) ? "\n" : "";
+  const below = !quoted && paragraphBelow(state, line.number + 1) ? "\n" : "";
   view.dispatch({
     changes: { from: at, insert: above + marker + below },
     selection: { anchor: at + above.length + marker.length },
@@ -875,7 +880,8 @@ function applyBlockMarker(
   view: EditorView,
   markerFor: (index: number, indent: number) => string,
   existing: RegExp,
-  replaces?: RegExp
+  replaces?: RegExp,
+  container = false
 ): void {
   const state = view.state;
   const blocks = blocksIn(state, state.selection.main.from, state.selection.main.to);
@@ -891,8 +897,14 @@ function applyBlockMarker(
   // cheerfully wrote its own marker in front of the indent: `-    1. a`, which is a top-level
   // bullet whose text happens to start with spaces. Every list in the report was nested, which is
   // why this arrived alongside the stacking rather than after it.
-  const markerStart = (line: { from: number; text: string }) => line.from + indentOf(line.text);
-  const body = (text: string) => text.slice(indentOf(text));
+  //
+  // And past the quote marks, for a list: the quote is the container, so its `>` stays outermost
+  // whichever button was pressed first — Quote then Numbered used to write `1. > `, a quote inside
+  // a list item, and Bullet on a quoted numbered item `- > 1. ` (decision 150). The quote command
+  // itself is the container and sits in front of everything but the indent.
+  const prefixOf = container ? indentOf : containerPrefixOf;
+  const markerStart = (line: { from: number; text: string }) => line.from + prefixOf(line.text);
+  const body = (text: string) => text.slice(prefixOf(text));
 
   // Off only when every block already carries **this** marker — on a mixed selection the button
   // should finish the job rather than strip the markers from half of it. A selection of a bullet
@@ -934,6 +946,14 @@ function applyBlockMarker(
     // Continuation lines follow the marker in or out, so the text stays aligned under itself.
     for (const line of lines.slice(1)) {
       const indent = /^ */.exec(line.text)![0].length;
+      // A quote is a container and marks every line it holds: `> ` on each line going in, and off
+      // each line coming out — it used to strip the first line only (150).
+      if (container) {
+        const mark = existing.exec(line.text.slice(indent))?.[0].length ?? 0;
+        if (removing && mark > 0) changes.push({ from: line.from + indent, to: line.from + indent + mark, insert: "" });
+        if (!removing && mark === 0) changes.push({ from: line.from + indent, to: line.from + indent, insert });
+        continue;
+      }
       if (removing) {
         const drop = Math.min(indent, had);
         if (drop > 0) changes.push({ from: line.from, to: line.from + drop, insert: "" });
@@ -982,7 +1002,7 @@ function applyOrderedList(view: EditorView): void {
     const indent = indentOf(text);
     if (indent > depth) continue;
     if (indent === depth) {
-      const previous = ORDERED_MARKER.exec(text.slice(indent));
+      const previous = ORDERED_MARKER.exec(text.slice(containerPrefixOf(text)));
       if (previous) start = Number(previous[1]) + 1;
     }
     break;
@@ -1021,7 +1041,7 @@ function applyTaskList(view: EditorView): void {
 
 /** No `replaces`: `> - a` is a real thing to want, so a quote stacks where a list kind replaces. */
 function applyQuote(view: EditorView): void {
-  applyBlockMarker(view, () => "> ", /^>\s?/);
+  applyBlockMarker(view, () => "> ", /^>\s?/, undefined, true);
 }
 
 /**

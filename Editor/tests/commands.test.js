@@ -88,8 +88,10 @@ const EXPECTED = {
   "Quote · one word": "> para one\n\npara two\n\nsoft a\nsoft b\n",
   "Quote · one paragraph": "> para one\n\npara two\n\nsoft a\nsoft b\n",
   "Quote · two paragraphs": "> para one\n\n> para two\n\nsoft a\nsoft b\n",
-  "Quote · soft-break pair": "para one\n\npara two\n\n> soft a\nsoft b\n",
-  "Quote · everything": "> para one\n\n> para two\n\n> soft a\nsoft b\n",
+  // Every line of the block, not the first alone (150): the lazy continuation was legal and what no
+  // other editor writes, and taking the quote off left `>` on the second line.
+  "Quote · soft-break pair": "para one\n\npara two\n\n> soft a\n> soft b\n",
+  "Quote · everything": "> para one\n\n> para two\n\n> soft a\n> soft b\n",
   "Numbered list · one word": "1. para one\n\npara two\n\nsoft a\nsoft b\n",
   "Numbered list · one paragraph": "1. para one\n\npara two\n\nsoft a\nsoft b\n",
   "Numbered list · two paragraphs": "1. para one\n\n2. para two\n\nsoft a\nsoft b\n",
@@ -837,6 +839,15 @@ export function runListKinds(view, doc, bar) {
   // A quote is a container rather than a kind, so it stacks on a list — the one block command that
   // deliberately does not replace.
   viaKey("⇧⌘B quotes a list rather than replacing it", "- Hi\n- A\n", ["B"], "> - Hi\n> - A\n");
+  // Decision 150: the quote is the container, so it is outermost whichever order the keys are
+  // pressed in. Quote then Numbered wrote `1. > ` — a quote inside a list item — and Bullet after a
+  // quoted numbered item wrote `- > 1. `, a bullet holding a quote holding a numbered item.
+  viaKey("⇧⌘7 on quoted paragraphs writes the list inside the quote (150)", "> Hi\n>\n> A\n", ["7"], "> 1. Hi\n>\n> 2. A\n");
+  viaKey("⇧⌘B on a two-line quote takes the `>` off both lines (150)", "> Hi\n> A\n", ["B"], "Hi\nA\n");
+  viaKey("…and ⇧⌘B on a ⇧⏎-broken paragraph quotes both lines", "Hi\nA\n", ["B"], "> Hi\n> A\n");
+  viaKey("…and ⇧⌘8 then changes the list kind inside the quote, not around it", "> 1. Hi\n> 2. A\n", ["8"], "> - Hi\n> - A\n");
+  viaKey("…and ⇧⌘B on that takes the quote off and leaves the list", "> - Hi\n> - A\n", ["B"], "- Hi\n- A\n");
+  viaKey("a numbered list inside a quote continues the quoted list above it", "> 1. a\n> 2. b\n>\n> c\n", ["7"], "> 1. a\n> 2. b\n>\n> 3. c\n");
 
   // --- an empty line ---------------------------------------------------------------------------
   //
@@ -938,6 +949,10 @@ export function runListKinds(view, doc, bar) {
 
   kindSwap("an empty bullet item becoming numbered takes a blank line", "- what\n- \n", 2,
     "Numbered list", "- what\n\n1. \n");
+  kindSwap("Numbered on a `> ` line writes the item inside the quote (150)", "> \n", 1,
+    "Numbered list", "> 1. \n");
+  kindSwap("Quote on a `1. ` line puts the quote outside (150)", "1. \n", 1,
+    "Quote", "> 1. \n");
   kindSwap("and an empty numbered item becoming a bullet", "1. a\n1. \n", 2,
     "Bulleted list", "1. a\n\n- \n");
   // Not asserted from inside a quote: `> q\n1. ` is *already* one block to this parser — the

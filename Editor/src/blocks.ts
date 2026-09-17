@@ -108,6 +108,16 @@ export function paragraphBreakLine(state: EditorState, n: number): boolean {
   return true;
 }
 
+/** Nothing on the line but quote marks and whitespace: a blank line inside a quote. */
+export function quoteMarksOnly(text: string): boolean {
+  return /^[ \t]*(?:>[ \t]*)+$/.test(text);
+}
+
+/** The indent and any quote marks — what a list marker sits behind. A quote is a container (100, 150). */
+export function containerPrefixOf(text: string): number {
+  return /^[ \t]*(?:>[ \t]*)*/.exec(text)![0].length;
+}
+
 /** Where a line's own text starts: past its indent, quote marks and list marker. */
 export function lineTextStart(state: EditorState, n: number): number {
   const line = state.doc.line(n);
@@ -133,6 +143,10 @@ export function blocksIn(state: EditorState, from: number, to: number): Block[] 
   for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) {
     const line = doc.line(n);
     if (line.text.trim() === "") continue;
+    // A line holding nothing but quote marks is the blank line *inside* a quote, and belongs to no
+    // block either (150): resolved at its `>`, it was the whole quote, and a list command then
+    // marked the quote's first line a second time.
+    if (quoteMarksOnly(line.text)) continue;
 
     // Resolved at the line's first real character, not at its start.
     //
@@ -141,7 +155,14 @@ export function blocksIn(state: EditorState, from: number, to: number): Block[] 
     // At `line.from` on a nested item the innermost node is still the *outer* item, so a caret in
     // `   1. a` converted `2. A` instead, and a selection of two nested items converted their
     // parents. Past the indent, the innermost node is the nested item's own marker.
-    const block = blockAt(state, line.from + /^[ \t]*/.exec(line.text)![0].length, 1);
+    //
+    // And past the quote marks (150): a quote is a container, so the block on a quoted line is the
+    // paragraph or item *inside* it — resolved at the `>`, every quoted line was the one Blockquote,
+    // and a list command marked its first line only. A line holding nothing but `> ` has nothing
+    // inside, and falls back to the quote itself.
+    const block =
+      blockAt(state, line.from + containerPrefixOf(line.text), 1) ??
+      blockAt(state, line.from + /^[ \t]*/.exec(line.text)![0].length, 1);
     if (!block) continue;
     if (blocks.some((b) => b.from === block.from && b.to === block.to)) continue;
     blocks.push(block);
