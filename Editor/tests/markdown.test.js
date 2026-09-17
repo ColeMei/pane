@@ -1860,6 +1860,17 @@ export function runSelectionReveal(view, doc) {
   r.check("and so does a collapsed fence", "hidden",
     fenceRule ? fenceRule.style.getPropertyValue("overflow") : "no rule");
 
+  // Decision 101's own rule, one box short. The number's gap box holds the space after `1.` and is
+  // an `inline-block` a `line-height` tall, so a selected numbered item painted that rectangle where
+  // a bullet — whose space is hidden — painted nothing: reported as the highlight on a numbered list
+  // being longer than the one under it (101's amendment). Out of reach here for the usual reason.
+  const gapRule = rules.find((rule) => rule.selectorText?.includes(".pane-list-gap::selection"));
+  r.check("a number's gap box takes no selection highlight either (101)", "transparent",
+    gapRule ? gapRule.style.getPropertyValue("background-color") : "no rule");
+  r.check("…and it is the same rule the rendered number takes", true,
+    !!gapRule && gapRule.selectorText.includes(".pane-list-number::selection"),
+    gapRule ? gapRule.selectorText : "no rule");
+
   // Fourth declaration. WebKit paints a selection over the union of the inline boxes on the line, so
   // a line of plain text painted 18.0pt (the font's height) while a bulleted one painted 20.5 — four
   // heights down one note, each correct on its own. They are matched upward onto the line box, which

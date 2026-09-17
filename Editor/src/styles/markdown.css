@@ -442,7 +442,12 @@
  * Nothing else will do it. The box has to stay `inline-block` to hold the marker column, so its
  * rectangle is a `line-height` tall whenever it paints; the only lever left is not painting.
  * Same shape as the blank-line rule above, and the same specificity, for the same reason. */
-.cm-editor .cm-line .pane-list-number::selection {
+.cm-editor .cm-line .pane-list-number::selection,
+/* And the gap box after it, for exactly the same reason: it holds the number's own space, it is an
+ * `inline-block` a `line-height` tall, and it painted a 20px rectangle 7.5px wide against the 18px
+ * of the text beside it — which is what made a selected numbered item read as longer than the
+ * bulleted one under it, where the same space is hidden (101, amended; 145). */
+.cm-editor .cm-line .pane-list-gap::selection {
   background-color: transparent !important;
 }
 
