@@ -1143,16 +1143,24 @@ export function runBlockEdges(view, doc) {
     ["⌘E", () => key("e", { metaKey: true }), "`a`"],
     ["⌘U", () => key("u", { metaKey: true }), "<u>a</u>"],
   ];
+  const pendingDrawn = () => [...i.lineEl(3).querySelectorAll(".pane-pending-mark")].map((el) => el.textContent).join("");
   for (const [name, press, want] of pending) {
     d.reset(); d.type("x"); d.press("Enter"); press();
     r.check(`${name} on an empty line writes nothing (148)`, "x\n\n", d.text(), name);
+    // …but it is not invisible: the pair is drawn either side of the caret, in the buffer nowhere.
+    const open = want.slice(0, want.indexOf("a"));
+    r.check(`…and the waiting pair is drawn beside the caret`, want.replace("a", ""), pendingDrawn(), name);
+    r.check(`…drawn, not written`, "x\n\n", d.text(), `${name} (${open})`);
     r.check(`…and the line is not a block`, false, /pane-line-code|pane-rule|pane-line-h/.test(i.classes(3)), `${name}: ${i.classes(3)}`);
     d.type("a");
     r.check(`…the first character arrives wrapped`, `x\n\n${want}`, d.text(), `${name} a`);
     r.check(`…with the caret before the closing marker`, 3 + want.length - (want.length - 1 - want.indexOf("a")), head(), `${name} a`);
   }
   d.reset(); d.type("x"); d.press("Enter"); key("s", { metaKey: true, shiftKey: true }); d.press("ArrowUp"); d.type("y");
-  r.check("a caret move forgets the waiting pair", "yx\n\n", d.text(), "⇧⌘S ↑ y");
+  // `xy`, not `yx`: the drawn markers sit either side of the caret, so it *appears* two characters
+  // in and ↑ keeps the column it appears to be at. Consistent with what is on screen, and the pair
+  // is forgotten either way, which is what this case is about.
+  r.check("a caret move forgets the waiting pair", "xy\n\n", d.text(), "⇧⌘S ↑ y");
   d.reset(); d.type("ab"); key("b", { metaKey: true });
   r.check("mid-line the empty pair still goes in at once", "ab****", d.text(), "ab ⌘B");
   r.check("…caret between the markers", 4, head(), "ab ⌘B");

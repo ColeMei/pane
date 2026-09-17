@@ -11,6 +11,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 import { endOfOwnContent } from "./blocks";
+import { pendingPair } from "./format-bar";
 import { softBreakLines } from "./list-indent";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
@@ -102,6 +103,25 @@ function insideCode(view: EditorView, pos: number): boolean {
     node = node.parent;
   }
   return false;
+}
+
+/** One half of a waiting pair, drawn beside the caret and absent from the buffer (148). */
+class PendingMarkWidget extends WidgetType {
+  constructor(readonly text: string) {
+    super();
+  }
+  eq(other: PendingMarkWidget) {
+    return other.text === this.text;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "pane-syntax pane-pending-mark";
+    span.textContent = this.text;
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
 }
 
 /** A rendered ordered-list number: `1.` as the reader sees it, not as raw syntax. */
@@ -583,6 +603,20 @@ export function buildDecorations(view: EditorView, reveal: Reveal): DecorationSe
   }
 
   linePass(w);
+
+  // The pair a toggle is waiting to wrap the next character in — decision 148, amended 151's day.
+  //
+  // At a line start the markers cannot go in the buffer yet: `~~~~` alone on a line is a tilde
+  // fence, `****` a rule, `====` a setext underline. But a button that visibly does nothing reads
+  // as broken — reported exactly that way. So they are *drawn* either side of the caret, in the
+  // faint of revealed inline syntax, and the first character typed replaces them with the real
+  // thing. Nothing here is in the file, and nothing else in this walk draws what is not.
+  const pair = pendingPair(view.state);
+  if (pair) {
+    const at = view.state.selection.main.head;
+    decorations.push(Decoration.widget({ widget: new PendingMarkWidget(pair.open), side: -1 }).range(at));
+    decorations.push(Decoration.widget({ widget: new PendingMarkWidget(pair.close), side: 1 }).range(at));
+  }
 
   // Sorted on construction rather than fed through a RangeSetBuilder: the tree yields nodes in
   // document order, but an outer mark and an inner replace can share a start offset, and getting

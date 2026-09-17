@@ -453,6 +453,13 @@
  * left of where the first character then landed; measured 39.3 against 47.5, and 37.4 for `- `.
  * Right-aligned in a box the gap wide, the space ends exactly where the text starts. `min-width`
  * so three spaces after a marker still paint rather than overflow into the text. */
+/* A waiting pair's markers (148): drawn beside the caret, in the buffer nowhere. Not selectable,
+ * because selecting text that does not exist is a second answer to what the note holds. */
+.pane-pending-mark {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .pane-list-gap {
   display: inline-block;
   min-width: var(--list-marker-gap);

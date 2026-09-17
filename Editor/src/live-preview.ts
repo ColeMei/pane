@@ -21,6 +21,7 @@
 import { syntaxTree } from "@codemirror/language";
 import { buildDecorations } from "./decorate";
 import { markerSpanEnd, notAPlace } from "./blocks";
+import { pendingPair } from "./format-bar";
 import { arrivedByEditAfter, revealPolicy } from "./reveal";
 import type { SyntaxNode } from "@lezer/common";
 import {
@@ -69,6 +70,10 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         // Focus is in the list because losing it renders the whole document — see `caretLines`.
         // Without this the raw line simply stayed raw, because nothing else about the state changed.
         update.focusChanged ||
+        // A toggle that starts waiting for its first character changes neither the document nor
+        // the selection, and its markers are drawn rather than written (148) — so without this the
+        // click drew nothing at all, which is the complaint it was meant to answer.
+        pendingPair(update.startState) !== pendingPair(update.state) ||
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
         this.decorations = buildDecorations(update.view, revealPolicy(update.state, update.view.hasFocus, caretArrivedByEdit));
