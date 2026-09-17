@@ -1076,12 +1076,101 @@ export function runFooterCount(view, doc) {
   return { checked, failures };
 }
 
+/**
+ * Decision 153: a block is selected from its content, and no command writes a marker.
+ *
+ * Reported from use: ⌘A on `1. Hi` then ⌘B wrote `**1. Hi**`, which is not a list item at all —
+ * the item is gone and the note renames itself after the first line. Two independent faults, so
+ * this asserts both halves separately: what ⌘A *selects*, and what a wrap *writes* from a range
+ * somebody dragged. Fixing either alone leaves the other way in.
+ */
+export function runMarkerSelection(view, doc, bar) {
+  const failures = [];
+  let checked = 0;
+  const content = doc.querySelector(".cm-content");
+  const check = (name, want, got) => {
+    checked += 1;
+    if (got !== want) failures.push({ case: `marker selection · ${name}`, want, got });
+  };
+  const click = (label) => {
+    const button = [...bar.querySelectorAll("button")]
+      .find((b) => (b.getAttribute("aria-label") || "").startsWith(label));
+    if (!button) throw new Error(`no format-bar button named ${label}`);
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  };
+  const set = (text) => {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+    view.dispatch({ selection: { anchor: text.length } });
+  };
+  const selectAll = () => content.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "a", metaKey: true, bubbles: true, cancelable: true,
+  }));
+
+  // ⌘A, then every inline command, on every kind of line that carries a marker.
+  const LINES = [
+    ["a numbered item", "1. Hi", "1. "],
+    ["a bullet", "- Hi", "- "],
+    ["a task", "- [ ] Hi", "- [ ] "],
+    ["a quoted line", "> Hi", "> "],
+    ["a heading", "# Hi", "# "],
+    ["a paragraph", "Hi", ""],
+  ];
+  const WRAPS = [["Bold", "**Hi**"], ["Italic", "*Hi*"], ["Strikethrough", "~~Hi~~"],
+                 ["Inline code", "`Hi`"], ["Highlight", "==Hi=="], ["Underline", "<u>Hi</u>"]];
+  for (const [name, line, marker] of LINES) {
+    set(line);
+    selectAll();
+    check(`⌘A on ${name} selects the text, not the marker`, "Hi",
+      view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to).trim());
+    for (const [label, wrapped] of WRAPS) {
+      set(line);
+      selectAll();
+      click(label);
+      check(`⌘A then ${label} on ${name}`, marker + wrapped, view.state.doc.toString());
+    }
+  }
+
+  // The other half: a range that reaches into the marker span however it was made. ⌘A is not the
+  // only way — ⇧Home and a drag from the left edge both start at the line's first byte.
+  for (const [name, line, marker] of LINES) {
+    set(line);
+    view.dispatch({ selection: { anchor: 0, head: line.length } });
+    click("Bold");
+    check(`a drag from the line start, then Bold, on ${name}`, `${marker}**Hi**`, view.state.doc.toString());
+  }
+
+  // ⌘A still steps out. Comparing the block's own start against the selection would have made the
+  // second press pick the same block again, because the range it leaves starts past the marker.
+  set("1. Hi\n2. There\n");
+  view.dispatch({ selection: { anchor: 3 } });
+  selectAll();
+  check("⌘A takes the item's text", "Hi",
+    view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to).trim());
+  selectAll();
+  check("…and ⌘A again takes the note", view.state.doc.length - 0,
+    view.state.selection.main.to - view.state.selection.main.from);
+  click("Bold");
+  check("…and Bold over the note wraps each item's text", "1. **Hi**\n2. **There**\n", view.state.doc.toString());
+
+  // A nested item steps out to the one holding it, both at their own content.
+  set("- a\n  - Hi\n");
+  view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf("Hi") } });
+  selectAll();
+  check("⌘A on a nested item takes its text", "Hi",
+    view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to).trim());
+  selectAll();
+  check("…and ⌘A again takes the item holding it", "a\n  - Hi",
+    view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to).trim());
+
+  return { checked, failures };
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
 
   for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips, runListKinds,
-                       runFooterCount, runLinkOpening]) {
+                       runFooterCount, runLinkOpening, runMarkerSelection]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);

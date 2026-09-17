@@ -366,15 +366,21 @@ function pairAround(
 }
 
 /**
- * Narrows a range to the text inside it, ignoring whitespace at either end.
+ * Narrows a range to the text inside it: past the line's marker span, and ignoring whitespace at
+ * either end.
  *
  * A delimiter next to a space is not a delimiter: `**select **` is not bold to CommonMark, or to
  * Obsidian, or to anything else that will ever open the file — it renders as four literal
  * asterisks. Double-clicking a word and dragging one character too far is enough to produce it, so
  * the button is not allowed to write it.
+ *
+ * **And a marker is not text** (153). A range that starts before the line's content — ⌘A, ⇧Home,
+ * a drag from the left edge — wrote `**1. Hi**`, which is no longer a list item at all. The caret
+ * rule from 151 is enforced for a caret only; this is the same rule for a range, at the one place
+ * that turns a range into bytes, so no command can write a marker however the selection was made.
  */
 function trimmed(state: EditorState, from: number, to: number): { from: number; to: number } {
-  let start = from;
+  let start = Math.min(Math.max(from, markerSpanEnd(state, state.doc.lineAt(from).number)), to);
   let end = to;
   while (start < end && /\s/.test(state.doc.sliceString(start, start + 1))) start++;
   while (end > start && /\s/.test(state.doc.sliceString(end - 1, end))) end--;

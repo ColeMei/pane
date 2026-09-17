@@ -475,6 +475,12 @@ func itemBoldWritesMarkers() {
     check(item, "⌘B on a selection writes **word**", (read(name) ?? "").hasSuffix("**word**\n"), (read(name) ?? "").split(separator: "\n").last.map(String.init) ?? "")
     key(K.b, .maskCommand); settle()
     check(item, "⌘B again takes them off (64)", (read(name) ?? "").hasSuffix("\nword\n"))
+
+    // Decision 153: ⌘A takes the item's text, so the marker is never inside what gets wrapped.
+    guard let list = freshNote(item, body: "1. Hi") else { return check(item, "the note appeared", false) }
+    key(K.a, .maskCommand); sleepMs(300)
+    key(K.b, .maskCommand); settle()
+    check(item, "⌘A then ⌘B on a list item keeps the marker outside (153)", (read(list) ?? "").hasSuffix("1. **Hi**\n"), (read(list) ?? "").split(separator: "\n").last.map(String.init) ?? "")
 }
 
 // MARK: - Run

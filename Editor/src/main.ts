@@ -472,6 +472,12 @@ function selectBlockThenAll(view: EditorView): boolean {
   // head instead sent the second press back *in*: ⌘A on a quoted note selected the quote, and ⌘A
   // again the last paragraph inside it, because the head had moved to the quote's end (decision 65,
   // amended 151). Both biases, because at a line start the node to the left is the block above.
+  // A block is selected from its **content**, not from its first byte — decision 153. A list item
+  // and a heading start at the line start, so ⌘A used to take `1. ` and `# ` with the text, and the
+  // inline commands wrapped them: `**1. Hi**` is not a list item any more. Nothing in a marker span
+  // is drawn as characters (151), so it is not something you can have selected either.
+  const contentOf = (block: SyntaxNode) => markerSpanEnd(state, state.doc.lineAt(block.from).number);
+
   let best: SyntaxNode | null = null;
   for (const bias of [-1, 1] as const) {
     for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(range.head, bias); node; node = node.parent) {
@@ -479,13 +485,16 @@ function selectBlockThenAll(view: EditorView): boolean {
       // A list item's own range, not the paragraph inside it — see SELECTABLE_BLOCKS.
       const block = node.parent?.name === "ListItem" ? node.parent : node;
       if (block.from > range.from || block.to < range.to) continue;
-      if (block.from === range.from && block.to === range.to) continue;
+      // Against what this press would *select*, not against the node: the range this leaves starts
+      // past the marker, so comparing node starts made the second press pick the same block again
+      // and ⌘A never stepped out.
+      if (contentOf(block) === range.from && block.to === range.to) continue;
       if (!best || block.to - block.from < best.to - best.from) best = block;
     }
   }
   if (!best) return false;
 
-  view.dispatch({ selection: EditorSelection.range(best.from, best.to) });
+  view.dispatch({ selection: EditorSelection.range(contentOf(best), best.to) });
   return true;
 }
 
