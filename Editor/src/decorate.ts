@@ -78,20 +78,7 @@ const blankLine = Decoration.line({ class: "pane-line-blank" });
 const gapLine = Decoration.line({ class: "pane-line-gap" });
 const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
-/* A fence showing its backticks gets the block's padding back explicitly: collapsed, the fence *is*
- * the padding, and revealing it left ```` ```python ```` flush with the slab's top edge (decision 42,
- * amended 2026-09-17). */
-const fenceOpenRaw = Decoration.line({ class: "pane-line-fence-open-raw" });
-const fenceCloseRaw = Decoration.line({ class: "pane-line-fence-close-raw" });
-
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
-
-/* A revealed list marker keeps the rendered marker's fixed box: `.pane-syntax` alone let it jump
- * 16px right and the text a space-width further (decisions 108, 122). The space after it is a box
- * of its own, the gap wide with the space at its right edge, so a caret after the space — the
- * caret on a line holding only `1. ` — is drawn where the first character will land (145). */
-const rawListMark = Decoration.mark({ class: "pane-syntax pane-syntax-listmark" });
-const rawListGap = Decoration.mark({ class: "pane-syntax pane-syntax-listgap" });
 
 /** The text of a ticked task item. */
 const doneTaskText = Decoration.mark({ class: "pane-task-done-text" });
@@ -121,16 +108,6 @@ function insideCode(view: EditorView, pos: number): boolean {
 const numberMark = Decoration.mark({ class: "pane-list-number" });
 /** The space after a rendered number, in the same gap box the raw marker's space takes (145). */
 const numberGap = Decoration.mark({ class: "pane-list-gap" });
-
-/** A revealed `[ ]`, in the checkbox's box — its own class because it wants a fixed width where
- * `rawListMark` must not have one: a raw list marker ends in a space a fixed box strands (decision 122). */
-const rawTaskMark = Decoration.mark({ class: "pane-syntax pane-syntax-taskmark" });
-
-/** The same, for a to-do inside a **numbered** item, where the number already has the line's one
- * marker slot — so this stands in the text flow after it rather than in the slot. See `TaskWidget`. */
-const rawTaskMarkInFlow = Decoration.mark({
-  class: "pane-syntax pane-syntax-taskmark pane-syntax-taskmark--inflow",
-});
 
 /** A rendered task checkbox standing in for the literal `[ ]` or `[x]` in the buffer. */
 class TaskWidget extends WidgetType {
@@ -258,12 +235,9 @@ interface Walk {
 }
 
 function horizontalRule(node: SyntaxNodeRef, w: Walk): void {
-  const lineNumber = w.doc.lineAt(node.from).number;
-  // A line decoration, off the caret's line only: drawn, the rule is a 1px line you can stand in and
-  // type into unseen (decision 42).
-  if (!w.reveal.lines.has(lineNumber)) {
-    w.decorations.push(ruleLine.range(w.doc.lineAt(node.from).from));
-  }
+  // A line decoration, always: the rule is drawn as a 1px line and is not a place the caret rests
+  // (42, 151), so nobody types into it unseen.
+  w.decorations.push(ruleLine.range(w.doc.lineAt(node.from).from));
   return;
 }
 
@@ -285,11 +259,7 @@ function blockLines(node: SyntaxNodeRef, w: Walk): void {
     // caret's line: a collapsed fence is a 10px strip that looks like a blank line and unbounds the block
     // when typed into (decisions 34, 42). Blank lines refuse the same treatment: they are crossed constantly.
     if (name === "FencedCode") {
-      if (w.reveal.lines.has(first)) {
-        w.decorations.push(fenceOpenRaw.range(w.doc.line(first).from));
-      } else {
-        w.decorations.push(fenceLine.range(w.doc.line(first).from));
-      }
+      w.decorations.push(fenceLine.range(w.doc.line(first).from));
       // Only when the last line *is* the closing fence. An unclosed block — `\`\`\`a` typed after
       // the closing one makes it a code line and unbounds the block — has code on its last line,
       // and collapsing that to a strip drew the text across the block's bottom edge (147).
@@ -297,13 +267,7 @@ function blockLines(node: SyntaxNodeRef, w: Walk): void {
       for (let child = node.node.firstChild; child; child = child.nextSibling) {
         if (child.name === "CodeMark" && w.doc.lineAt(child.from).number === last && last > first) closed = true;
       }
-      if (closed) {
-        if (w.reveal.lines.has(last)) {
-          w.decorations.push(fenceCloseRaw.range(w.doc.line(last).from));
-        } else {
-          w.decorations.push(fenceLine.range(w.doc.line(last).from));
-        }
-      }
+      if (closed) w.decorations.push(fenceLine.range(w.doc.line(last).from));
     }
     return;
   }
@@ -380,20 +344,10 @@ function escape(node: SyntaxNodeRef, w: Walk): void {
 }
 
 function taskMarker(node: SyntaxNodeRef, w: Walk): void {
-  const lineNumber = w.doc.lineAt(node.from).number;
-  const isActive = w.reveal.lines.has(lineNumber);
   // A numbered to-do keeps its number in the line's one marker slot and the box stands in the flow
-  // after it — both in the slot painted on top of each other (decision 135).
+  // after it — both in the slot painted on top of each other (decision 135). The box is drawn
+  // whether or not the caret is on the line (151).
   const inFlow = /^[ \t]*\d+[.)][ \t]/.test(w.doc.lineAt(node.from).text);
-  if (isActive) {
-    // The raw `[ ]` goes in the checkbox's box, as a revealed `-` or `1.` does; as literal text after
-    // it, it pushed the words 24px right (decision 122).
-    w.decorations.push((inFlow ? rawTaskMarkInFlow : rawTaskMark).range(node.from, node.to));
-    if (w.doc.sliceString(node.to, node.to + 1) === " ") {
-      w.decorations.push(hide.range(node.to, node.to + 1));
-    }
-    return;
-  }
   const text = w.doc.sliceString(node.from, node.to);
   const done = /x/i.test(text);
   w.decorations.push(
@@ -421,8 +375,6 @@ function taskMarker(node: SyntaxNodeRef, w: Walk): void {
 }
 
 function listMark(node: SyntaxNodeRef, w: Walk): void {
-  const lineNumber = w.doc.lineAt(node.from).number;
-  const isActive = w.reveal.lines.has(lineNumber);
   // The literal indentation in front of the marker goes with it — indent comes from `pane-line-li-N`,
   // and rendering the spaces too put level two a space-width right (108). Only where that span is
   // whitespace: on `1. 1. three` the inner marker's "indentation" is the outer marker, there is one
@@ -452,13 +404,10 @@ function listMark(node: SyntaxNodeRef, w: Walk): void {
     return;
   }
 
-  // The marker in its box and its space in the gap box, raw and rendered alike; the two are the
-  // same shape by construction, which is what keeps item ten from shifting on reveal (108, 122, 145).
+  // The marker in its box and its space in the gap box, whether or not the caret is on the line:
+  // block markers never show their source (151), so nothing can shift when the caret arrives.
   const spacesEnd = w.spacesAfter(node.to);
-  if (isActive) {
-    w.decorations.push(rawListMark.range(node.from, node.to));
-    if (spacesEnd > node.to) w.decorations.push(rawListGap.range(node.to, spacesEnd));
-  } else if (ordered) {
+  if (ordered) {
     // Its own class: a rendered number is content the reader sees, not muted syntax.
     w.decorations.push(numberMark.range(node.from, node.to));
     if (spacesEnd > node.to) w.decorations.push(numberGap.range(node.to, spacesEnd));
@@ -476,8 +425,6 @@ function listMark(node: SyntaxNodeRef, w: Walk): void {
 
 function marker(node: SyntaxNodeRef, w: Walk): void {
   const name = node.name;
-  const lineNumber = w.doc.lineAt(node.from).number;
-  const isActive = w.reveal.lines.has(lineNumber);
   const parentName = node.node.parent?.name;
   const insideImage = parentName === "Image";
   // An image hides none of itself, for the reason above: it is markdown Pane does not
@@ -489,12 +436,11 @@ function marker(node: SyntaxNodeRef, w: Walk): void {
   if (name === "URL" && parentName !== "Link") return;
 
   // A mark follows whatever it belongs to. Inside an inline construct that is the construct
-  // — the `**` appear with the caret and stay hidden while it is elsewhere on the line. A
-  // block's marks — a heading's hashes, a quote's `>`, a fence and its language — keep the
-  // line rule, because they sit at the start of the line rather than inside the sentence,
-  // and they are how you change what kind of block you are standing in.
+  // — the `**` appear with the caret and stay hidden while it is elsewhere on the line (57). A
+  // block's marks — a heading's hashes, a quote's `>`, a fence and its language — are never
+  // shown (151): the block is changed with the keys and the bar, not by editing its marks.
   const owner = w.inlineRanges.find((r) => r.from <= node.from && r.to >= node.to);
-  if (owner ? owner.revealed : isActive) {
+  if (owner ? owner.revealed : false) {
     // Revealed, but muted, so the line reads as text rather than as punctuation.
     w.decorations.push(syntaxMark.range(node.from, node.to));
   } else if (node.to > node.from) {

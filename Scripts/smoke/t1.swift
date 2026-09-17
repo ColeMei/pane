@@ -93,6 +93,7 @@ enum K {
     static let left: CGKeyCode = 123, right: CGKeyCode = 124, down: CGKeyCode = 125, up: CGKeyCode = 126
     static let a: CGKeyCode = 0, b: CGKeyCode = 11, n: CGKeyCode = 45, p: CGKeyCode = 35, k: CGKeyCode = 40
     static let x: CGKeyCode = 7, z: CGKeyCode = 6, space: CGKeyCode = 49
+    static let c: CGKeyCode = 8, seven: CGKeyCode = 26, eight: CGKeyCode = 28
 }
 
 func hotkey() { key(K.space, hotkeyFlags) }
@@ -412,6 +413,30 @@ func itemMarkerOnlyThenType() {
     }
 }
 
+/// Decision 151: block markers never show, so the keys are the only way off a block. And 150: the
+/// quote is the container whichever button came first. Both read off the file.
+func itemBlocks() {
+    let item = "blocks"
+    if let name = freshNote(item) {
+        type("\n\n"); key(K.c, [.maskCommand, .maskAlternate]); settle()
+        check(item, "⌥⌘C opens an empty code block (151)", (read(name) ?? "").hasSuffix("```\n\n```\n"), (read(name) ?? "").split(separator: "\n").suffix(3).joined(separator: "⏎"))
+        key(K.delete); settle()
+        check(item, "…and ⌫ inside it takes the whole block (151)", !(read(name) ?? "").contains("```"), (read(name) ?? "").debugDescription)
+    }
+    if let name = freshNote(item) {
+        type("\n\n# Title"); key(K.left); key(K.left); key(K.left); key(K.left); key(K.left); key(K.delete); settle()
+        check(item, "⌫ at a heading's text start makes it a paragraph (151)", (read(name) ?? "").hasSuffix("\nTitle\n"), (read(name) ?? "").split(separator: "\n").last.map(String.init) ?? "")
+    }
+    if let name = freshNote(item) {
+        type("\n\n"); key(K.b, [.maskCommand, .maskShift]); sleepMs(300); key(K.seven, [.maskCommand, .maskShift]); sleepMs(300); type("a"); settle()
+        check(item, "Quote then Numbered writes the list inside the quote (150)", (read(name) ?? "").hasSuffix("> 1. a\n"), (read(name) ?? "").split(separator: "\n").last.map(String.init) ?? "")
+    }
+    if let name = freshNote(item) {
+        type("\n\n"); key(K.seven, [.maskCommand, .maskShift]); sleepMs(300); key(K.b, [.maskCommand, .maskShift]); sleepMs(300); key(K.eight, [.maskCommand, .maskShift]); sleepMs(300); type("b"); settle()
+        check(item, "…and Numbered, Quote, Bulleted the same (150)", (read(name) ?? "").hasSuffix("> - b\n"), (read(name) ?? "").split(separator: "\n").last.map(String.init) ?? "")
+    }
+}
+
 func itemDeleteIntoRecentlyDeleted() {
     let item = "ctrlx"
     guard let name = freshNote(item, body: "settled body") else { return check(item, "the note appeared", false) }
@@ -454,6 +479,7 @@ let items: [(String, () -> Void)] = [
     ("fence", itemFenceClose),
     ("softbreak", itemShiftEnterNested),
     ("markeronly", itemMarkerOnlyThenType),
+    ("blocks", itemBlocks),
     ("ctrlx", itemDeleteIntoRecentlyDeleted),
     ("bold", itemBoldWritesMarkers),
 ]

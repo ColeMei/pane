@@ -45,6 +45,18 @@ export const cases: Case[] = [
   { name: "…for a task item too", doc: "- [ ] |task", want: "|task" },
   { name: "…for a numbered item", doc: "1. |one", want: "|one" },
   { name: "not at the text start: nothing", doc: "- o|ne", want: FALLTHROUGH },
+
+  // 5–8. The ways off a heading, a code block and a rule, now that their marks never show (151)
+  { name: "⌫ at a heading's text start makes it a paragraph", doc: "## |Title", want: "|Title" },
+  { name: "…and at the text start of an empty heading", doc: "# |", want: "|" },
+  { name: "⌫ inside a heading's text is one character", doc: "# Ti|tle", want: FALLTHROUGH },
+  { name: "⌫ at the start of an empty code block removes the block", doc: "a\n```\n|\n```\nb", want: "a\n|\nb" },
+  { name: "…with a language too", doc: "```python\n|\n```", want: "|" },
+  { name: "⌫ at the start of a block's first line of code, with code, does nothing", doc: "```\n|code\n```", want: "```\n|code\n```" },
+  { name: "…and on its second line it is one character", doc: "```\ncode\n|more\n```", want: FALLTHROUGH },
+  { name: "⌫ at the start of the line after a block steps into its last line of code", doc: "```\ncode\n```\n|after", want: "```\ncode|\n```\nafter" },
+  { name: "…and after a block with nothing inside, nothing", doc: "```\n```\n|after", want: "```\n```\n|after" },
+  { name: "⌫ at the start of the line after a rule takes the rule", doc: "a\n\n---\n|b", want: "a\n\n|b" },
   { name: "at the marker itself: nothing", doc: "- |", want: "-|" },
 
   // 4. A typed marker loses one character (109)

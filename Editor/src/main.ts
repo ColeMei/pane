@@ -24,6 +24,7 @@ import {
 } from "@codemirror/lang-markdown";
 import { html } from "@codemirror/lang-html";
 import { syntaxTree } from "@codemirror/language";
+import type { SyntaxNode } from "@lezer/common";
 import {
   Compartment,
   EditorSelection,
@@ -48,6 +49,8 @@ import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
 import { backspace } from "./keyboard/backspace";
 import { arrowDown, arrowUp } from "./keyboard/arrows";
+import { deleteForward } from "./keyboard/delete";
+import { caretPlaces } from "./caret";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { shiftTab, tab } from "./keyboard/tab";
@@ -411,16 +414,25 @@ function selectBlockThenAll(view: EditorView): boolean {
   const range = state.selection.main;
   if (range.from === 0 && range.to === state.doc.length) return false;
 
-  let node = syntaxTree(state).resolveInner(range.head, -1);
-  while (node.parent && !SELECTABLE_BLOCKS.has(node.name)) node = node.parent;
-  if (!SELECTABLE_BLOCKS.has(node.name)) return false;
+  // The smallest selectable block that **strictly contains** the selection, so a second press steps
+  // *out* — paragraph, then the quote around it, then the note. Taking the innermost block at the
+  // head instead sent the second press back *in*: ⌘A on a quoted note selected the quote, and ⌘A
+  // again the last paragraph inside it, because the head had moved to the quote's end (decision 65,
+  // amended 151). Both biases, because at a line start the node to the left is the block above.
+  let best: SyntaxNode | null = null;
+  for (const bias of [-1, 1] as const) {
+    for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(range.head, bias); node; node = node.parent) {
+      if (!SELECTABLE_BLOCKS.has(node.name)) continue;
+      // A list item's own range, not the paragraph inside it — see SELECTABLE_BLOCKS.
+      const block = node.parent?.name === "ListItem" ? node.parent : node;
+      if (block.from > range.from || block.to < range.to) continue;
+      if (block.from === range.from && block.to === range.to) continue;
+      if (!best || block.to - block.from < best.to - best.from) best = block;
+    }
+  }
+  if (!best) return false;
 
-  // A list item's own range, not the paragraph inside it — see SELECTABLE_BLOCKS.
-  if (node.parent?.name === "ListItem") node = node.parent;
-
-  if (range.from === node.from && range.to === node.to) return false;
-
-  view.dispatch({ selection: EditorSelection.range(node.from, node.to) });
+  view.dispatch({ selection: EditorSelection.range(best.from, best.to) });
   return true;
 }
 
@@ -550,6 +562,9 @@ function baseExtensions(): Extension[] {
     closeBrackets(),
 
     livePreview((target) => send({ type: "openLink", target })),
+    // Where the caret may rest: past every block marker, never on a break, a fence line or a
+    // rule — one filter for every way a caret arrives (146, 151).
+    caretPlaces(),
     findHighlighting(),
     // Ordered lists count themselves. A filter that writes to the document, so it declares the
     // transactions it is *for* rather than the ones it is against — see the file's own note, and
@@ -575,9 +590,11 @@ function baseExtensions(): Extension[] {
         { key: "Shift-Enter", run: shiftEnterKey },
         { key: "Enter", run: enterKey },
         { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
-        // ↑ and ↓ step over the paragraph break, which is not a place (146).
+        // ↑ and ↓ step over every line that is not a place, keeping their column (146, 151).
         { key: "ArrowUp", run: arrowUp },
         { key: "ArrowDown", run: arrowDown },
+        // ⌦ cannot pull a fence or a rule up into the line above (151).
+        { key: "Delete", run: keyCommand(deleteForward) },
         { key: "Mod-a", run: selectBlockThenAll },
       ])
     ),

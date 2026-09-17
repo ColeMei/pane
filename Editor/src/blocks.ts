@@ -118,6 +118,96 @@ export function containerPrefixOf(text: string): number {
   return /^[ \t]*(?:>[ \t]*)*/.exec(text)![0].length;
 }
 
+/**
+ * A fenced block's own lines: where its opening fence is, where its closing fence is, and whether
+ * it has one. **Not `node.to`**, which runs past the closing fence — to the blank line after it,
+ * or to the end of the note when the block is unclosed — so every "is this the last line" test
+ * written against it was false (151, and the same trap in 147).
+ */
+export function fencesOf(state: EditorState, node: SyntaxNode): { first: number; last: number; closed: boolean } {
+  const doc = state.doc;
+  const first = doc.lineAt(node.from).number;
+  let last = first;
+  let closed = false;
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.name !== "CodeMark") continue;
+    const line = doc.lineAt(child.from).number;
+    if (line > first) { last = line; closed = true; }
+  }
+  if (!closed) {
+    // Runs to the end of the note; its last line of code is the last line with anything on it.
+    last = doc.lineAt(Math.min(node.to, doc.length)).number;
+    while (last > first && doc.line(last).text.trim() === "") last--;
+  }
+  return { first, last, closed };
+}
+
+/** The fenced block containing `pos`, or null. */
+export function fencedBlockAt(state: EditorState, pos: number, side: -1 | 1 = -1): SyntaxNode | null {
+  let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, side);
+  while (node && node.name !== "FencedCode") node = node.parent;
+  return node;
+}
+
+/**
+ * A line that is nothing but a hidden block mark: a fence — the first line of a fenced block, or
+ * its last when closed — a rule, or a setext heading's underline.
+ */
+export function fenceOrRuleLine(state: EditorState, n: number): boolean {
+  const line = state.doc.line(n);
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from, 1); node; node = node.parent) {
+    if (node.name === "HorizontalRule") return true;
+    if (node.name === "HeaderMark" && node.from === line.from && node.to === line.to) return true;
+    if (node.name === "FencedCode") {
+      for (let child = node.firstChild; child; child = child.nextSibling) {
+        if (child.name === "CodeMark" && state.doc.lineAt(child.from).number === n) return true;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * A line the caret does not rest on: the paragraph break (146), a fence line or a rule (151). Block
+ * markers are never drawn as characters, so a fence line is an 8px strip and a rule a 1px line —
+ * neither is a place, and typing into either unbounds the block or breaks the rule.
+ */
+export function notAPlace(state: EditorState, n: number): boolean {
+  return paragraphBreakLine(state, n) || fenceOrRuleLine(state, n);
+}
+
+/**
+ * The end of the marker span at the head of line `n`: the indent, then every block mark the tree
+ * puts at the line's start — quote marks, a list marker and its task box, a heading's hashes — with
+ * the spaces after each. The caret rests at or after it (151): nothing in the span is drawn as
+ * characters. A marker the tree does not know — `1. ` under a paragraph, an escaped `1\.` — is
+ * text, and the span ends at the indent.
+ */
+export function markerSpanEnd(state: EditorState, n: number): number {
+  const doc = state.doc;
+  const line = doc.line(n);
+  let end = line.from + /^[ \t]*/.exec(line.text)![0].length;
+  const marks: { from: number; to: number }[] = [];
+  syntaxTree(state).iterate({
+    from: line.from,
+    to: line.to,
+    enter(node) {
+      if (node.from > end + 0 && node.from > line.to) return false;
+      if (node.name === "QuoteMark" || node.name === "ListMark" || node.name === "TaskMarker") marks.push({ from: node.from, to: node.to });
+      if (node.name === "HeaderMark" && node.from === end) marks.push({ from: node.from, to: node.to });
+      return true;
+    },
+  });
+  marks.sort((a, b) => a.from - b.from);
+  for (const mark of marks) {
+    if (mark.from !== end) break;
+    end = mark.to;
+    while (end < line.to && /[ \t]/.test(doc.sliceString(end, end + 1))) end++;
+  }
+  return end;
+}
+
 /** Where a line's own text starts: past its indent, quote marks and list marker. */
 export function lineTextStart(state: EditorState, n: number): number {
   const line = state.doc.line(n);

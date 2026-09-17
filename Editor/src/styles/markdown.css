@@ -374,7 +374,7 @@
 .pane-list-marker,
 .pane-list-number {
   display: inline-block;
-  /* `min-width`, never `width` — see `.pane-syntax-listmark` for what a fixed width did to typing.
+  /* `min-width`, never `width` — a fixed width once turned `- ` + `a` into `-a` (decision 122).
    * These boxes hold a number that is real document text, so they take the same treatment even
    * though the caret is never in one (a caret on the line reveals the raw marker instead). */
   min-width: var(--list-marker-box);
@@ -433,7 +433,7 @@
 /* **And `user-select` only works for two of those three.** The bullet and the checkbox are widgets —
  * `contenteditable="false"`, empty text, a `cm-widgetBuffer` either side — so the property does what
  * it says. A rendered number is not a widget: it is a mark over the document's own `1. `, kept as
- * real text on purpose (see `.pane-list-number` above, and `.pane-syntax-listmark` for what a box
+ * real text on purpose (see `.pane-list-number` above, and decision 122 for what a box
  * without it did to typing), and WebKit ignores `user-select: none` for live text inside a
  * contenteditable. So the rule above read as covering all three and covered two, from the day it
  * landed: measured on the shipped build, a selected number painted a 20pt box against the text's
@@ -446,61 +446,13 @@
   background-color: transparent !important;
 }
 
-/* A revealed task marker: fixed width, because it carries no trailing space to strand and `[x]`
- * is wider than the box, so `min-width` would grow it and push the item's words 3px right on
- * reveal. `nowrap` so it overflows into the gap instead of breaking in two. */
-.pane-syntax-taskmark {
-  display: inline-block;
-  width: var(--list-marker-box);
-  white-space: nowrap;
-  text-align: center;
-  margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
-  margin-right: var(--list-marker-gap);
-}
-
-/* The same, revealed, inside a **numbered** item — see `.pane-task.pane-task--inflow`. No pull,
- * and a right margin derived so the advance matches the rendered box's: the checkbox is
- * `--checkbox-size` wide plus a gap, this one is `--list-marker-box` wide, so the difference is
- * what it owes. Written as a sum rather than as a number, decision 82, or the next change to
- * either box moves the item's words on reveal.
- *
- * **Two classes deep on purpose.** A single-class rule here would tie with `.pane-syntax-taskmark`
- * above and be decided by source order, which is decision 71's trap and has now cost this codebase
- * four separate bugs. */
-.pane-syntax-taskmark.pane-syntax-taskmark--inflow {
-  margin-left: 0;
-  margin-right: calc(
-    var(--checkbox-size) + var(--list-marker-gap) - var(--list-marker-box)
-  );
-}
-
-/* A revealed list marker sits in the same box the rendered one does, or the line jumps 16px right
- * the moment the caret arrives on it — see `rawListMark` in live-preview.ts.
- *
- * **`min-width`, never `width`, and this one cost a typing bug.** This box holds real document
- * text ending in the marker's own space, and a fixed-width `inline-block` is a block container:
- * that space lands in the box's slack, where WebKit will not place a caret after it. So a caret
- * CodeMirror had put at the end of `- ` resolved to the position *before* the space, and the next
- * character typed went between the hyphen and its space — turning a new list item into `-a`, which
- * is not a list item at all and draws as a continuation of the item above. Measured against both
- * builds by typing into them: `min-width` gives `- a`, `width` gives `-a`. Nothing in the DOM
- * differs, and no suite here can see it — they insert through CodeMirror, and this is WebKit's own
- * insertion into contenteditable. */
-.pane-syntax-listmark {
-  display: inline-block;
-  min-width: var(--list-marker-box);
-  text-align: center;
-  margin-left: calc(-1 * (var(--list-marker-box) + var(--list-marker-gap)));
-}
-
-/* The marker's own space, in a box the gap wide with the space at its right edge — decision 145.
+/* A number's own space, in a box the gap wide with the space at its right edge — decision 145.
  *
  * The gap used to be the marker box's right margin, with the space inside the box. A caret after
  * that space is drawn at the space's right edge, so on a line holding only `1. ` it waited 8px
  * left of where the first character then landed; measured 39.3 against 47.5, and 37.4 for `- `.
  * Right-aligned in a box the gap wide, the space ends exactly where the text starts. `min-width`
  * so three spaces after a marker still paint rather than overflow into the text. */
-.pane-syntax-listgap,
 .pane-list-gap {
   display: inline-block;
   min-width: var(--list-marker-gap);
@@ -542,11 +494,6 @@
       + 3 * var(--list-step)
   );
 }
-
-/* The padding a collapsed fence was standing in for — see `fenceOpenRaw` in live-preview.ts. Only
- * while the fence is showing its backticks; the rest of the time the 8px fence line *is* this. */
-.cm-line.pane-line-fence-open-raw { padding-top: var(--blank-line-height); }
-.cm-line.pane-line-fence-close-raw { padding-bottom: var(--blank-line-height); }
 
 .cm-line.pane-line-code {
   font-family: var(--font-mono);

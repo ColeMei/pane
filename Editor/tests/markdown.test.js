@@ -793,13 +793,13 @@ export function runListStructure(view, doc) {
   r.check("and its box is still in the marker slot", true,
     rect(1, ".pane-task").left < rect(2, ".pane-task").left);
 
-  // --- the raw source under the caret ------------------------------------------------------------
+  // --- the caret's line looks like every other (151) ---------------------------------------------
 
   d.load(BULLETS);
   d.at("three", 1);
-  r.check("the caret's own marker goes raw", "raw:- ", i.marker(3));
-  r.check("but the line above keeps its glyph", "◦", i.marker(2));
-  r.check("a revealed marker does not reveal the indent as well", "- three", i.visibleText(3));
+  r.check("the caret's own marker stays rendered (151)", "▪", i.marker(3));
+  r.check("and the line above keeps its glyph", "◦", i.marker(2));
+  r.check("the caret's line shows no marker and no indent as text", "three", i.visibleText(3));
 
   // --- what a flat document must not look like -----------------------------------------------------
   //
@@ -971,24 +971,20 @@ export function runListGeometry(view, doc) {
       `marker ${ink.middle} against text ${i.textMiddle(1)}`);
   }
 
-  // The raw list-marker box must never declare a fixed `width` — decision 122, and this is a
-  // guard on a rule rather than on behaviour because the fault is not reachable from here.
-  //
-  // That box holds real document text ending in the marker's space. Given a fixed width the space
-  // lands in the box's own slack, WebKit refuses to place a caret after it, and the next character
-  // typed goes *in front of* it: a new `- ` item becomes `-a`, which is not a list item at all.
-  // Nothing about the DOM looks different, and this suite cannot see it either — it inserts text
-  // through CodeMirror, while the fault is in WebKit's own insertion into contenteditable. It was
-  // found by typing into the built app and comparing against the previous build. So what is pinned
-  // is the declaration, which is the thing that has to stay true.
-  const listmarkRule = [...doc.styleSheets]
+  // The rendered marker box must never declare a fixed `width` — decision 122, and this is a guard
+  // on a rule rather than on behaviour because the fault is not reachable from here: given a fixed
+  // width the space in the box lands in its slack, WebKit refuses to place a caret after it, and the
+  // next character typed goes in front of it, turning `- ` + `a` into `-a`. Found by typing into the
+  // built app. The raw marker box this first guarded is gone with decision 151, so the guard moves
+  // to the rendered one, which now holds the caret's line too.
+  const numberRule = [...doc.styleSheets]
     .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
-    .find((rule) => rule.selectorText === ".pane-syntax-listmark");
-  r.check("the raw list-marker box is declared", true, !!listmarkRule);
-  r.check("the raw list-marker box sets no fixed width",
-    "", listmarkRule ? listmarkRule.style.getPropertyValue("width") : "?");
-  r.check("the raw list-marker box sets a min-width instead",
-    true, !!listmarkRule && listmarkRule.style.getPropertyValue("min-width") !== "");
+    .find((rule) => (rule.selectorText ?? "").replace(/\s+/g, " ") === ".pane-list-marker, .pane-list-number");
+  r.check("the rendered marker box is declared", true, !!numberRule);
+  r.check("the rendered marker box sets no fixed width",
+    "", numberRule ? numberRule.style.getPropertyValue("width") : "?");
+  r.check("the rendered marker box sets a min-width instead",
+    true, !!numberRule && numberRule.style.getPropertyValue("min-width") !== "");
 
   // Every kind puts its text in the same place, or a list that mixes kinds looks ragged.
   const textEdgeOf = (text) => {
@@ -1160,6 +1156,36 @@ export function runBlockEdges(view, doc) {
   d.reset(); d.type("ab"); key("b", { metaKey: true });
   r.check("mid-line the empty pair still goes in at once", "ab****", d.text(), "ab ⌘B");
   r.check("…caret between the markers", 4, head(), "ab ⌘B");
+
+  // 151: a block marker never shows its source, so the caret's line is drawn like every other. The
+  // no-jump sweep measures that nothing *moves*; this reads what is actually drawn.
+  const DRAWN = [
+    ["a bullet", "- item word", "•"],
+    ["a nested bullet", "- a\n  - item word", "◦"],
+    ["a numbered item", "1. item word", "1."],
+    ["a task", "- [ ] item word", "[ ]"],
+    ["a done task", "- [x] item word", "[x]"],
+    ["a quoted bullet", "> - item word", "•"],
+  ];
+  for (const [name, text, drawn] of DRAWN) {
+    d.load(`${text}\n\nPARA\n`);
+    const n = text.split("\n").length;
+    d.at("PARA");
+    r.check(`${name}: drawn with the caret away`, drawn, i.marker(n));
+    d.at("word");
+    r.check(`${name}: still drawn with the caret on it (151)`, drawn, i.marker(n));
+  }
+  d.load("# Title\n\n> quoted\n\nPARA\n");
+  d.at("Title");
+  r.check("a heading's hashes never show (151)", "Title", i.visibleText(1));
+  d.at("quoted");
+  r.check("a quote's `>` never shows (151)", "quoted", i.visibleText(3));
+  d.load("```js\ncode\n```\n\nPARA\n");
+  d.at("PARA");
+  const strip = i.height(1);
+  d.at("code");
+  r.check("a fence stays a strip with the caret in the block (151)", strip, i.height(1));
+  r.check("…and its language never shows", "code", i.visibleText(2));
 
   return { checked: r.checked, failures: r.failures };
 }
@@ -1710,7 +1736,7 @@ export function runSelectionReveal(view, doc) {
 
   d.load(NOTE);
   d.at("numbered");
-  r.check("a caret still reveals its marker", "raw:1. ", i.marker(7));
+  r.check("a caret keeps its marker rendered (151)", "1.", i.marker(7));
 
   // --- and nothing moves when the reveal drops ---------------------------------------------------
 

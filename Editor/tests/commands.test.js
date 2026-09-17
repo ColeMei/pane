@@ -389,15 +389,17 @@ export function runLayout(view, doc) {
       Math.abs(near - away) <= (kind === "task" ? 1 : 0));
   }
 
-  // A revealed fence keeps the padding the collapsed strip was standing in for.
+  // A fence never reveals (151): the caret inside the block leaves the fence line the strip it is,
+  // and the caret cannot be put on the fence line at all — it lands on the code below.
   put(1, 0);
   const strip = Math.round(lineEl(8).getBoundingClientRect().height);
+  put(9, 2);
+  check("a fence stays a strip with the caret inside its block (151)", strip,
+    Math.round(lineEl(8).getBoundingClientRect().height));
+  put(1, 0);
   put(8, 2);
-  const padding = Math.round(parseFloat(getComputedStyle(lineEl(8)).paddingTop));
-  check("a revealed fence gets the collapsed strip's height back as padding", strip, padding);
-
-  // And its text starts where the code below it does, rather than in its own gutter.
-  check("the fence lines up with its own code", markerX(9), markerX(8));
+  check("a caret put on the fence line, coming from above, lands on the code below it (151)", 9,
+    view.state.doc.lineAt(view.state.selection.main.head).number);
 
   // The caret's blank line opens only when the caret got there by **typing** (decision 44's actual
   // argument), not when it was clicked or arrowed onto — where growing 8px to 20px under the
@@ -813,6 +815,10 @@ export function runListKinds(view, doc, bar) {
 
   const viaKey = (name, start, keys, want) => {
     set(start);
+    // From the top, explicitly: `set` leaves the caret wherever the previous case put it, and ⌘A
+    // steps out from where it stands (65, 151), so without this a case selected whatever block the
+    // last one happened to end in.
+    view.dispatch({ selection: { anchor: 0 } });
     selectAll();
     selectAll();
     for (const k of keys) key(k);
@@ -878,36 +884,38 @@ export function runListKinds(view, doc, bar) {
     }
   };
 
-  // The plain case: a blank line with nothing either side of it that needs separating.
-  onBlankLine("a bullet starts on an empty line", "- x\n\n", 2, "Bulleted list",
-    "- x\n- \n", 6);
-  onBlankLine("a task starts on an empty line", "- x\n\n", 2, "Task list",
-    "- x\n- [ ] \n", 10);
-  onBlankLine("a quote starts on an empty line", "- x\n\n", 2, "Quote",
-    "- x\n> \n", 6);
+  // The plain case: the empty line ⏎ ⏎ left the caret on under a list, with the break above it.
+  // The break itself is not a place the caret can be (146), so every case here starts from a line
+  // that is one: the last line of the note, or the second of two blank lines.
+  onBlankLine("a bullet starts on an empty line", "- x\n\n", 3, "Bulleted list",
+    "- x\n\n- ", 7);
+  onBlankLine("a task starts on an empty line", "- x\n\n", 3, "Task list",
+    "- x\n\n- [ ] ", 11);
+  onBlankLine("a quote starts on an empty line", "- x\n\n", 3, "Quote",
+    "- x\n\n> ", 7);
   // A numbered marker on its own under a bullet item takes a blank line: an empty item cannot
   // interrupt the paragraph inside the item above, so `- x\n1. ` is a lazy continuation to this
   // parser and draws as literal text at the item's text column. Measured, not reasoned.
-  onBlankLine("and a numbered item takes a blank line off the list above it", "- x\n\n", 2,
-    "Numbered list", "- x\n\n1. \n", 8);
+  onBlankLine("and a numbered item takes a blank line off the list above it", "- x\n", 2,
+    "Numbered list", "- x\n\n1. ", 8);
 
   // The number is the whole point of the button that writes it, and there is no block to read it
   // off — so the count comes from the caret's own line. Anchored on `blocks[0]` this wrote `1.`
   // under a list that had reached two.
-  onBlankLine("a numbered item continues the list above it", "1. a\n2. b\n\n", 3,
-    "Numbered list", "1. a\n2. b\n3. \n", 13);
-  onBlankLine("and starts at one where there is no list above it", "> q\n\n", 2,
-    "Numbered list", "> q\n\n1. \n", 8);
+  onBlankLine("a numbered item continues the list above it", "1. a\n2. b\n\n", 4,
+    "Numbered list", "1. a\n2. b\n\n3. ", 14);
+  onBlankLine("and starts at one where there is no list above it", "> q\n\n", 3,
+    "Numbered list", "> q\n\n1. ", 8);
 
   // A paragraph above takes a blank line, or the `-` underlines it into a heading.
-  onBlankLine("a paragraph above is separated from the marker", "a\n\n", 2, "Bulleted list",
-    "a\n\n- \n", 5);
+  onBlankLine("a paragraph above is separated from the marker", "a\n", 2, "Bulleted list",
+    "a\n\n- ", 5);
   // And one below takes a blank line, because the item swallows it once it has text in it.
-  onBlankLine("and so is one below", "a\n\nb\n", 2, "Bulleted list",
+  onBlankLine("and so is one below", "a\n\n\nb\n", 3, "Bulleted list",
     "a\n\n- \n\nb\n", 5);
   // Nothing is added where the neighbour closes itself.
-  onBlankLine("a heading needs no separating", "# h\n\n", 2, "Bulleted list",
-    "# h\n- \n", 6);
+  onBlankLine("a heading needs no separating", "# h\n", 2, "Bulleted list",
+    "# h\n- ", 6);
 
   // Pressing it again takes it off: a marker-only line **is** a block, so this goes back through
   // the ordinary toggle rather than through anything new.
@@ -976,9 +984,9 @@ export function runListKinds(view, doc, bar) {
   // From the keyboard as well, for the reason the block above this one exists: the bar's buttons
   // and ⇧⌘7/8/9 were two implementations of one command, and the matrix only ever pressed buttons.
   set("- x\n\n");
-  view.dispatch({ selection: { anchor: view.state.doc.line(2).from } });
+  view.dispatch({ selection: { anchor: view.state.doc.line(3).from } });
   key("7");
-  check("⇧⌘7 starts a numbered item on an empty line", "- x\n\n1. \n");
+  check("⇧⌘7 starts a numbered item on an empty line", "- x\n\n1. ");
 
   // The pressed state, which is what made the corruption visible. A task is a bullet in the tree,
   // so Bulleted lit alongside Task on every checkbox before this.

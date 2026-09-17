@@ -16,6 +16,7 @@ import type { SyntaxNode } from "@lezer/common";
 import type { LineContext } from "./context";
 import { delegateWhen, FENCE_OPENING, keyCommand } from "./context";
 import { chain, rows, type KeyEdit } from "./edit";
+import { fencesOf } from "../blocks";
 import { continueMarkup, exitEmptyBlockquote, exitListToParagraph } from "./enter";
 
 const INPUT = "input";
@@ -38,14 +39,12 @@ export function escapeCodeBlock(ctx: LineContext): KeyEdit | null {
   if (!block) return null;
 
   const first = doc.lineAt(block.from);
-  let last = doc.lineAt(Math.min(block.to, ctx.docLength));
-  let closed = block.name === "CodeBlock";
-  for (let child = block.firstChild; child; child = child.nextSibling) {
-    if (child.name === "CodeMark" && doc.lineAt(child.from).number > first.number) closed = true;
-  }
+  // An indented block has no fences and needs none; a fenced one is asked (`fencesOf`, not
+  // `node.to`, which runs past the closing fence).
+  const closed = block.name === "CodeBlock" || fencesOf(ctx.state, block).closed;
   // An unclosed block runs to the end of the note and has swallowed whatever was below the caret;
   // the closing fence goes under the caret's own line, and what follows is prose again.
-  if (!closed) last = doc.line(ctx.line.number);
+  const last = closed ? doc.lineAt(Math.min(block.to, ctx.docLength)) : doc.line(ctx.line.number);
 
   const fence = closed ? "" : `\n${FENCE_OPENING.exec(first.text)?.[1] ?? "\`\`\`"}`;
   const below = last.number < ctx.docLines ? doc.line(last.number + 1) : null;

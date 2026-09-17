@@ -20,7 +20,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 import { buildDecorations } from "./decorate";
-import { lineTextStart, paragraphBreakLine } from "./blocks";
+import { markerSpanEnd, notAPlace } from "./blocks";
 import { arrivedByEditAfter, revealPolicy } from "./reveal";
 import type { SyntaxNode } from "@lezer/common";
 import {
@@ -116,12 +116,17 @@ const blankLineClickHandler = EditorView.domEventHandlers({
 
     const doc = view.state.doc;
     const line = doc.lineAt(pos);
-    if (!paragraphBreakLine(view.state, line.number)) return false;
+    if (!notAPlace(view.state, line.number)) return false;
 
-    // `lineBlockAt` is document-relative; `documentTop` puts it in the event's coordinates.
+    // `lineBlockAt` is document-relative; `documentTop` puts it in the event's coordinates. The
+    // neighbours are the nearest *places* either side: a fence line's are the line above the block
+    // and its first line of code (151).
     const block = view.lineBlockAt(line.from);
     const above = event.clientY < view.documentTop + block.top + block.height / 2;
-    const target = above ? doc.line(line.number - 1).to : lineTextStart(view.state, line.number + 1);
+    let n = line.number;
+    do n += above ? -1 : 1; while (n >= 1 && n <= doc.lines && notAPlace(view.state, n));
+    if (n < 1 || n > doc.lines) return false;
+    const target = above ? doc.line(n).to : markerSpanEnd(view.state, n);
     view.dispatch({ selection: { anchor: target }, userEvent: "select.pointer", scrollIntoView: true });
     event.preventDefault();
     return true;
