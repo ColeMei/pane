@@ -876,6 +876,26 @@ export function runListGeometry(view, doc) {
       23.5, texts[level - 1] - markers[level - 1]);
   }
 
+  // Decision 154: a line is indented to the level of the marker it draws. A second marker on the
+  // same line is not indentation — the outer one keeps the single marker slot (135) and the inner
+  // stays literal text — so the line must not take the inner item's depth. Reported as the line
+  // "shifting right a little bit" when a `*` follows `1. `, which is what a half-deleted `**`
+  // leaves behind: the number moved with it, and nothing on screen said why.
+  //
+  // Measured against the same line without the second marker, so the case is about *movement*
+  // rather than about a pixel constant.
+  d.load("1. a\n\npara\n"); d.at("para");
+  const plainItem = { marker: i.leftEdge(1), depth: i.renderedDepth(1) };
+  for (const text of ["1. *", "1. -", "1. * b", "1. 1. three", "- *", "- -"]) {
+    d.load(`${text}\n\npara\n`); d.at("para");
+    r.check(`\`${text}\`: the line does not move`, plainItem.marker, i.leftEdge(1), text);
+    r.check(`\`${text}\`: …and is one level deep, not two`, plainItem.depth, i.renderedDepth(1), `${text}: ${i.depthClasses(1)}`);
+  }
+  // …while a marker that *does* own its line still indents, which is the case this must not break.
+  d.load("- a\n  - b\n\npara\n"); d.at("para");
+  r.check("a real nested item still steps in by one level", 2, i.renderedDepth(2));
+  r.check("…by the same 22px", 22, i.leftEdge(2) - i.leftEdge(1));
+
   // A list line's marker is where a paragraph's text is, plus the level's indent. The first level is
   // the one the typography pass found pushed 12pt too far right, so it is worth its own case.
   // Measured from the text column's own origin, which is the only origin these numbers are about.

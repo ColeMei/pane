@@ -293,7 +293,28 @@ function blockLines(node: SyntaxNodeRef, w: Walk): void {
   }
 }
 
+/**
+ * Does the mark at `from` own its line's one marker slot?
+ *
+ * A line has one marker slot and the outermost marker keeps it (135, 121): on `1. * b` the inner
+ * `*` is not indentation, it is a second marker on the same line, and everything in front of it is
+ * the nesting above. Only indent and quote marks may sit before the mark that owns the slot — a
+ * quote is a container rather than a kind (100), and its `>` is hidden by `QuoteMark` anyway.
+ */
+function ownsMarkerSlot(w: Walk, from: number): boolean {
+  const line = w.doc.lineAt(from);
+  return from === line.from || /^[ \t>]*$/.test(w.doc.sliceString(line.from, from));
+}
+
 function listItem(node: SyntaxNodeRef, w: Walk): void {
+  // **A line is indented to the level of the marker it draws** — decision 154. An item whose marker
+  // starts mid-line does not get the slot, so `listMark` leaves that marker as literal text; taking
+  // its depth as well stamped a second `pane-line-li-N` on the line and, deepest winning, moved the
+  // whole line — the outer marker included — a step right with nothing on screen to explain it.
+  // `1. *` is that shape, and it is what a half-deleted `**` leaves behind.
+  const mark = node.node.firstChild;
+  if (mark && mark.name === "ListMark" && !ownsMarkerSlot(w, mark.from)) return;
+
   const depth = Math.min(listDepth(w.view, node.from), 4);
   // ONLY the item's own first line. A ListItem's range covers any nested list beneath it, so
   // decorating every line in the range stamps the outer item's depth onto its children too —
@@ -401,11 +422,10 @@ function listMark(node: SyntaxNodeRef, w: Walk): void {
   // marker slot, so the outer keeps it and the inner stays literal (135, 121).
   const lineStart = w.doc.lineAt(node.from);
   //
-  // `>` counts as indentation and a list marker does not. A quote is a container rather
-  // than a kind (decision 100), so `> - one` is one marker behind a bar and the bar is
-  // hidden by `QuoteMark` anyway; a marker in front of a marker is the nesting above.
+  // `ownsMarkerSlot` is the same question `listItem` asks about the indent, and they are one
+  // function so they cannot drift: a marker that stays literal must not move its line (154).
   if (node.from > lineStart.from) {
-    if (!/^[ \t>]*$/.test(w.doc.sliceString(lineStart.from, node.from))) return;
+    if (!ownsMarkerSlot(w, node.from)) return;
     w.decorations.push(hide.range(lineStart.from, node.from));
   }
 
