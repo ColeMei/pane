@@ -11,7 +11,7 @@
 
 import { syntaxTree } from "@codemirror/language";
 
-import { blockAt, blocksIn, containerPrefixOf, linesOf, quoteMarksOnly } from "./blocks";
+import { blockAt, blocksIn, containerPrefixOf, linesOf, markerSpanEnd, quoteMarksOnly } from "./blocks";
 import { describe } from "./tooltip";
 import { type ChangeSet, type EditorState, type Extension, type Line, StateEffect, StateField } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
@@ -590,7 +590,10 @@ function wrapPerBlock(
   // that waits for the first character (148).
   if (from === to) {
     const line = state.doc.lineAt(from);
-    if (line.text.slice(0, from - line.from).trim() === "") {
+    // "At a line start" is the **marker span**, not whitespace (151). On `1. ` the text before the
+    // caret trims to `1.`, so the guard read the line as mid-line and wrote `1. ****` — a thematic
+    // break inside the item, drawn as a rule, which is decision 148's own fault in a list.
+    if (from <= markerSpanEnd(state, line.number)) {
       view.dispatch({ effects: setPendingWrap.of({ open, close }) });
     } else {
       view.dispatch({

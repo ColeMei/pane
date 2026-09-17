@@ -1156,6 +1156,16 @@ export function runBlockEdges(view, doc) {
     r.check(`…the first character arrives wrapped`, `x\n\n${want}`, d.text(), `${name} a`);
     r.check(`…with the caret before the closing marker`, 3 + want.length - (want.length - 1 - want.indexOf("a")), head(), `${name} a`);
   }
+  // …and after a block marker, which is a line start too (148, amended). `1. ****` is a thematic
+  // break *inside* the item — the same fault one marker over, and the one that was reported.
+  for (const marker of ["1. ", "- ", "> ", "- [ ] "]) {
+    d.reset(); d.type("x"); d.press("Enter"); d.type(marker); key("b", { metaKey: true });
+    r.check(`⌘B after \`${marker}\` writes nothing (148)`, `x\n\n${marker}`, d.text(), `${marker}⌘B`);
+    r.check(`…and the line is still the item, not a rule`, false, i.classes(3).includes("pane-rule"), `${marker}: ${i.classes(3)}`);
+    d.type("a");
+    r.check(`…the first character arrives wrapped`, `x\n\n${marker}**a**`, d.text(), `${marker}⌘B a`);
+  }
+
   // What this asks is that nothing was *written* — which column ↑ lands in is CodeMirror's, and
   // the drawn markers shift the caret's pixel x, so the offset differs with the font.
   d.reset(); d.type("x"); d.press("Enter"); key("s", { metaKey: true, shiftKey: true }); d.press("ArrowUp"); d.type("y");
