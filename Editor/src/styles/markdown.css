@@ -566,9 +566,25 @@
 
 .cm-line.pane-rule {
   /* Drawn on the line box rather than as an <hr>, because the line still holds the literal "---"
-   * the user typed and must stay selectable and editable. */
-  border-bottom: 1px solid var(--rule);
+   * the user typed and must stay selectable and editable.
+   *
+   * **A block gap either side, and the line centred in it** — decision 152. A rule separates, and
+   * at one blank line's 8px above and nothing below it sat against the text under it and read as
+   * an underline of the paragraph above. The space is `--block-gap` twice rather than a number of
+   * its own (82): the same gap every other block is given.
+   *
+   * Padding, not margin: CodeMirror measures a line's height off the element, and a margin is
+   * height its layout model never sees. Which is also why the rule is a centred background rather
+   * than a border — a border-bottom paints under the padding, so the line would sit at the very
+   * bottom of the space instead of in the middle of it.
+   *
+   * This must stay AFTER `.pane-line-gap`, which is the same specificity and sets `padding-top`:
+   * a rule that starts a block with no blank line above it takes this padding, not that one, or
+   * the two stack and the line is no longer centred (71's trap). */
+  background: linear-gradient(var(--rule), var(--rule)) no-repeat center / 100% 1px;
   height: 0;
+  padding-top: var(--block-gap);
+  padding-bottom: var(--block-gap);
   overflow: hidden;
   color: transparent;
 }

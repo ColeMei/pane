@@ -1175,6 +1175,32 @@ export function runBlockEdges(view, doc) {
   r.check("mid-line the empty pair still goes in at once", "ab****", d.text(), "ab ⌘B");
   r.check("…caret between the markers", 4, head(), "ab ⌘B");
 
+  // 152: a rule is finished the moment it is typed. The caret cannot stay on it — a 1px line is no
+  // place (151) — so it steps to the first place under it, and the line keeps a block gap either side.
+  d.reset(); d.type("text"); d.press("Enter"); d.type("---");
+  r.check("typing --- makes a rule (152)", "text\n\n---\n", d.text(), "text ⏎ ---");
+  r.check("…and the caret is under it, not on it", 4, view.state.doc.lineAt(head()).number, "text ⏎ ---");
+  d.type("after");
+  r.check("…so the next thing typed lands under the rule", "text\n\n---\nafter", d.text(), "text ⏎ --- after");
+
+  // Nothing below to land on: the rule takes the last line, so the caret gets one of its own.
+  d.load("a\n\n"); view.dispatch({ selection: { anchor: view.state.doc.length } });
+  d.type("---");
+  r.check("a rule at the end of the note gets a line under it (152)", "a\n\n---\n", d.text(), "--- at the end");
+  r.check("…and the caret is on it", view.state.doc.lines, view.state.doc.lineAt(head()).number, "--- at the end");
+
+  // And the one case the caret must NOT move: `---` under a line is that line's setext underline,
+  // not a rule, and moving off it would scatter the rest of what they type (151).
+  d.reset(); d.type("Title"); d.press("Enter", { shiftKey: true }); d.type("---");
+  r.check("--- under a line is a setext underline, and the caret stays (152)", "Title\n---", d.text(), "Title ⇧⏎ ---");
+  r.check("…on the underline itself", 2, view.state.doc.lineAt(head()).number, "Title ⇧⏎ ---");
+
+  // The space either side, derived: `--block-gap` and `--blank-line-height` are the same number, so
+  // a rule is exactly two blank lines tall — enough that it separates rather than underlining the
+  // paragraph above it.
+  d.load("a\n\n---\n\nb\n");
+  r.check("a rule has a block gap above and below it (152)", 2 * i.height(2), i.height(3), `rule ${i.height(3)}, blank ${i.height(2)}`);
+
   // 151: a block marker never shows its source, so the caret's line is drawn like every other. The
   // no-jump sweep measures that nothing *moves*; this reads what is actually drawn.
   const DRAWN = [

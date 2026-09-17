@@ -169,6 +169,20 @@ export function fenceOrRuleLine(state: EditorState, n: number): boolean {
 }
 
 /**
+ * A line that is a thematic break of its own — `---`, `***`, `___`.
+ *
+ * The node name, not the bytes: `---` directly under a paragraph is that paragraph's setext
+ * underline, which reads the same and is a different block entirely.
+ */
+export function ruleLine(state: EditorState, n: number): boolean {
+  const line = state.doc.line(n);
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from, 1); node; node = node.parent) {
+    if (node.name === "HorizontalRule") return true;
+  }
+  return false;
+}
+
+/**
  * A line the caret does not rest on: the paragraph break (146), a fence line or a rule (151). Block
  * markers are never drawn as characters, so a fence line is an 8px strip and a rule a 1px line —
  * neither is a place, and typing into either unbounds the block or breaks the rule.

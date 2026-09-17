@@ -51,6 +51,7 @@ import { backspace } from "./keyboard/backspace";
 import { arrowDown, arrowUp } from "./keyboard/arrows";
 import { deleteForward } from "./keyboard/delete";
 import { caretPlaces } from "./caret";
+import { markerSpanEnd, notAPlace, ruleLine } from "./blocks";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { shiftTab, tab } from "./keyboard/tab";
@@ -362,6 +363,58 @@ function checkboxInputRule(): Extension {
   });
 }
 
+/**
+ * A rule is finished the moment it is typed — decision 152.
+ *
+ * `---` on a line of its own draws a 1px line with nothing in it, and that line is not a place the
+ * caret can sit (151): parked there it is drawn below the rule, three hidden characters to the
+ * right of where the text starts, over whatever line comes next. So the character that completes
+ * the break also moves the caret to the first place under the rule, adding a line when the rule
+ * ends the note. The same step ↓ takes from a rule, taken for the person who just made one.
+ *
+ * Only a line that is the break and nothing else, and only when the tree agrees it is one: `---`
+ * directly under a paragraph is a setext underline, and the caret has to stay on it or the rest of
+ * what they type scatters (151).
+ */
+function ruleInputRule(): Extension {
+  return EditorView.inputHandler.of((view, from, to, text) => {
+    if (from !== to || !/^[-*_]$/.test(text)) return false;
+    const state = view.state;
+    const line = state.doc.lineAt(from);
+    if (from !== line.to) return false;
+    if (!new RegExp(`^[ \\t]*(?:\\${text}[ \\t]*)+$`).test(line.text)) return false;
+    // Not on the note's first line. A rule there separates nothing, and `---` at the top of an
+    // empty note is how a YAML frontmatter fence is typed — adding a line under it would break the
+    // bytes of something Pane does not interpret and must not damage (121).
+    if (line.number === 1) return false;
+
+    const after = state.update({ changes: { from, to, insert: text } }).state;
+    if (!ruleLine(after, line.number)) return false;
+
+    // The first line under the rule the caret may rest on. A blank line between two paragraphs is
+    // not one (146), so this lands where ↓ would.
+    let n = line.number + 1;
+    while (n <= after.doc.lines && notAPlace(after, n)) n += 1;
+    if (n > after.doc.lines) {
+      // Nothing below to land on: the rule takes a line of its own and the caret the one after it.
+      view.dispatch({
+        changes: { from, to, insert: `${text}\n` },
+        selection: { anchor: from + text.length + 1 },
+        userEvent: "input.type",
+        scrollIntoView: true,
+      });
+      return true;
+    }
+    view.dispatch({
+      changes: { from, to, insert: text },
+      selection: { anchor: markerSpanEnd(after, n) },
+      userEvent: "input.type",
+      scrollIntoView: true,
+    });
+    return true;
+  });
+}
+
 /** A marker typed at an item's content start is text, and the bytes say so: `1\. ` and `\* `
  * (decision 135). `> ` is deliberately not a trigger — `> - x` means a list inside a quote. */
 function escapeNestedMarkerRule(): Extension {
@@ -578,6 +631,8 @@ function baseExtensions(): Extension[] {
     pendingWrapExtension(),
     checkboxInputRule(),
     bulletInputRule(),
+    // The character that completes `---` also steps the caret off the rule it just made (152).
+    ruleInputRule(),
     escapeNestedMarkerRule(),
     editorTheme,
     updateListener,

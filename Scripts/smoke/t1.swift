@@ -437,6 +437,19 @@ func itemBlocks() {
     }
 }
 
+/// Decision 152: the character that completes `---` steps the caret off the rule, so what is typed
+/// next is a line under it rather than three characters into a 1px line nobody can read.
+func itemRule() {
+    let item = "rule"
+    guard let name = freshNote(item, body: "text") else { return check(item, "the note appeared", false) }
+    type("\n---"); settle()
+    let made = read(name) ?? ""
+    check(item, "typing --- writes the rule (152)", made.hasSuffix("---\n"), made.split(separator: "\n").suffix(2).joined(separator: "⏎"))
+    type("after"); settle()
+    let after = read(name) ?? ""
+    check(item, "…and what is typed next is a line under it (152)", after.hasSuffix("---\nafter\n"), after.split(separator: "\n").suffix(2).joined(separator: "⏎"))
+}
+
 func itemDeleteIntoRecentlyDeleted() {
     let item = "ctrlx"
     guard let name = freshNote(item, body: "settled body") else { return check(item, "the note appeared", false) }
@@ -480,6 +493,7 @@ let items: [(String, () -> Void)] = [
     ("softbreak", itemShiftEnterNested),
     ("markeronly", itemMarkerOnlyThenType),
     ("blocks", itemBlocks),
+    ("rule", itemRule),
     ("ctrlx", itemDeleteIntoRecentlyDeleted),
     ("bold", itemBoldWritesMarkers),
 ]
