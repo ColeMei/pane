@@ -1156,11 +1156,11 @@ export function runBlockEdges(view, doc) {
     r.check(`…the first character arrives wrapped`, `x\n\n${want}`, d.text(), `${name} a`);
     r.check(`…with the caret before the closing marker`, 3 + want.length - (want.length - 1 - want.indexOf("a")), head(), `${name} a`);
   }
+  // What this asks is that nothing was *written* — which column ↑ lands in is CodeMirror's, and
+  // the drawn markers shift the caret's pixel x, so the offset differs with the font.
   d.reset(); d.type("x"); d.press("Enter"); key("s", { metaKey: true, shiftKey: true }); d.press("ArrowUp"); d.type("y");
-  // `xy`, not `yx`: the drawn markers sit either side of the caret, so it *appears* two characters
-  // in and ↑ keeps the column it appears to be at. Consistent with what is on screen, and the pair
-  // is forgotten either way, which is what this case is about.
-  r.check("a caret move forgets the waiting pair", "xy\n\n", d.text(), "⇧⌘S ↑ y");
+  r.check("a caret move forgets the waiting pair", false, d.text().includes("~~"), "⇧⌘S ↑ y");
+  r.check("…and the character typed is all that went in", 4, d.text().length, "⇧⌘S ↑ y");
   d.reset(); d.type("ab"); key("b", { metaKey: true });
   r.check("mid-line the empty pair still goes in at once", "ab****", d.text(), "ab ⌘B");
   r.check("…caret between the markers", 4, head(), "ab ⌘B");
@@ -1201,22 +1201,25 @@ export function runBlockEdges(view, doc) {
 export function runLineBreaks(view, doc) {
   const r = recorder("line breaks");
   const d = driver(view, doc);
-  const head = () => view.state.selection.main.head;
-
   // Decision 146: ↑ and ↓ step over the paragraph break, which is not a place. Before, ↑ from the
   // line ⏎ had just made stopped on the break for a press, a squashed caret three pixels under the
   // text above (132), and a second press was needed to reach the line.
+  //
+  // **The line, never the offset.** Which line the caret lands on is the rule; the column it keeps
+  // is CodeMirror's pixel arithmetic, and it differs with the font — on CI, whose fonts are not
+  // these, a single `cursorLineDown` sometimes clears a collapsed 8px line that it does not clear
+  // here, landing a column over. Five red CI runs said so while this suite was green.
+  const line = () => view.state.doc.lineAt(view.state.selection.main.head).number;
   d.reset(); d.type("line 1"); d.press("Enter");
-  // Column 0, because a vertical move keeps its column; what matters is line 1, not line 2.
-  r.check("⏎ then ↑: the caret is on the line above, not on the break", 0, (d.press("ArrowUp"), head()), "line 1 ⏎ ↑");
-  r.check("…and ↓ brings it back to its own empty line", 8, (d.press("ArrowDown"), head()), "line 1 ⏎ ↑ ↓");
+  r.check("⏎ then ↑: the caret is on the line above, not on the break", 1, (d.press("ArrowUp"), line()), "line 1 ⏎ ↑");
+  r.check("…and ↓ brings it back to its own empty line", 3, (d.press("ArrowDown"), line()), "line 1 ⏎ ↑ ↓");
   d.load("alpha\n\nbravo\n"); d.at("bravo", 2);
-  r.check("↑ from a paragraph lands in the one above at the same column", 2, (d.press("ArrowUp"), head()), "↑");
-  r.check("↓ from there lands back in the one below", 9, (d.press("ArrowDown"), head()), "↓");
+  r.check("↑ from a paragraph lands in the one above, not on the break", 1, (d.press("ArrowUp"), line()), "↑");
+  r.check("↓ from there lands back in the one below", 3, (d.press("ArrowDown"), line()), "↓");
   d.load("alpha\n\n\nbravo\n"); d.at("alpha", 5);
-  r.check("↓ over a break onto the second of two blank lines stops there: that one is a place", 7, (d.press("ArrowDown"), head()), "↓ into a run");
+  r.check("↓ over a break onto the second of two blank lines stops there: that one is a place", 3, (d.press("ArrowDown"), line()), "↓ into a run");
   d.load("```\na\n\nb\n```\n"); d.at("b");
-  r.check("↑ inside a fence stops on the blank line: it is content", 6, (d.press("ArrowUp"), head()), "↑ in a fence");
+  r.check("↑ inside a fence stops on the blank line: it is content", 3, (d.press("ArrowUp"), line()), "↑ in a fence");
 
   d.reset();
   d.type("one");

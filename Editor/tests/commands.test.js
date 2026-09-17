@@ -441,9 +441,12 @@ export function runLayout(view, doc) {
       clientX: Math.round(r.left + 30), clientY: Math.round(r.top + r.height * fraction),
     }));
   };
+  // Never the exact middle: `clientY` is rounded to a whole pixel and the strip is 8px, so a click
+  // *at* the midpoint fell on either side of it depending on the line height — green here and red on
+  // CI, which has different fonts. Each half is asked a clear quarter in.
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "alpha\n\nbravo\n" } });
   view.dispatch({ selection: { anchor: 12 } });
-  clickCentre(2);
+  clickAt(2, 0.8);
   check("clicking the blank line between two paragraphs lands at the start of the one below", 7, head());
   clickAt(2, 0.2);
   check("…and from the upper part of the strip, at the end of the one above", 5, head());
@@ -452,12 +455,12 @@ export function runLayout(view, doc) {
   // on the break, which drawn open reads as a ⇧⏎ line nobody typed (decision 146).
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "line 1\n\n" } });
   view.dispatch({ selection: { anchor: 8 } });
-  clickCentre(2);
+  clickAt(2, 0.8);
   check("the break under the caret's own empty line is not a place either", 8, head());
   clickAt(2, 0.2);
   check("…and its upper part goes to the end of the line above", 6, head());
   view.dispatch({ selection: { anchor: 8 } });
-  clickCentre(3);
+  clickAt(3, 0.5);
   check("the caret's own empty line, below the break, still is", 8, head());
 
   // The three things that must keep working, each of which a blunter rule would have broken.
