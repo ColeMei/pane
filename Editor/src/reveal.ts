@@ -1,20 +1,23 @@
 /*
- * What is revealed — the source shown under the caret — decided once per rebuild.
+ * What is revealed — the source shown under the selection — decided once per rebuild.
  *
- * Eight decisions describe when a line or a construct shows its markdown rather than its rendering:
- * 42, 44, 53, 57, 77, 89, 132 and 139. They used to be spread through the decoration walk as
- * conditions on individual constructs, so a change to the rule had to be found in each of them.
- * This is the one place. `decorate.ts` reads the answer and never re-derives it.
+ * Seven decisions describe when a construct shows its markdown rather than its rendering: 44, 53,
+ * 57, 77, 89, 132 and 139. They used to be spread through the decoration walk as conditions on
+ * individual constructs, so a change to the rule had to be found in each of them. This is the one
+ * place. `decorate.ts` reads the answer and never re-derives it.
+ *
+ * **Only inline constructs reveal (151).** A block's markers are drawn and never written out, so
+ * nothing here keys off "the caret is on this line" any more; what survives of the caret is the
+ * blank line it stands on. Where the caret may *stand* is a different question, and `caret.ts`
+ * answers it.
  *
  * Pure over the state and two facts about the view — whether it has focus, and whether the caret
- * arrived by typing — which is what makes the eight rules testable in plain node (`tests/unit/`).
+ * arrived by typing — which is what makes the rules testable in plain node (`tests/unit/`).
  */
 
 import type { EditorState } from "@codemirror/state";
 
 export interface Reveal {
-  /** Lines holding a caret: every line-level reveal keys off this set. See `caretLines`. */
-  lines: Set<number>;
   /** The selection ranges an inline construct reveals for. See `inlineRevealRanges`. */
   ranges: readonly { from: number; to: number }[];
   /** Does any of `ranges` overlap `from..to`? An inline construct is revealed when one does (57). */
@@ -24,30 +27,17 @@ export interface Reveal {
 }
 
 /**
- * Lines holding a **caret** — an empty selection — and nothing else. Every line-level reveal in this
- * file keys off this one set: which markers a line shows, and which of its blank lines, fences and
- * rules stay collapsed.
+ * Lines holding a **caret** — an empty selection — and nothing else. Since 151 this decides one
+ * thing, the blank line the caret stands on; it used to decide which markers a line showed too, and
+ * the markers no longer have a raw form to show.
  *
- * **Nothing is revealed while the editor is not focused.** The caret's line shows its source because
- * that is where you are working; a pane you have clicked away from is not where you are working, and
- * a note left showing `**A research plan**` on one line reads as a rendering bug rather than as a
- * caret. It is also what anyone comparing Pane to the reference sees first, since the reference never
- * shows raw markup at all. Nothing is lost on the way back: focus returns, the line goes raw again,
- * and the caret is still where it was (decision 11).
+ * **Nothing is revealed while the editor is not focused** (53). A pane you have clicked away from
+ * is not where you are working, and a note left showing `**A research plan**` on one line reads as
+ * a rendering bug rather than as a caret. Nothing is lost on the way back: focus returns, the line
+ * goes raw again, and the caret is still where it was (11).
  *
- * **It used to be two sets, and collapsing them is the point.** `activeLines` was every line a
- * selection *touched*, and decision 77 carved the height-changing reveals out of it onto the caret
- * because ⌘A un-collapsed every blank line, fence and rule at once — measured on a four-block note,
- * the document grew 24px and every paragraph moved down. The markers were left on the old set, which
- * is how ⌘A still turned the whole note back into its source, and how the first ⌘A — which takes the
- * *block*, decision 65, and is therefore usually one line — kept revealing that line's markers and
- * bringing their mismatched selection rectangles back with them. A selection is a thing you have
- * marked, not a place you are standing; there was never a reason for the two sets to differ.
- *
- * A marker can be dropped from a selected line for free, which is what makes this safe: raw or
- * rendered, it occupies the same fixed box (see `rawListMark`), so the item's words do not move.
- * **An inline construct cannot** — revealing `**bold**` is 26px wider than not — which is why
- * `inlineRevealRanges` is a separate, wider rule rather than this one.
+ * **A selection is a thing you have marked, not a place you are standing** (77), so a range never
+ * counts as a caret line and ⌘A opens no blank line.
  */
 function caretLines(state: EditorState, hasFocus: boolean): Set<number> {
   const lines = new Set<number>();
@@ -61,21 +51,15 @@ function caretLines(state: EditorState, hasFocus: boolean): Set<number> {
 /**
  * The selection ranges an **inline** construct reveals for: the ones confined to a single line.
  *
- * Decision 77 settled the sentence and applied it to half the problem — *"a range selection is not a
- * place you are standing, it is a thing you have marked"* — and keyed the height-changing reveals off
- * the caret for exactly that reason. Everything else kept following whatever a selection *touched*,
- * so ⌘A revealed the source of the entire note: measured on a six-line note, the heading's `#`, the
- * `**`, the backticks, the `*em*`, the quote's `>` and the task's `-` all came back at once, and the
- * document you had just selected was no longer the document you had been reading.
+ * A selection that spans lines reveals nothing at all: ⌘A used to turn the whole note back into its
+ * source, and the document you had just selected was no longer the document you had been reading
+ * (139).
  *
- * **Why this is not simply the caret, which is what the block markers below use.** Revealing an
- * inline construct changes the line's width: measured on `Some **bold** and tail here.`, the word
- * `tail` sits at x=163 with the markers shown and x=137 without them. A caret-only rule would
- * therefore move the text 26px sideways the instant a drag *starting inside a bold run* became
- * non-empty — under the pointer, mid-gesture, which is the cursor instability this file's header is
- * about. A block marker has no such cost: it lives in a fixed box either way (see `rawListMark`), so
- * `numbered` stays at x=69 whether its `1. [ ]` is raw or rendered. Two rules because the two have
- * different costs, which is the same split decision 57 already draws.
+ * **Why a range and not simply the caret.** Revealing an inline construct changes the line's width —
+ * `**bold**` is 26px wider shown than hidden, measured in 139 — so a caret-only rule would move the
+ * text sideways the instant a drag *starting inside a bold run* became non-empty, under the pointer,
+ * mid-gesture. And why only a *single-line* range: that same width, paid on every line at once, is
+ * what ⌘A used to cost (77, 139).
  */
 function inlineRevealRanges(state: EditorState, hasFocus: boolean): readonly { from: number; to: number }[] {
   if (!hasFocus) return [];
@@ -135,7 +119,6 @@ export function revealPolicy(state: EditorState, hasFocus: boolean, arrivedByEdi
   const lines = caretLines(state, hasFocus);
   const ranges = inlineRevealRanges(state, hasFocus);
   return {
-    lines,
     ranges,
     touches: (from, to) => ranges.some((range) => range.from <= to && range.to >= from),
     blankLineExempt: blankLineExempt(state, lines, arrivedByEdit),
