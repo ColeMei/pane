@@ -139,6 +139,9 @@ function becameFirst(tr: Transaction, item: SyntaxNode): boolean {
   let node: SyntaxNode | null = syntaxTree(before).resolveInner(back, 1);
   for (; node; node = node.parent) if (node.name === "ListItem") break;
   if (!node || node.parent?.name !== "OrderedList") return false;
+  // The item *holding* the position is not this item: `2. 2.` is, for one keystroke, a list nested in
+  // item two, and it was never demoted — it did not exist (156).
+  if (node.from !== back) return false;
 
   for (let sibling = node.prevSibling; sibling; sibling = sibling.prevSibling) {
     if (sibling.name === "ListItem") return true;

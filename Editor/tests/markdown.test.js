@@ -680,6 +680,20 @@ export function runTypedLists(view, doc) {
   r.check("a list that starts at five continues at six", "5. five\n6. six", d.text(),
     "5. five ⏎ six");
 
+  // Decision 156: `2. 2.` is, for one keystroke, an empty list nested in item two. It is new, not
+  // demoted, so it keeps the number typed — and a moment later `2.3` is text anyway.
+  d.reset();
+  d.type("1. a");
+  d.press("Enter"); d.type("2.3 dollars");
+  r.check("(156) a decimal typed into the second item keeps its digits", "1. a\n2. 2.3 dollars", d.text(),
+    "1. a ⏎ 2.3 dollars");
+
+  d.reset();
+  d.type("1. a");
+  d.press("Enter"); d.type("b");
+  d.press("Enter"); d.type("5.5");
+  r.check("(156) and into the third", "1. a\n2. b\n3. 5.5", d.text(), "1. a ⏎ b ⏎ 5.5");
+
   // --- a soft break inside an item ---------------------------------------------------------------
 
   d.reset();

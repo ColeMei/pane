@@ -450,6 +450,20 @@ func itemRule() {
     check(item, "…and what is typed next is a line under it (152)", after.hasSuffix("---\nafter\n"), after.split(separator: "\n").suffix(2).joined(separator: "⏎"))
 }
 
+func itemOneListItemPerLine() {
+    let item = "oneitem"
+    guard let name = freshNote(item, body: "text") else { return check(item, "the note appeared", false) }
+    key(K.ret); type("- --- x"); settle()
+    let rule = read(name) ?? ""
+    check(item, "`- ---` stays a bullet holding dashes (155)", rule.hasSuffix("- \\--- x\n"), rule.split(separator: "\n").last.map(String.init) ?? "")
+    key(K.ret); type("> y"); settle()
+    let quote = read(name) ?? ""
+    check(item, "…and `>` on the next bullet is text (155)", quote.hasSuffix("- \\> y\n"), quote.split(separator: "\n").last.map(String.init) ?? "")
+    key(K.ret); key(K.ret); type("1. a"); key(K.ret); type("2.3 z"); settle()
+    let number = read(name) ?? ""
+    check(item, "`2.3` typed into item two keeps its digits (156)", number.hasSuffix("2. 2.3 z\n"), number.split(separator: "\n").last.map(String.init) ?? "")
+}
+
 func itemDeleteIntoRecentlyDeleted() {
     let item = "ctrlx"
     guard let name = freshNote(item, body: "settled body") else { return check(item, "the note appeared", false) }
@@ -500,6 +514,7 @@ let items: [(String, () -> Void)] = [
     ("markeronly", itemMarkerOnlyThenType),
     ("blocks", itemBlocks),
     ("rule", itemRule),
+    ("oneitem", itemOneListItemPerLine),
     ("ctrlx", itemDeleteIntoRecentlyDeleted),
     ("bold", itemBoldWritesMarkers),
 ]
