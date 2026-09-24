@@ -1342,6 +1342,15 @@ export function runBlockEdges(view, doc) {
   d.reset(); d.type("a"); d.press("Enter"); d.type("```"); d.press("Backspace");
   r.check("(160) ⌫ on the empty code line takes the block", false, d.text().includes("```"), show(d.text()));
 
+  // 161, as reported: a block, ⇧⏎ out of it, then ⌫. The caret goes back to the end of the code,
+  // never onto the closing fence, and the fence is untouched however many times ⌫ is pressed after.
+  d.reset(); d.type("x"); d.press("Enter"); d.type("```"); d.type("a"); d.press("Enter"); d.type("a");
+  d.press("Enter", { shiftKey: true }); d.press("Backspace");
+  r.check("(161) ⌫ after ⇧⏎ out of a block goes back to its last line", "x\n\n```\na\na|\n```",
+    (() => { const t = d.text(); const h = head(); return t.slice(0, h) + "|" + t.slice(h); })(), "``` a ⏎ a ⇧⏎ ⌫");
+  d.press("Backspace");
+  r.check("(161) …and the next ⌫ is ordinary, inside the code", "x\n\n```\na\n\n```", d.text(), "… ⌫ ⌫");
+
   // The space either side, derived: `--block-gap` and `--blank-line-height` are the same number, so
   // a rule is exactly two blank lines tall — enough that it separates rather than underlining the
   // paragraph above it.

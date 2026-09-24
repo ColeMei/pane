@@ -57,6 +57,14 @@ export const cases: Case[] = [
   { name: "⌫ at the start of the line after a block steps into its last line of code", doc: "```\ncode\n```\n|after", want: "```\ncode|\n```\nafter" },
   { name: "…and after a block with nothing inside, nothing", doc: "```\n```\n|after", want: "```\n```\n|after" },
   { name: "⌫ at the start of the line after a rule takes the rule", doc: "a\n\n---\n|b", want: "a\n\n|b" },
+  // 161. A finished fence or rule is never edited as text: ⌫ below one steps toward it, never onto it.
+  { name: "(161) ⌫ on the empty line ⇧⏎ left under a block goes back into its last line", doc: "x\n\n```\na\n```\n\n|", want: "x\n\n```\na|\n```" },
+  { name: "(161) …and with more of the note below", doc: "```\na\n```\n\n|\n\npara", want: "```\na|\n```\n\npara" },
+  { name: "(161) ⌫ at a line of text under a block takes the blank line, not the fence", doc: "```\na\n```\n\n|para", want: "```\na\n```\n|para" },
+  { name: "(161) ⌫ on an empty line right under a block goes into it", doc: "```\na\n```\n|", want: "```\na|\n```" },
+  { name: "(161) ⌫ at text under a blank line under a rule takes the blank line", doc: "a\n\n---\n\n|b", want: "a\n\n---\n|b" },
+  { name: "(161) …and on an empty one too, keeping a line under the rule", doc: "a\n\n---\n\n|", want: "a\n\n---\n|" },
+  { name: "(161) under an empty block, the blank line goes and nothing else", doc: "```\n\n```\n\n|b", want: "```\n\n```\n|b" },
   { name: "at the marker itself: nothing", doc: "- |", want: "-|" },
 
   // 4. A typed marker loses one character (109)

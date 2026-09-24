@@ -10,12 +10,14 @@
  * The rules and the decisions behind them:
  *   1. undo a marker break       — a ⏎ that made a marker-only line is undone whole (90, 108)
  *   1b. undo a soft break        — the whitespace-only line ⇧⏎ left goes the same way (144)
+ *   2a. never onto a fence       — under a blank line under a fence or a rule, ⌫ stops short of it (161)
  *   2. join back to paragraph    — a paragraph break is deleted, not halved (90)
  *   3. leave or outdent an item  — ⌫ at an item's text start outdents, or drops the marker (108, 109)
  *   4. delete a typed marker     — a marker somebody typed loses one character, not the line (109)
  *   5. off a heading             — ⌫ at a heading's text start makes it a paragraph (151)
  *   6. out of a code block       — ⌫ at the start of an empty block removes it; with code, nothing (151)
- *   7. into a code block         — ⌫ at the start of the line after a block steps into its last line (151)
+ *   7. into a code block         — ⌫ at the start of the line after a block steps into its last line (151);
+ *                                  an empty one goes on the way (161)
  *   8. delete a rule             — ⌫ at the start of the line after a rule takes the rule (151)
  */
 
@@ -45,6 +47,31 @@ function undoSoftBreak(ctx: LineContext): KeyEdit | null {
   if (!ctx.inListItem || ctx.listMarker) return null;
   const aboveEnd = ctx.line.from - 1;
   return { changes: [{ from: aboveEnd, to: ctx.line.to }], anchor: aboveEnd, userEvent: DELETE };
+}
+
+/**
+ * 2a. Under a blank line under a closing fence or a rule: a finished block is never edited as text
+ * (161). Row 2 would delete both breaks and leave the caret on the fence's 8px strip, or pull the
+ * line's text onto the `---`. An empty line goes with the blank one and the caret steps into the
+ * block's last line of code; otherwise only the blank line goes, and rows 7 and 8 take the next ⌫.
+ */
+function stopShortOfFence(ctx: LineContext): KeyEdit | null {
+  if (!ctx.atLineStart || ctx.line.number < 3 || !ctx.above || ctx.above.length !== 0) return null;
+  const doc = ctx.state.doc;
+  const markLine = doc.line(ctx.line.number - 2);
+  if (!fenceOrRuleLine(ctx.state, markLine.number)) return null;
+  const block = fencedBlockAt(ctx.state, markLine.from, 1);
+  if (block) {
+    const { first, last, closed } = fencesOf(ctx.state, block);
+    if (!closed || last !== markLine.number) return null;
+    if (ctx.line.length === 0 && last - first >= 2) {
+      return { changes: [{ from: markLine.to, to: ctx.line.to }], anchor: doc.line(last - 1).to, userEvent: DELETE };
+    }
+  } else if (!/^[ \t]*([-*_])([ \t]*\1){2,}[ \t]*$/.test(markLine.text)) {
+    return null;
+  }
+  const blank = doc.line(ctx.line.number - 1);
+  return { changes: [{ from: blank.from, to: ctx.line.from }], anchor: blank.from, userEvent: DELETE };
 }
 
 /** 2. A caret at the start of a line under a blank one, or on the blank line itself: delete the break. */
@@ -135,6 +162,10 @@ function stepIntoCodeBlock(ctx: LineContext): KeyEdit | null {
   if (!closed || last !== ctx.line.number - 1) return null;
   // An empty block: rule 6 owns it from the inside, and from here there is nothing to step to.
   if (last - first < 2) return NOOP;
+  // An empty line has nothing to keep, and goes with the step (161).
+  if (ctx.line.length === 0) {
+    return { changes: [{ from: doc.line(last).to, to: ctx.line.to }], anchor: doc.line(last - 1).to, userEvent: DELETE };
+  }
   return { changes: [], anchor: doc.line(last - 1).to, userEvent: "select" };
 }
 
@@ -147,7 +178,7 @@ function deleteRuleAbove(ctx: LineContext): KeyEdit | null {
 }
 
 const table = rows(
-  undoMarkerBreak, undoSoftBreak, joinBackToParagraph, unindentListItem, deleteTypedMarker,
+  undoMarkerBreak, undoSoftBreak, stopShortOfFence, joinBackToParagraph, unindentListItem, deleteTypedMarker,
   removeHeadingMarks, leaveEmptyCodeBlock, stepIntoCodeBlock, deleteRuleAbove
 );
 
