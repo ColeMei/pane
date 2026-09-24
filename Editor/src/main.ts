@@ -23,7 +23,7 @@ import {
   markdownLanguage,
 } from "@codemirror/lang-markdown";
 import { html } from "@codemirror/lang-html";
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 import {
   Compartment,
@@ -354,6 +354,44 @@ function checkboxInputRule(): Extension {
 }
 
 /**
+ * A fence is finished the moment it is typed — decision 160.
+ *
+ * The backtick that makes ```` ``` ```` open a block also writes its closing fence and one empty code
+ * line, and the caret goes there. Left alone, the caret stood on the opening fence — an 8px strip
+ * that is not a place (151) — and what was typed next went into an info string nobody can see. Only
+ * when it opens a block: the same three characters closing an open one are just typed.
+ */
+function fenceInputRule(): Extension {
+  return Prec.high(EditorView.inputHandler.of((view, from, to, text) => {
+    if (from !== to || (text !== "`" && text !== "~")) return false;
+    const state = view.state;
+    const line = state.doc.lineAt(from);
+    if (from !== line.to) return false;
+    const typed = /^([ \t]*)(```|~~~)$/.exec(line.text + text);
+    if (!typed) return false;
+
+    const after = state.update({ changes: { from, insert: text } }).state;
+    const tree = ensureSyntaxTree(after, after.doc.length, 50) ?? syntaxTree(after);
+    const block = tree.resolveInner(line.from + typed[1]!.length, 1);
+    let fenced: typeof block | null = block;
+    while (fenced && fenced.name !== "FencedCode") fenced = fenced.parent;
+    if (!fenced || fenced.from !== line.from + typed[1]!.length) return false;
+    let marks = 0;
+    for (let child = fenced.firstChild; child; child = child.nextSibling) if (child.name === "CodeMark") marks += 1;
+    if (marks !== 1) return false;
+
+    const indent = typed[1]!;
+    view.dispatch({
+      changes: { from, insert: `${text}\n${indent}\n${indent}${typed[2]}` },
+      selection: { anchor: from + 2 + indent.length },
+      userEvent: "input.type",
+      scrollIntoView: true,
+    });
+    return true;
+  }));
+}
+
+/**
  * A rule is finished the moment it is typed — decision 152.
  *
  * `---` on a line of its own draws a 1px line with nothing in it, and that line is not a place the
@@ -610,6 +648,8 @@ function baseExtensions(): Extension[] {
     bulletInputRule(),
     // The character that completes `---` also steps the caret off the rule it just made (152).
     ruleInputRule(),
+    // And the backtick that completes a fence writes the block around the caret (160).
+    fenceInputRule(),
     editorTheme,
     updateListener,
     // ⏎, ⇧⏎ and ⌫ are tables over the line under the caret — `keyboard/`, one file per key — and

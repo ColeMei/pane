@@ -387,9 +387,9 @@ func itemEscapedMarker() {
 func itemFenceClose() {
     let item = "fence"
     guard let name = freshNote(item) else { return check(item, "the note appeared", false) }
-    type("\n\n```python"); key(K.ret); type("print(1)")
+    type("\n\n```"); type("print(1)")
     settle()
-    check(item, "⏎ on an opening fence writes the closing one (108)", (read(name) ?? "").hasSuffix("```python\nprint(1)\n```\n"), (read(name) ?? "").split(separator: "\n").suffix(3).joined(separator: "⏎"))
+    check(item, "the third backtick writes the closing fence, the caret inside (160)", (read(name) ?? "").hasSuffix("```\nprint(1)\n```\n"), (read(name) ?? "").split(separator: "\n").suffix(3).joined(separator: "⏎"))
 }
 
 func itemShiftEnterNested() {

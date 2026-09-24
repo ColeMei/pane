@@ -1314,6 +1314,34 @@ export function runBlockEdges(view, doc) {
   d.type("---\n");
   r.check("(159) a rule pushed onto the first line by a later edit is text too", false, i.classes(1).includes("pane-rule"), i.classes(1));
 
+  // 160: the backtick that makes a fence completes the block — a closing fence and one empty code
+  // line, the caret on it — so a new block is never an 8px strip holding the caret.
+  const fenceCaret = () => view.state.doc.lineAt(head()).number;
+  d.reset(); d.type("a"); d.press("Enter"); d.type("```");
+  r.check("(160) ``` completes a code block", "a\n\n```\n\n```", d.text(), "a ⏎ ```");
+  r.check("(160) …with the caret on its code line", 4, fenceCaret());
+  r.check("(160) …which is a full line tall", true, view.state.doc.lines >= 4 && i.height(4) >= 16,
+    view.state.doc.lines >= 4 ? `${i.height(4)}px` : "no line 4");
+  d.type("x");
+  r.check("(160) …and what is typed lands in the code", "a\n\n```\nx\n```", d.text(), "a ⏎ ``` x");
+  d.reset(); d.type("```");
+  r.check("(160) the same at the note's start", "```\n\n```", d.text(), "```");
+  r.check("(160) …caret on line two", 2, fenceCaret());
+  d.reset(); d.type("~~~");
+  r.check("(160) a tilde fence completes with a tilde fence", "~~~\n\n~~~", d.text(), "~~~");
+  // Closing an open block is not opening one.
+  d.load("```\ncode\n"); view.dispatch({ selection: { anchor: view.state.doc.length } });
+  d.type("```");
+  // Only that it opens nothing: the backtick pairing already makes a hand-typed closer four long,
+  // which closes the block just the same.
+  r.check("(160) ``` that closes an open block opens no new one", 3, view.state.doc.lines, show(d.text()));
+  // A list item holds text (158), so there is no block to complete.
+  d.reset(); d.type("- ```");
+  r.check("(160) ``` in a list item is text", "- ```", d.text(), "- ```");
+  // ⌫ on the new empty code line takes the whole block (151).
+  d.reset(); d.type("a"); d.press("Enter"); d.type("```"); d.press("Backspace");
+  r.check("(160) ⌫ on the empty code line takes the block", false, d.text().includes("```"), show(d.text()));
+
   // The space either side, derived: `--block-gap` and `--blank-line-height` are the same number, so
   // a rule is exactly two blank lines tall — enough that it separates rather than underlining the
   // paragraph above it.
@@ -1650,12 +1678,12 @@ export function runConstructs(view, doc) {
   // press Enter on the opening one, and the reason is not convenience: an unclosed fence swallows
   // the entire rest of the note, so everything typed afterwards is code — in the file as well as on
   // screen.
+  // Since 160 the third backtick closes it, before ⏎: no language is typed, and Pane shows none.
   d.reset();
-  d.type("```python");
-  d.press("Enter");
+  d.type("```");
   d.type("x = 1");
-  r.check("opening a fence closes it", "```python\nx = 1\n```",
-    view.state.doc.toString(), "```python ⏎ x = 1");
+  r.check("opening a fence closes it", "```\nx = 1\n```",
+    view.state.doc.toString(), "``` x = 1");
 
   // And with a fence that *is* closed, ⇧⏎ is the way out of it.
   d.load("```python\nx = 1\ny = 2\n```\n");
@@ -1742,7 +1770,8 @@ export function runDegradation(view, doc) {
   survives("an HTML comment", "<!-- hidden -->");
   survives("an entity", "caf&eacute;");
   survives("a YAML frontmatter fence", "---\ntitle: x\n---");
-  survives("a tilde fence", "~~~\ncode\n~~~");
+  // Typed the way it types since 160: the third tilde writes the block.
+  survives("a tilde fence", "~~~code", "~~~\ncode\n~~~");
   survives("a math block", "$$\nx = 1\n$$");
   survives("a wiki link", "[[Some Note]]");
   survives("a tag", "#tag and #another");
