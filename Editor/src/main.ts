@@ -51,7 +51,7 @@ import { backspace } from "./keyboard/backspace";
 import { arrowDown, arrowUp } from "./keyboard/arrows";
 import { deleteForward } from "./keyboard/delete";
 import { caretPlaces } from "./caret";
-import { markerSpanEnd, notAPlace, ruleLine } from "./blocks";
+import { fencesOf, markerSpanEnd, notAPlace, ruleLine } from "./blocks";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { shiftTab, tab } from "./keyboard/tab";
@@ -479,7 +479,15 @@ function selectBlockThenAll(view: EditorView): boolean {
   // and a heading start at the line start, so ⌘A used to take `1. ` and `# ` with the text, and the
   // inline commands wrapped them: `**1. Hi**` is not a list item any more. Nothing in a marker span
   // is drawn as characters (151), so it is not something you can have selected either.
-  const contentOf = (block: SyntaxNode) => markerSpanEnd(state, state.doc.lineAt(block.from).number);
+  // A code block's content is its code: its fences are never drawn either, and a range ending on the
+  // closing one left its end on that 8px strip (162). A block with no code has nothing to select.
+  const rangeOf = (block: SyntaxNode): { from: number; to: number } | null => {
+    if (block.name !== "FencedCode") return { from: markerSpanEnd(state, state.doc.lineAt(block.from).number), to: block.to };
+    const { first, last, closed } = fencesOf(state, block);
+    const lastCode = closed ? last - 1 : last;
+    if (lastCode <= first) return null;
+    return { from: state.doc.line(first + 1).from, to: state.doc.line(lastCode).to };
+  };
 
   let best: SyntaxNode | null = null;
   for (const bias of [-1, 1] as const) {
@@ -487,17 +495,19 @@ function selectBlockThenAll(view: EditorView): boolean {
       if (!SELECTABLE_BLOCKS.has(node.name)) continue;
       // A list item's own range, not the paragraph inside it — see SELECTABLE_BLOCKS.
       const block = node.parent?.name === "ListItem" ? node.parent : node;
-      if (block.from > range.from || block.to < range.to) continue;
+      const take = rangeOf(block);
+      if (!take || take.from > range.from || take.to < range.to) continue;
       // Against what this press would *select*, not against the node: the range this leaves starts
       // past the marker, so comparing node starts made the second press pick the same block again
       // and ⌘A never stepped out.
-      if (contentOf(block) === range.from && block.to === range.to) continue;
+      if (take.from === range.from && take.to === range.to) continue;
       if (!best || block.to - block.from < best.to - best.from) best = block;
     }
   }
-  if (!best) return false;
+  const take = best && rangeOf(best);
+  if (!take) return false;
 
-  view.dispatch({ selection: EditorSelection.range(contentOf(best), best.to) });
+  view.dispatch({ selection: EditorSelection.range(take.from, take.to) });
   return true;
 }
 

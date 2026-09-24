@@ -1351,6 +1351,20 @@ export function runBlockEdges(view, doc) {
   d.press("Backspace");
   r.check("(161) …and the next ⌫ is ordinary, inside the code", "x\n\n```\na\n\n```", d.text(), "… ⌫ ⌫");
 
+  // 162: ⌘A in a code block takes the code, not its fences. A selection that ended on the closing
+  // fence left its end on that 8px strip, painted as a bar on a line that does not exist.
+  const cmdA = () => d.content.dispatchEvent(new KeyboardEvent("keydown",
+    { key: "a", code: "KeyA", keyCode: 65, metaKey: true, bubbles: true, cancelable: true }));
+  const selected = () => view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
+  d.load("a\n\n```\nHi\nHi\n```\n\nb\n"); d.at("Hi", 1); cmdA();
+  r.check("(162) ⌘A in a code block selects its code only", "Hi\nHi", selected(), "⌘A in ``` Hi Hi ```");
+  cmdA();
+  r.check("(162) …and ⌘A again takes the note", view.state.doc.length, selected().length, "⌘A ⌘A");
+  d.load("```python\none\n```\n"); d.at("one", 1); cmdA();
+  r.check("(162) a block with a language, the same", "one", selected(), "⌘A in ```python");
+  d.load("```\nopen\nstill\n"); d.at("open", 1); cmdA();
+  r.check("(162) an unclosed block takes every line after its fence", "open\nstill", selected().replace(/\n$/, ""), "⌘A unclosed");
+
   // The space either side, derived: `--block-gap` and `--blank-line-height` are the same number, so
   // a rule is exactly two blank lines tall — enough that it separates rather than underlining the
   // paragraph above it.
