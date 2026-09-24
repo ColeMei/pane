@@ -1949,6 +1949,16 @@ export function runSelectionReveal(view, doc) {
   r.check("and so does a collapsed fence", "hidden",
     fenceRule ? fenceRule.style.getPropertyValue("overflow") : "no rule");
 
+  // Decision 157: a line whose markers are all hidden has no text to select, so it paints none — a
+  // fence line and a rule. The browser painted each as a full-width bar (a fence) or a 16pt band
+  // wider than the 1px line (a rule), measured off the running build's pixels.
+  const hiddenLineRule = rules.find((rule) => (rule.selectorText ?? "").includes(".pane-line-fence::selection"));
+  r.check("(157) a fence line paints no selection", "transparent",
+    hiddenLineRule ? hiddenLineRule.style.getPropertyValue("background-color") : "no rule");
+  r.check("(157) …and a rule is the same rule", true,
+    !!hiddenLineRule && hiddenLineRule.selectorText.includes(".pane-rule::selection"),
+    hiddenLineRule ? hiddenLineRule.selectorText : "no rule");
+
   // Decision 101's own rule, one box short. The number's gap box holds the space after `1.` and is
   // an `inline-block` a `line-height` tall, so a selected numbered item painted that rectangle where
   // a bullet — whose space is hidden — painted nothing: reported as the highlight on a numbered list

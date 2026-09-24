@@ -202,6 +202,16 @@
   background: transparent !important;
 }
 
+/* Nor does a line whose markers are all hidden: a fence line and a rule (157). Nothing on either is
+ * text you typed, and the browser painted the fence as a full-width bar and the rule as a band 16pt
+ * tall and narrower than its own 1px line. The characters are still selected, and still copied. */
+.cm-editor .cm-line.pane-line-fence::selection,
+.cm-editor .cm-line.pane-line-fence ::selection,
+.cm-editor .cm-line.pane-rule::selection,
+.cm-editor .cm-line.pane-rule ::selection {
+  background-color: transparent !important;
+}
+
 /* ---- Block layout -----------------------------------------------------------------------------
  * These are LINE decorations (see live-preview.ts). Margins and indents only work because the class
  * lands on CodeMirror's `.cm-line`, which is a block box — a mark decoration wraps an inline span
