@@ -12,6 +12,7 @@
  *   2. **A list item holds text.** No heading, rule, quote, fence, code block, table or HTML inside
  *      one, and no second list marker on its line: a nested list is made with ⇥, on a line of its
  *      own. A to-do is a bullet's; `1. [ ]` is a number followed by text.
+ *      A note's first line is never a rule (159): it separates nothing, and front matter starts so.
  *   3. **A quote holds lists.** Paragraphs, lists and a deeper quote; no heading, rule, fence, code
  *      block, table or HTML.
  *
@@ -171,6 +172,9 @@ export const paneDialect: MarkdownConfig = {
       name: "HorizontalRule",
       parse(cx, line) {
         if (inContainer(cx) || /^([-*+])[ \t]/.test(line.text.slice(line.pos))) return false;
+        // Not on a note's first line: a rule there separates nothing, and `---` there is how front
+        // matter is typed (159).
+        if (cx.lineStart === 0) return false;
         return original("HorizontalRule")(cx, line);
       },
     },

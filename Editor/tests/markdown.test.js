@@ -1302,6 +1302,18 @@ export function runBlockEdges(view, doc) {
   r.check("--- under a line is a setext underline, and the caret stays (152)", "Title\n---", d.text(), "Title ⇧⏎ ---");
   r.check("…on the underline itself", 2, view.state.doc.lineAt(head()).number, "Title ⇧⏎ ---");
 
+  // 159: a note's first line is never a rule. It separates nothing, `---` there is how front matter
+  // is typed, and the caret had nowhere to go — it sat on the 0px line, drawn under it, and ⌫ took one
+  // dash and turned the rule back into text.
+  for (const rule of ["---", "***", "___"]) {
+    d.reset(); d.type(rule);
+    r.check(`(159) \`${rule}\` as the note's first line is text`, false, i.classes(1).includes("pane-rule"), i.classes(1));
+    r.check(`(159) …and reads as typed`, rule, i.visibleText(1));
+  }
+  d.load("a\n"); view.dispatch({ selection: { anchor: 0 } });
+  d.type("---\n");
+  r.check("(159) a rule pushed onto the first line by a later edit is text too", false, i.classes(1).includes("pane-rule"), i.classes(1));
+
   // The space either side, derived: `--block-gap` and `--blank-line-height` are the same number, so
   // a rule is exactly two blank lines tall — enough that it separates rather than underlining the
   // paragraph above it.
@@ -1534,9 +1546,12 @@ export function runConstructs(view, doc) {
 
   // --- rules ------------------------------------------------------------------------------------
 
-  line1("a dashed rule", "---", "---", "pane-rule");
-  line1("a starred rule", "***", "***", "pane-rule");
-  line1("an underscored rule", "___", "___", "pane-rule");
+  // Under a paragraph: a note's first line is never a rule (159), which its own rows cover.
+  for (const [name, rule] of [["a dashed rule", "---"], ["a starred rule", "***"], ["an underscored rule", "___"]]) {
+    d.reset(); d.type("a"); d.press("Enter"); d.type(rule);
+    r.check(`${name} writes what was typed`, `a\n\n${rule}\n`, d.text(), rule);
+    r.check(`${name} renders as pane-rule`, true, i.classes(3).includes("pane-rule"), i.classes(3));
+  }
 
   // --- quotes -----------------------------------------------------------------------------------
 
