@@ -54,5 +54,6 @@ export const cases: Case[] = [
   // before it. It is still the item to the person who pressed the key (144).
   { name: "…and from the whitespace-only line ⇧⏎ itself left (144)", doc: "soft:- one\n  - two\n    |", want: "- one\n  - two\n    \n    |" },
   { name: "⇧⏎ in prose is CodeMirror's plain newline", doc: "soft:hello|", want: FALLTHROUGH },
-  { name: "⇧⏎ in a fence inside an item is the code's newline", doc: "soft:- one\n  ```\n  co|de\n  ```", want: FALLTHROUGH },
+  // An item holds text (158): a fence under one is its text, and ⇧⏎ breaks it like any item line.
+  { name: "⇧⏎ under a fence inside an item is the item's soft break (158)", doc: "soft:- one\n  ```\n  co|de\n  ```", want: "- one\n  ```\n  co\n  |de\n  ```" },
 ];

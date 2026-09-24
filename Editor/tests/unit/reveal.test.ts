@@ -7,6 +7,7 @@
 
 import { EditorState, EditorSelection } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { paneDialect } from "../../src/dialect";
 import { arrivedByEditAfter, revealPolicy } from "../../src/reveal";
 import type { Case } from "./harness";
 
@@ -23,7 +24,7 @@ function stateWithSelection(doc: string): EditorState {
     text = doc.slice(0, open) + doc.slice(open + 1, close) + doc.slice(close + 1);
     selection = EditorSelection.range(open, close - 1);
   }
-  return EditorState.create({ doc: text, selection, extensions: [markdown({ base: markdownLanguage })] });
+  return EditorState.create({ doc: text, selection, extensions: [markdown({ base: markdownLanguage, extensions: paneDialect })] });
 }
 
 /**

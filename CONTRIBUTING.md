@@ -71,7 +71,8 @@ Scripts/build-app.sh --debug   # assemble build/Pane.app
 questions and each has caught what the others could not. CI runs all five on every pull request.
 They run inside a real `WKWebView` (`Scripts/editor-probe.swift`) because most editor faults here
 are about what is painted, not what the DOM says; `pandoc -f commonmark -t html` is the independent
-oracle for what typed bytes mean.
+oracle for what typed bytes mean, except for the three rules Pane reads differently from CommonMark,
+which are listed at the top of `Editor/src/dialect.ts`.
 
 Two things about the layout worth knowing:
 

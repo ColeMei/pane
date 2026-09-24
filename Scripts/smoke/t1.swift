@@ -379,7 +379,9 @@ func itemEscapedMarker() {
     type("\n\n1. ")
     type("1. three dollars")
     settle()
-    check(item, "a marker typed into an empty item is escaped (135)", (read(name) ?? "").contains("1. 1\\. three dollars"), (read(name) ?? "").split(separator: "\n").last.map(String.init) ?? "")
+    let line = (read(name) ?? "").split(separator: "\n").last.map(String.init) ?? ""
+    check(item, "a marker typed into an item is written as typed, no backslash (158)", line == "1. 1. three dollars", line)
+    check(item, "…and reads as its own characters (158)", renderedText().contains("1. three dollars"), String(renderedText().suffix(24)))
 }
 
 func itemFenceClose() {
@@ -455,13 +457,16 @@ func itemOneListItemPerLine() {
     guard let name = freshNote(item, body: "text") else { return check(item, "the note appeared", false) }
     key(K.ret); type("- --- x"); settle()
     let rule = read(name) ?? ""
-    check(item, "`- ---` stays a bullet holding dashes (155)", rule.hasSuffix("- \\--- x\n"), rule.split(separator: "\n").last.map(String.init) ?? "")
+    check(item, "`- ---` stays a bullet holding dashes, as typed (158)", rule.hasSuffix("- --- x\n"), rule.split(separator: "\n").last.map(String.init) ?? "")
+    check(item, "…and the dashes are on screen (158)", renderedText().contains("--- x"), String(renderedText().suffix(12)))
     key(K.ret); type("> y"); settle()
     let quote = read(name) ?? ""
-    check(item, "…and `>` on the next bullet is text (155)", quote.hasSuffix("- \\> y\n"), quote.split(separator: "\n").last.map(String.init) ?? "")
+    check(item, "…and `>` on the next bullet is text (158)", quote.hasSuffix("- > y\n"), quote.split(separator: "\n").last.map(String.init) ?? "")
     key(K.ret); key(K.ret); type("1. a"); key(K.ret); type("2.3 z"); settle()
     let number = read(name) ?? ""
     check(item, "`2.3` typed into item two keeps its digits (156)", number.hasSuffix("2. 2.3 z\n"), number.split(separator: "\n").last.map(String.init) ?? "")
+    key(K.ret); key(K.ret); type("#"); settle()
+    check(item, "a lone `#` is on screen as a hash, not a heading (158)", renderedText().trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("\n#"), String(renderedText().suffix(6)))
 }
 
 func itemDeleteIntoRecentlyDeleted() {
