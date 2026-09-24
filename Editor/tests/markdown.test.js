@@ -2000,6 +2000,24 @@ export function runSelectionReveal(view, doc) {
     view.state.selection.ranges.length);
   d.at("numbered");
 
+  // --- no caret while text is selected, computed (139, amended 163) --------------------------------
+  //
+  // The declaration below was pinned and never once applied while the pane had focus: CodeMirror's
+  // `.cm-focused > .cm-scroller > .cm-cursorLayer .cm-cursor { display: block }` outranks it, so ⌘A
+  // left an amber bar at the selection's end — reported where that end was a closing fence. Read
+  // off the computed style of a focused editor, which is the only state it matters in.
+  view.focus();
+  const caretShown = () => [...doc.querySelectorAll(".cm-cursor")].some((c) => getComputedStyle(c).display !== "none");
+  d.load("clear\n\n```\na\na\n```"); d.at("clear", 1);
+  r.check("(163) a focused caret is drawn", true, caretShown());
+  selectAll();
+  r.check("(163) …and not while the note is selected", false, caretShown(),
+    [...doc.querySelectorAll(".cm-cursor")].map((c) => getComputedStyle(c).display).join(","));
+  d.load("one two\n"); select(0, 3);
+  r.check("(163) …nor while a word is", false, caretShown());
+  d.at("two");
+  r.check("(163) …and it is back once the selection collapses", true, caretShown());
+
   // --- two declarations this harness cannot reach --------------------------------------------------
 
   const rules = [...doc.styleSheets]
@@ -2009,7 +2027,7 @@ export function runSelectionReveal(view, doc) {
   // `.cm-cursor` is drawn by `drawSelection`'s cursor layer, which draws one per range head whether
   // the range is empty or not and offers no option — so the only lever is CSS, and CSS cannot see
   // the selection, which is what `data-ranged` above is for.
-  const caretRule = rules.find((rule) => rule.selectorText === ".cm-editor[data-ranged] .cm-cursor");
+  const caretRule = rules.find((rule) => (rule.selectorText ?? "").startsWith(".cm-editor[data-ranged] .cm-cursor"));
   r.check("no caret is drawn while text is selected", "none",
     caretRule ? caretRule.style.getPropertyValue("display") : "no rule");
 

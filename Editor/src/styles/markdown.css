@@ -97,8 +97,14 @@
 }
 
 /* No caret while text is selected — `data-ranged` in live-preview.ts, and the reasoning is there.
- * `.cm-dropCursor` is deliberately not here: it answers a drag, not the selection. */
-.cm-editor[data-ranged] .cm-cursor {
+ * `.cm-dropCursor` is deliberately not here: it answers a drag, not the selection.
+ *
+ * The second selector is the one that works while the pane has focus, which is the only time a caret
+ * is drawn at all. CodeMirror's `&.cm-focused > .cm-scroller > .cm-cursorLayer .cm-cursor` sets
+ * `display: block` at (0,5,0) against the first one's (0,3,0), so for as long as this rule existed
+ * ⌘A left a caret at the selection's end (163; 71's trap, a fifth time). This one is (0,6,0). */
+.cm-editor[data-ranged] .cm-cursor,
+.cm-editor[data-ranged].cm-focused > .cm-scroller > .cm-cursorLayer .cm-cursor {
   display: none;
 }
 
