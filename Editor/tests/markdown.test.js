@@ -348,14 +348,14 @@ export function runTypedLists(view, doc) {
   r.check("Enter continues a numbered list", "1. alpha\n2. bravo", d.text(), "1. alpha ⏎ bravo");
 
   d.reset();
-  d.type("- [] alpha");
-  r.check("[] becomes a checkbox as you type", "- [ ] alpha", d.text(), "- [] alpha");
+  d.type("[] alpha");
+  r.check("[] becomes a checkbox as you type", "- [ ] alpha", d.text(), "[] alpha");
 
   d.reset();
-  d.type("- [] alpha");
+  d.type("[] alpha");
   d.press("Enter");
   d.type("bravo");
-  r.check("Enter continues a task list", "- [ ] alpha\n- [ ] bravo", d.text(), "- [] alpha ⏎ bravo");
+  r.check("Enter continues a task list", "- [ ] alpha\n- [ ] bravo", d.text(), "[] alpha ⏎ bravo");
 
   // Decision 59: a new bullet takes the marker the list above it is using.
   d.reset();
@@ -398,12 +398,12 @@ export function runTypedLists(view, doc) {
   r.check("Tab nests under a number", "1. alpha\n   1. bravo", d.text(), "1. alpha ⏎ ⇥ bravo");
 
   d.reset();
-  d.type("- [] alpha");
+  d.type("[] alpha");
   d.press("Enter");
   d.press("Tab");
   d.type("bravo");
   r.check("Tab nests under a task", "- [ ] alpha\n  - [ ] bravo", d.text(),
-    "- [] alpha ⏎ ⇥ bravo");
+    "[] alpha ⏎ ⇥ bravo");
 
   // Three levels, which is where a per-level indent that is wrong compounds.
   d.reset();
@@ -517,11 +517,11 @@ export function runTypedLists(view, doc) {
     "1. one ⏎ ⏎ para");
 
   d.reset();
-  d.type("- [] one");
+  d.type("[] one");
   d.press("Enter");
   d.press("Enter");
   d.type("para");
-  r.check("and for a task list", "- [ ] one\n\npara", d.text(), "- [] one ⏎ ⏎ para");
+  r.check("and for a task list", "- [ ] one\n\npara", d.text(), "[] one ⏎ ⏎ para");
 
   // --- mixed kinds ------------------------------------------------------------------------------
 
@@ -589,8 +589,8 @@ export function runTypedLists(view, doc) {
   r.check("a marker after the item's text is already text", "1. a 1. b", d.text(), "1. a 1. b");
 
   d.reset();
-  d.type("- [] x - y");
-  r.check("and so is one after a checkbox", "- [ ] x - y", d.text(), "- [] x - y");
+  d.type("[] x - y");
+  r.check("and so is one after a checkbox", "- [ ] x - y", d.text(), "[] x - y");
 
   // A quote is not a list, and `> - x` is how a list inside one is written.
   d.reset();
@@ -603,6 +603,59 @@ export function runTypedLists(view, doc) {
   d.press("Enter"); d.press("Tab"); d.type("* b");
   r.check("a marker typed into a nested item is escaped too", "- a\n  - \\* b", d.text(),
     "- a ⏎⇥ * b");
+
+  // --- one line, one list item (decision 155) -----------------------------------------------------
+  //
+  // A list item holds text. A block marker typed at its content column — a rule, a quote, a
+  // heading, a fence, a checkbox — is written as text with a backslash, the way 135 already writes
+  // a second list marker; a nested block is made with ⇥, never on the same line. Reported from use:
+  // `- --` became a rule and ate the bullet, `- >` a quote, `- [] ` a checkbox, `1. ---` a rule
+  // inside the item, and spaces after `- ` an indented code block.
+
+  const oneItem = (name, keys, want, forbidden) => {
+    d.reset();
+    keys();
+    r.check(name, want, d.text(), show(want));
+    if (!forbidden) return;
+    const hit = [...doc.querySelectorAll(".cm-line")].find((el) => el.classList.contains(forbidden));
+    r.check(`${name}: nothing draws as ${forbidden}`, false, !!hit, hit ? hit.className : "");
+  };
+
+  oneItem("(155) `- --` is a bullet holding dashes", () => d.type("- --"), "- \\--", "pane-rule");
+  oneItem("(155) and `- ---` too, with the caret left on its line", () => d.type("- ---x"), "- \\---x", "pane-rule");
+  oneItem("(155) `---` on a continued bullet", () => { d.type("- a"); d.press("Enter"); d.type("---"); },
+    "- a\n- \\---", "pane-rule");
+  oneItem("(155) `---` on a numbered item", () => { d.type("1. a"); d.press("Enter"); d.type("---"); },
+    "1. a\n2. \\---", "pane-rule");
+  oneItem("(155) `---` on a nested item", () => { d.type("- a"); d.press("Enter"); d.press("Tab"); d.type("---"); },
+    "- a\n  - \\---", "pane-rule");
+  oneItem("(155) `***` on a bullet", () => d.type("- ***"), "- \\***", "pane-rule");
+  oneItem("(155) `>` on a bullet", () => d.type("- > x"), "- \\> x", "pane-line-quote");
+  oneItem("(155) `>` on a numbered item", () => d.type("1. > x"), "1. \\> x", "pane-line-quote");
+  oneItem("(155) `#` on a bullet", () => d.type("- # x"), "- \\# x", "pane-line-h1");
+  oneItem("(155) a fence on a bullet", () => d.type("- ```"), "- \\```", "pane-line-code");
+  oneItem("(155) `[] ` on a bullet stays text", () => d.type("- [] x"), "- [] x", null);
+  oneItem("(155) `[ ] ` on a bullet is text", () => d.type("- [ ] x"), "- \\[ ] x", null);
+  oneItem("(155) `[] ` on a numbered item stays text", () => d.type("1. [] x"), "1. [] x", null);
+  oneItem("(155) `[x] ` on a numbered item is text", () => d.type("1. [x] x"), "1. \\[x] x", null);
+  oneItem("(155) a setext underline under an item's text", () => {
+    d.type("- a"); d.press("Enter", { shiftKey: true }); d.type("---");
+  }, "- a\n  \\---", "pane-line-h2");
+  // Spaces at an item's content column are not typed: five would make the item an indented code block.
+  oneItem("(155) spaces after `- ` are not typed", () => d.type("-      x"), "- x", "pane-line-code");
+  oneItem("(155) nor after `1. `", () => d.type("1.      x"), "1. x", "pane-line-code");
+  oneItem("(155) nor after a checkbox", () => d.type("[]      x"), "- [ ] x", null);
+  // What it leaves alone.
+  oneItem("(155) `[] ` on an empty line still makes a task", () => d.type("[] x"), "- [ ] x", null);
+  oneItem("(155) bold at an item's start is inline, and untouched", () => d.type("- **b** x"), "- **b** x", null);
+  oneItem("(155) a strike at an item's start is untouched", () => d.type("- ~~s~~ x"), "- ~~s~~ x", null);
+  oneItem("(155) a link at an item's start is untouched", () => d.type("- [a](b) x"), "- [a](b) x", null);
+  oneItem("(155) a dash after the item's text is text", () => d.type("- a -- b"), "- a -- b", null);
+  oneItem("(155) a space after the item's text is typed", () => d.type("- a  b"), "- a  b", null);
+  oneItem("(155) `---` outside a list is still a rule", () => { d.type("a"); d.press("Enter"); d.type("---"); },
+    "a\n\n---\n", null);
+  oneItem("(155) `> ` outside a list is still a quote", () => d.type("> x"), "> x", null);
+  oneItem("(155) a list inside a quote is still a list", () => d.type("> - x"), "> - x", null);
 
   // --- numbering --------------------------------------------------------------------------------
 
@@ -1091,7 +1144,8 @@ export function runListGeometry(view, doc) {
   const markerOnly = [
     ["`1. `", () => d.type("1. "), 1],
     ["`- `", () => d.type("- "), 1],
-    ["`- [ ] `", () => d.type("- [ ] "), 1],
+    // Typed as `[] `: after a marker it is text (155).
+    ["`- [ ] `", () => d.type("[] "), 1],
     ["`2. ` made by ⏎", () => { d.type("1. one"); d.press("Enter"); }, 2],
     ["`1. ` under a paragraph", () => { d.type("para"); d.press("Enter"); d.type("1. "); }, 3],
     ["a nested `- ` made by ⏎ ⇥", () => { d.type("- one"); d.press("Enter"); d.press("Tab"); }, 2],
@@ -1178,8 +1232,9 @@ export function runBlockEdges(view, doc) {
   }
   // …and after a block marker, which is a line start too (148, amended). `1. ****` is a thematic
   // break *inside* the item — the same fault one marker over, and the one that was reported.
+  // A task is typed as `[] `: after a marker it is text (155).
   for (const marker of ["1. ", "- ", "> ", "- [ ] "]) {
-    d.reset(); d.type("x"); d.press("Enter"); d.type(marker); key("b", { metaKey: true });
+    d.reset(); d.type("x"); d.press("Enter"); d.type(marker === "- [ ] " ? "[] " : marker); key("b", { metaKey: true });
     r.check(`⌘B after \`${marker}\` writes nothing (148)`, `x\n\n${marker}`, d.text(), `${marker}⌘B`);
     r.check(`…and the line is still the item, not a rule`, false, i.classes(3).includes("pane-rule"), `${marker}: ${i.classes(3)}`);
     d.type("a");

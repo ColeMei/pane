@@ -23,7 +23,7 @@ import {
   markdownLanguage,
 } from "@codemirror/lang-markdown";
 import { html } from "@codemirror/lang-html";
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 import {
   Compartment,
@@ -334,18 +334,7 @@ function checkboxInputRule(): Extension {
     const line = view.state.doc.lineAt(from);
     const before = line.text.slice(0, from - line.from);
 
-    // After a list marker: `- []`, `* []`, `1. []`.
-    const marker = /^(\s*(?:[-*+]|\d+[.)])\s+)\[\]$/.exec(before)?.[1];
-    if (marker !== undefined) {
-      const start = line.from + marker.length;
-      view.dispatch({
-        changes: { from: start, to, insert: "[ ] " },
-        selection: { anchor: start + 4 },
-        userEvent: "input.type",
-      });
-      return true;
-    }
-
+    // Only on a line of its own. After a list marker `[] ` is text: a line is one kind of item (155).
     // On a line of its own — `[]` becomes a whole list item, which is what Typora does and what you
     // mean when you start a line that way.
     const indent = /^(\s*)\[\]$/.exec(before)?.[1];
@@ -361,6 +350,87 @@ function checkboxInputRule(): Extension {
 
     return false;
   });
+}
+
+/** Blocks a list item's line may not start: an item holds text, and a nested block is made with ⇥
+ * (155). A second list marker is not here — it needs its space, and 135 escapes it on that. */
+const NOT_IN_AN_ITEM = new Set([
+  "HorizontalRule", "Blockquote", "FencedCode", "CodeBlock", "SetextHeading1", "SetextHeading2",
+  "ATXHeading1", "ATXHeading2", "ATXHeading3", "ATXHeading4", "ATXHeading5", "ATXHeading6",
+]);
+
+/** Whether the line holding `at` is text in a list item: walking out from `at`, a `ListItem` comes
+ * before any block of its own. A task's own box is part of the item; one that starts at or after
+ * `start` was just made. */
+function inItemText(state: EditorState, at: number, side: -1 | 1, start: number): boolean {
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(at, side); node; node = node.parent) {
+    if (node.name === "ListItem") return true;
+    if (node.name === "Task" && node.from >= start) return false;
+    if (NOT_IN_AN_ITEM.has(node.name)) return false;
+  }
+  return false;
+}
+
+/**
+ * One line, one list item — decision 155.
+ *
+ * A character that would turn a list item's text into a block — `- --` a rule that eats the bullet,
+ * `- >` a quote, `1. [ ]` a to-do, `- #` a heading — is written with a backslash at the item's
+ * content column, which is how markdown says "this is text" (135). And a space at the content column
+ * is not typed at all: five of them make the item an indented code block, and none of them shows.
+ */
+function itemHoldsTextRule(): Extension {
+  return EditorView.inputHandler.of((view, from, to, text) => {
+    if (from !== to || text.length !== 1) return false;
+    const state = view.state;
+    const line = state.doc.lineAt(from);
+    const { start, marked } = itemContentStart(state, line.number);
+    if (from < start) return false;
+    // A lone marker is not an item yet — it is how `---` is begun — so its line belongs to whatever
+    // holds it, read from the left.
+    const side = marked && start < line.to ? 1 : -1;
+    if (!inItemText(state, start, side, start)) return false;
+
+    if ((text === " " || text === "\t") && marked && from === start) return true;
+
+    const after = state.update({ changes: { from, to, insert: text } }).state;
+    ensureSyntaxTree(after, after.doc.lineAt(from).to, 50);
+    if (inItemText(after, start, 1, start)) return false;
+    if (!/[!-/:-@[-`{-~]/.test(after.doc.sliceString(start, start + 1))) return false;
+
+    view.dispatch({
+      changes: [{ from: start, insert: "\\" }, { from, to, insert: text }],
+      selection: { anchor: from + 2 },
+      userEvent: "input.type",
+    });
+    return true;
+  });
+}
+
+/** Where line `n`'s own item text starts: past the indent, quote marks, the **first** list marker
+ * with its space, and a task box. Not `markerSpanEnd`, which runs on through `- -`'s second marker.
+ * `marked` is whether a marker with its space was passed; a lone `-` is left as text. */
+function itemContentStart(state: EditorState, n: number): { start: number; marked: boolean } {
+  const doc = state.doc;
+  const line = doc.line(n);
+  let end = line.from + /^[ \t]*/.exec(line.text)![0].length;
+  const marks: SyntaxNode[] = [];
+  syntaxTree(state).iterate({ from: line.from, to: line.to, enter: (node) => {
+    if (node.name === "QuoteMark" || node.name === "ListMark" || node.name === "TaskMarker") marks.push(node.node);
+  } });
+  marks.sort((a, b) => a.from - b.from);
+  let marked = false;
+  for (const mark of marks) {
+    if (mark.from !== end) break;
+    if (mark.name === "ListMark" && marked) break;
+    if (mark.name === "TaskMarker" && !marked) break;
+    const spaced = /^[ \t]/.test(doc.sliceString(mark.to, mark.to + 1));
+    if (mark.name === "ListMark" && !spaced) break;
+    end = mark.to;
+    while (end < line.to && /[ \t]/.test(doc.sliceString(end, end + 1))) end++;
+    if (mark.name === "ListMark") marked = true;
+  }
+  return { start: end, marked };
 }
 
 /**
@@ -638,6 +708,8 @@ function baseExtensions(): Extension[] {
     placeholder("Start writing…"),
     // First among the input rules: a pair waiting at a line start takes the first character (148).
     pendingWrapExtension(),
+    // Before the rule and checkbox rules: in a list item, their markers are text (155).
+    itemHoldsTextRule(),
     checkboxInputRule(),
     bulletInputRule(),
     // The character that completes `---` also steps the caret off the rule it just made (152).
