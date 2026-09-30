@@ -589,6 +589,13 @@
   text-decoration: underline;
 }
 
+/* A link's words are all the link, however they are styled inside it — decision 167. Bold and code
+ * set colours of their own, and nested in a link they painted half the label as not a link. */
+.pane-link .pane-strong,
+.pane-link .pane-code {
+  color: inherit;
+}
+
 /* ---- Blocks ------------------------------------------------------------------------------------ */
 
 .cm-line.pane-rule {
