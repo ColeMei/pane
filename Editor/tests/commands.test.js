@@ -1170,7 +1170,8 @@ export function run(view, bar, doc) {
   let checked = 0;
 
   for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips, runListKinds,
-                       runFooterCount, runLinkOpening, runMarkerSelection, runFindSurvives]) {
+                       runFooterCount, runLinkOpening, runMarkerSelection, runFindSurvives,
+                       runCaretToggles]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);
@@ -1215,6 +1216,79 @@ export function run(view, bar, doc) {
       }
     }
   }
+
+  return { checked, failures };
+}
+
+/**
+ * An inline button pressed with a bare caret — decision 165.
+ *
+ * Written from use, in the order people do it: press, type, press, keep typing. The selection
+ * matrix above never had a caret in it, so three faults sat under it: bold, italic, strikethrough,
+ * underline and code turned off by *selecting* the word, so the next key replaced it; highlight
+ * mistook its own closing `==` for an opener and wrapped again; and ⌘L never turned off at all.
+ */
+export function runCaretToggles(view, doc, bar) {
+  const failures = [];
+  let checked = 0;
+  const check = (name, want, got) => {
+    checked += 1;
+    if (got !== want) failures.push({ case: `caret toggle · ${name}`, want, got });
+  };
+  const click = (label) => {
+    const button = [...bar.querySelectorAll("button")]
+      .find((b) => (b.getAttribute("aria-label") || "").startsWith(label));
+    if (!button) throw new Error(`no format-bar button named ${label}`);
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  };
+  const type = (text) => view.dispatch(view.state.replaceSelection(text));
+  const load = (text, caret) => {
+    window.paneHost.loadNote("t.md", text, caret, false);
+    view.dispatch({ selection: { anchor: caret } });
+  };
+  const collapsed = () => view.state.selection.main.empty;
+
+  const WRAPS = [
+    ["Bold", "**", "**"], ["Italic", "*", "*"], ["Strikethrough", "~~", "~~"],
+    ["Underline", "<u>", "</u>"], ["Highlight", "==", "=="], ["Inline code", "`", "`"],
+  ];
+
+  for (const [label, open, close] of WRAPS) {
+    // Press, type, press, type: the word keeps its style and the typing after it does not.
+    load("a \n", 2);
+    click(label); type("xy"); click(label);
+    check(`${label} · the second press leaves no selection`, true, collapsed());
+    type(" z");
+    check(`${label} · press, type, press, type`, `a ${open}xy${close} z\n`, view.state.doc.toString());
+
+    // In the middle of a styled word the press takes the style off, and the caret stays put.
+    const styled = `a ${open}bold${close} z\n`;
+    load(styled, 2 + open.length + 2);
+    click(label);
+    check(`${label} · mid-word press unwraps`, "a bold z\n", view.state.doc.toString());
+    check(`${label} · and leaves no selection`, true, collapsed());
+    type("Q");
+    check(`${label} · and typing lands where the caret was`, "a boQld z\n", view.state.doc.toString());
+
+    // Two presses on nothing leave nothing behind.
+    load("a \n", 2);
+    click(label); click(label);
+    check(`${label} · two presses with nothing typed`, "a \n", view.state.doc.toString());
+  }
+
+  // ⌘L: label, then target, then out — the same keystroke carries you through the link.
+  load("a \n", 2);
+  click("Link"); type("xy"); click("Link"); type("u"); click("Link"); type(" z");
+  check("Link · label, target, out", "a [xy](u) z\n", view.state.doc.toString());
+
+  load("a [bold](u) z\n", 5);
+  click("Link");
+  check("Link · mid-label press unwraps", "a bold z\n", view.state.doc.toString());
+  check("Link · and leaves no selection", true, collapsed());
+
+  load("a \n", 2);
+  click("Link"); click("Link");
+  check("Link · two presses with nothing typed", "a \n", view.state.doc.toString());
 
   return { checked, failures };
 }

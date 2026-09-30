@@ -192,9 +192,43 @@ function applyLink(view: EditorView): void {
   const state = view.state;
   const { from, to } = state.selection.main;
 
-  // No selection: an empty link with the caret in the label.
+  // No selection: one keystroke carries you through a link — label, then target, then out (165).
+  // It used to write a fresh `[]()` every time, so a second press nested a link in the label.
   if (from === to) {
-    view.dispatch({ changes: { from, insert: "[]()" }, selection: { anchor: from + 1 } });
+    const move = (anchor: number) => {
+      view.dispatch({ selection: { anchor } });
+      view.focus();
+    };
+    // Pressed twice with nothing typed: the empty link comes back out.
+    if (state.sliceDoc(from - 1, from + 3) === "[]()") {
+      view.dispatch({
+        changes: { from: from - 1, to: from + 3 },
+        selection: { anchor: from - 1 },
+        userEvent: "input",
+      });
+      view.focus();
+      return;
+    }
+    const link = enclosingNode(state, "Link");
+    if (!link) {
+      view.dispatch({ changes: { from, insert: "[]()" }, selection: { anchor: from + 1 } });
+      view.focus();
+      return;
+    }
+    const labelEnd = link.from + state.sliceDoc(link.from, link.to).lastIndexOf("](");
+    // In the target already: out.
+    if (from > labelEnd) return move(link.to);
+    // At the end of the label: into an empty target, or out past a filled one.
+    if (from === labelEnd) return move(state.sliceDoc(link.to - 2, link.to) === "()" ? link.to - 1 : link.to);
+    // In the middle of the label: the link comes off and the text stays, caret where it was.
+    view.dispatch({
+      changes: [
+        { from: link.from, to: link.from + 1 },
+        { from: labelEnd, to: link.to },
+      ],
+      selection: { anchor: Math.max(from - 1, link.from) },
+      userEvent: "input",
+    });
     view.focus();
     return;
   }
@@ -352,6 +386,21 @@ function pairAround(
   const head = range.from - line.from;
   const tail = range.to - line.from;
 
+  // `==` opens and closes with the same bytes, so searching back from the caret finds the *closing*
+  // marker whenever the caret sits just before it — and a press there wrapped again, `==xy====`
+  // (165). Pair them left to right instead, the way the line reads.
+  if (open === close) {
+    let from = 0;
+    for (;;) {
+      const start = line.text.indexOf(open, from);
+      if (start === -1 || start > head) return null;
+      const end = line.text.indexOf(close, start + open.length);
+      if (end === -1) return null;
+      if (end + close.length >= tail) return { from: line.from + start, to: line.from + end + close.length };
+      from = end + close.length;
+    }
+  }
+
   // Containment, matching what the tree path tests for the constructs that have a node: the
   // construct has to *contain* the span, not sit strictly outside it. Requiring the span to start
   // after the opening delimiter was stricter than bold's rule, so a selection that happened to
@@ -387,17 +436,42 @@ function trimmed(state: EditorState, from: number, to: number): { from: number; 
   return { from: start, to: end };
 }
 
-/** Removes a construct's delimiters, leaving the text and selecting it. */
-function unwrap(view: EditorView, node: { from: number; to: number }, open: number, close: number): void {
+/**
+ * Removes a construct's delimiters around a caret, and leaves the caret where it was in the text.
+ *
+ * It used to select the text it had unwrapped, which is right after unwrapping a selection and
+ * wrong here: the next key replaced the word (165).
+ */
+function unwrap(
+  view: EditorView,
+  node: { from: number; to: number },
+  open: number,
+  close: number,
+  caret: number
+): void {
+  const textEnd = node.to - open - close;
   view.dispatch({
     changes: [
       { from: node.from, to: node.from + open },
       { from: node.to - close, to: node.to },
     ],
-    selection: { anchor: node.from, head: node.to - open - close },
+    selection: { anchor: Math.min(Math.max(caret - open, node.from), textEnd) },
     userEvent: "input",
   });
   view.focus();
+}
+
+/**
+ * The pair a press just wrote with nothing typed into it — `**|**` — so a second press takes it
+ * back out rather than wrapping it again. Not when a word follows the closer: `*|*bold**` is the
+ * inside of bold's opening marker, not an empty italic.
+ */
+function emptyPairAt(state: EditorState, at: number, open: string, close: string): boolean {
+  return (
+    state.sliceDoc(at - open.length, at) === open &&
+    state.sliceDoc(at, at + close.length) === close &&
+    !/\w/.test(state.sliceDoc(at + close.length, at + close.length + 1))
+  );
 }
 
 /**
@@ -459,13 +533,34 @@ function toggleWrap(
   const state = view.state;
   const { from, to } = state.selection.main;
 
-  // A caret is one position, so one construct: unwrap the one it is in, or open an empty pair.
+  // A caret is one position, so one construct. Three answers, for press-type-press-type (165).
   if (from === to) {
+    // Pressed twice with nothing typed: the empty pair comes back out.
+    if (emptyPairAt(state, from, open, close)) {
+      view.dispatch({
+        changes: { from: from - open.length, to: from + close.length },
+        selection: { anchor: from - open.length },
+        userEvent: "input",
+      });
+      view.focus();
+      return;
+    }
     const inside = nodeName ? enclosingNode(state, nodeName) : enclosingPair(state, open, close);
-    // Length rather than the marker itself: `_italic_` and `*italic*` are one node and both
-    // delimiters are one character, so removing by length handles the spelling the user chose.
-    if (inside) unwrap(view, inside, open.length, close.length);
-    else wrapPerBlock(view, open, close, !nodeName);
+    if (!inside) {
+      wrapPerBlock(view, open, close, !nodeName);
+      return;
+    }
+    // At the end of its text, the press steps out: the word keeps its style and what you type
+    // next does not — how every editor with a bold key behaves.
+    if (from === inside.to - close.length) {
+      view.dispatch({ selection: { anchor: inside.to } });
+      view.focus();
+      return;
+    }
+    // Anywhere else inside, it takes the style off. Length rather than the marker itself:
+    // `_italic_` and `*italic*` are one node and both delimiters are one character, so removing by
+    // length handles the spelling the user chose.
+    unwrap(view, inside, open.length, close.length, from);
     return;
   }
 
