@@ -321,6 +321,12 @@
    * height short of the note it is drawing. Anything spatial on a `.cm-line` has to be padding. */
 }
 
+/* Twice the block gap above a heading, like the rule's (152), so a section reads as one — decision
+ * 166, amending 55. A blank line typed above supplies one gap and this the other; with none typed,
+ * `pane-line-gap` is on the same line and both come from here. Padding, for the reason above. */
+.cm-line.pane-line-heading-space { padding-top: var(--block-gap); }
+.cm-line.pane-line-heading-space.pane-line-gap { padding-top: calc(var(--block-gap) * 2); }
+
 .cm-line.pane-line-h1 { font-size: var(--size-h1); }
 .cm-line.pane-line-h2 { font-size: calc(var(--size-h1) * 0.78); }
 .cm-line.pane-line-h3 { font-size: calc(var(--size-h1) * 0.66); }

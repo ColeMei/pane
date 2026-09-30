@@ -77,6 +77,7 @@ const blankLine = Decoration.line({ class: "pane-line-blank" });
 /** The gap above a block the user did not separate with a blank line — decision 55. Where a blank
  * line exists it is already the gap. */
 const gapLine = Decoration.line({ class: "pane-line-gap" });
+const headingSpaceLine = Decoration.line({ class: "pane-line-heading-space" });
 const fenceLine = Decoration.line({ class: "pane-line-fence" });
 
 const syntaxMark = Decoration.mark({ class: "pane-syntax" });
@@ -273,6 +274,11 @@ function blockLines(node: SyntaxNodeRef, w: Walk): void {
     for (let n = first; n <= last; n++) {
       w.decorations.push(deco.range(w.doc.line(n).from));
       if (blockClass === "pane-line-code") w.codeLines.add(n);
+    }
+    // A heading opens a section, so it gets more room above it than a block does — but not as the
+    // note's first line, where there is nothing above to be separated from (166).
+    if (blockClass.startsWith("pane-line-h") && first > 1) {
+      w.decorations.push(headingSpaceLine.range(w.doc.line(first).from));
     }
 
     // Both fences and the info string are chrome, collapsed into the block's own padding — only off the

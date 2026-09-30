@@ -1225,6 +1225,15 @@ export function runBlockEdges(view, doc) {
     r.check(`an h${level} starts where the paragraph does (149)`, i.wordEdge(7, "text"), i.wordEdge(n, "title"));
   }
 
+  // 166: a heading has twice the block gap above it, and none as the note's first line. Measured as
+  // line heights, since the space is padding: after a blank line it adds one gap to the line (the
+  // blank line is the other), after text it adds both.
+  d.load("## title\n\npara\n\n## title\npara\n## title\n\nPARA\n"); d.at("PARA");
+  const afterBlank = i.height(5) - i.height(1);
+  const afterText = i.height(7) - i.height(1);
+  r.check("a heading after a blank line gets one more gap than a first-line one (166)", true, afterBlank > 0, `+${afterBlank}px`);
+  r.check("…and one straight after text gets two", afterBlank * 2, afterText);
+
   // 147: an unclosed block's last line is code, not a collapsed fence.
   d.load("```\ncode\n```a\n\nPARA\n"); d.at("PARA");
   r.check("a closing fence somebody typed on is a code line at code height (147)", i.height(2), i.height(3));
