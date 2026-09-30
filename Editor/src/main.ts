@@ -56,6 +56,7 @@ import { fencesOf, markerSpanEnd, notAPlace, ruleLine } from "./blocks";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { splitSpans } from "./keyboard/spans";
+import { moveBlockDown, moveBlockUp, nothing, selectBlockEnd, selectBlockStart } from "./keyboard/move-block";
 import { shiftTab, tab } from "./keyboard/tab";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { renumberOrderedLists } from "./renumber";
@@ -679,6 +680,14 @@ function baseExtensions(): Extension[] {
         { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
         // A line's edges are its text's: outside an inline construct, after a block's marker, and
         // ⌥⌫ or ⌘⌫ at the text start is ⌫ (170).
+        // ⌥↑ and ⌥↓ move the caret's block, and ⌃⌘↑ and ⌃⌘↓ are the same under Raycast's key;
+        // ⇧⌥ selects to the block's edge, and ⌘⌥ is taken so it adds no second caret (174).
+        { key: "Alt-ArrowUp", run: moveBlockUp, shift: selectBlockStart },
+        { key: "Alt-ArrowDown", run: moveBlockDown, shift: selectBlockEnd },
+        { key: "Ctrl-Mod-ArrowUp", run: moveBlockUp },
+        { key: "Ctrl-Mod-ArrowDown", run: moveBlockDown },
+        { key: "Mod-Alt-ArrowUp", run: nothing },
+        { key: "Mod-Alt-ArrowDown", run: nothing },
         { key: "Mod-ArrowLeft", run: lineStart, shift: selectLineStart },
         { key: "Mod-ArrowRight", run: lineEnd, shift: selectLineEnd },
         { key: "Mod-Backspace", run: deleteToLineStart(backspaceKey) },

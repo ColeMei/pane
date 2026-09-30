@@ -2426,6 +2426,30 @@ export function runGestures(view, doc) {
     r.check(`${name}: ↓ from the text start lands at the start of the line below (173)`, d.text().indexOf("end line"), head());
   }
 
+  // 174: ⌥↑ and ⌥↓, and ⌃⌘↑ and ⌃⌘↓, move the block the caret is in; ⇧⌥↑ and ⇧⌥↓ select to its edge.
+  const moved = (text, needle, key, mods) => { d.load(text); d.at(needle, 2); d.press(key, mods); return [d.text(), head() - d.text().indexOf(needle)]; };
+  const P3 = "top\n\nfirst para words\n\nsecond para words\n\nend line\n";
+  const [upText, upAt] = moved(P3, "second", "ArrowUp", { altKey: true });
+  r.check("⌥↑ swaps a paragraph with the one above, gap kept (174)", "top\n\nsecond para words\n\nfirst para words\n\nend line\n", upText);
+  r.check("…and the caret moves with it", 2, upAt);
+  r.check("⌥↓ swaps it with the one below (174)", "top\n\nfirst para words\n\nend line\n\nsecond para words\n", moved(P3, "second", "ArrowDown", { altKey: true })[0]);
+  const L3 = "- first item\n- second item\n- third item\n\nPARA\n";
+  r.check("⌥↑ moves a list item above its sibling (174)", "- second item\n- first item\n- third item\n\nPARA\n", moved(L3, "second", "ArrowUp", { altKey: true })[0]);
+  r.check("⌃⌘↑ does the same (174, the key fixed by 39)", "- second item\n- first item\n- third item\n\nPARA\n", moved(L3, "second", "ArrowUp", { ctrlKey: true, metaKey: true })[0]);
+  r.check("⌃⌘↓ moves it down", "- first item\n- third item\n- second item\n\nPARA\n", moved(L3, "second", "ArrowDown", { ctrlKey: true, metaKey: true })[0]);
+  r.check("⌥↑ on a list's first item does nothing (174)", L3, moved(L3, "first", "ArrowUp", { altKey: true })[0]);
+  r.check("a numbered item moves and the list renumbers (174)", "1. two\n2. one\n\nPARA\n", moved("1. one\n2. two\n\nPARA\n", "two", "ArrowUp", { altKey: true })[0]);
+  d.load(P3); d.at("second para words", 9);
+  d.press("ArrowUp", { altKey: true, shiftKey: true });
+  r.check("⇧⌥↑ selects to the paragraph's start and writes nothing (174)", "second pa", selected());
+  d.load(P3); d.at("second para words", 9);
+  d.press("ArrowDown", { altKey: true, shiftKey: true });
+  r.check("⇧⌥↓ selects to its end (174)", "ra words", selected());
+  d.load(P3); d.at("second para words", 9);
+  d.press("ArrowUp", { altKey: true, metaKey: true });
+  r.check("⌘⌥↑ does nothing (174)", P3, d.text());
+  r.check("…and adds no second caret", 1, view.state.selection.ranges.length);
+
   // 172: ⌦ at a paragraph's end takes the whole break, as ⌫ does from below.
   const forward = (text, needle, keys = {}) => { d.load(text); d.at(needle, needle.length); d.press("Delete", keys); return d.text(); };
   r.check("⌦ at a paragraph's end joins the next one (172)", "top\n\nfirst para wordssecond para words\n\nPARA\n", forward(PARAS, "first para words"));
