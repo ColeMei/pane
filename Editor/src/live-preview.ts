@@ -19,7 +19,7 @@
  */
 
 import { syntaxTree } from "@codemirror/language";
-import { buildDecorations } from "./decorate";
+import { buildDecorations, TEXT_STYLE_CLASSES } from "./decorate";
 import { markerSpanEnd, notAPlace } from "./blocks";
 import { pendingPair } from "./format-bar";
 import { arrivedByEditAfter, revealPolicy } from "./reveal";
@@ -39,9 +39,12 @@ let caretArrivedByEdit = false;
 const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    /** The decorations the caret may not stand inside: all of them but the text styles (168). */
+    atoms: DecorationSet;
 
     constructor(view: EditorView) {
       this.decorations = buildDecorations(view, revealPolicy(view.state, view.hasFocus, caretArrivedByEdit));
+      this.atoms = atomsOf(this.decorations);
     }
 
     update(update: ViewUpdate) {
@@ -77,6 +80,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
         this.decorations = buildDecorations(update.view, revealPolicy(update.state, update.view.hasFocus, caretArrivedByEdit));
+        this.atoms = atomsOf(this.decorations);
       }
     }
   },
@@ -85,11 +89,17 @@ const livePreviewPlugin = ViewPlugin.fromClass(
 
     // Hidden markers must not swallow the caret. Without this, arrowing across a hidden `**` leaves
     // the caret in a position the user cannot see, and every subsequent keystroke lands somewhere
-    // surprising — the classic live-preview cursor bug.
+    // surprising — the classic live-preview cursor bug. A mark that only styles text is not a hidden
+    // marker, and is left out (168).
     provide: (plugin) =>
-      EditorView.atomicRanges.of((view) => view.plugin(plugin)?.decorations ?? RangeSet.empty),
+      EditorView.atomicRanges.of((view) => view.plugin(plugin)?.atoms ?? RangeSet.empty),
   }
 );
+
+/** Everything but the marks that style text in place: a styled word is somewhere the caret goes (168). */
+function atomsOf(decorations: DecorationSet): DecorationSet {
+  return decorations.update({ filter: (_from, _to, value) => !TEXT_STYLE_CLASSES.has(value.spec.class) });
+}
 
 /**
  * Clicking a checkbox rewrites the literal `[ ]` / `[x]` in the buffer.

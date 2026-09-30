@@ -94,6 +94,14 @@ const TEXT_CONSTRUCTS: { pattern: RegExp; open: number; close: number; class: st
   { pattern: /<u>(.+?)<\/u>/g, open: 3, close: 4, class: "pane-underline" },
 ];
 
+/**
+ * The marks that only style text the caret may stand in. They are left out of the atomic ranges:
+ * a whole unrevealed `**bold words**` as one atom sent every click and ↑/↓ into it to an edge (168).
+ */
+export const TEXT_STYLE_CLASSES: ReadonlySet<string> = new Set([
+  ...Object.values(INLINE_STYLE), ...TEXT_CONSTRUCTS.map((c) => c.class), "pane-task-done-text",
+]);
+
 /** Is this offset inside code, where a `==` is two equals signs and nothing more? */
 function insideCode(view: EditorView, pos: number): boolean {
   let node = syntaxTree(view.state).resolveInner(pos, 1);

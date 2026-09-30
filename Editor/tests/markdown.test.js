@@ -2223,13 +2223,63 @@ export function runNoJump(view, doc) {
   return r;
 }
 
+/**
+ * Caret and selection gestures, from the 2026-09-30 sweep against Typora (`compare/gestures.md`).
+ * Each row is a cell the sweep measured wrong, written before its fix.
+ */
+export function runGestures(view, doc) {
+  const r = recorder("gestures");
+  const d = driver(view, doc);
+  Object.defineProperty(view, "hasFocus", { get: () => true, configurable: true });
+  const head = () => view.state.selection.main.head;
+  const sel = () => view.state.selection.main;
+
+  // 168: a styled word the caret is away from is not one atom. ↓ and ↑ from a plain line into the
+  // middle of it, and a click on its middle, land inside it rather than at an edge.
+  const STYLED = [
+    ["bold", "**", "**", "bold"], ["italic", "*", "*", "slant"], ["strike", "~~", "~~", "gone"],
+    ["underline", "<u>", "</u>", "under"], ["highlight", "==", "==", "mark"], ["code", "`", "`", "code"],
+    ["link", "[", "](https://x.com)", "link"],
+  ];
+  for (const [name, open, close, word] of STYLED) {
+    const construct = `${open}${word} words${close}`;
+    const inside = (at) => {
+      const from = d.text().indexOf(construct);
+      return at > from + open.length && at < from + construct.length - close.length;
+    };
+    d.load(`top\n\naa ${word} words zz plain\n\naa ${construct} zz\n\nPARA\n`);
+    d.at(`${word} words zz plain`, 2);
+    d.press("ArrowDown");
+    r.check(`${name}: ↓ from a plain line lands inside the styled word (168)`, true, inside(head()), `head ${head()}`);
+  }
+  for (const [name, open, close, word] of [STYLED[0], STYLED[6]]) {
+    const construct = `${open}${word} words${close}`;
+    d.load(`aa ${construct} zz\n\nPARA\n`);
+    d.at("PARA");
+    const from = d.text().indexOf(construct);
+    const target = from + open.length + 2;
+    const box = view.coordsAtPos(target);
+    d.content.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true, cancelable: true, detail: 1, button: 0,
+      clientX: Math.round(box.left + 1), clientY: Math.round((box.top + box.bottom) / 2),
+    }));
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, detail: 1, button: 0 }));
+    const landed = head();
+    r.check(`${name}: a click in the middle of the styled word lands inside it (168)`, true,
+      landed > from + open.length && landed < from + construct.length - close.length, `head ${landed}, aimed at ${target}`);
+    r.check(`${name}: …and selects nothing`, true, sel().empty);
+  }
+
+  return r;
+}
+
 export function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
   // An instrument reports; it does not fall over. A section that throws is itself a finding, and
   // the sections after it still have to run.
   for (const suite of [runTypedLists, runListStructure, runListGeometry, runLineBreaks,
-                       runConstructs, runDegradation, runSelectionReveal, runNoJump, runBlockEdges]) {
+                       runConstructs, runDegradation, runSelectionReveal, runNoJump, runBlockEdges, runGestures]) {
     try {
       const result = suite(view, doc, bar);
       checked += result.checked;
