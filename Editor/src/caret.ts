@@ -16,8 +16,8 @@
  * which half of the strip was clicked and this does not.
  */
 
-import { type Annotation, type AnnotationType, EditorSelection, EditorState, type Extension, Transaction } from "@codemirror/state";
-import { markerSpanEnd, notAPlace } from "./blocks";
+import { type Annotation, type AnnotationType, EditorSelection, EditorState, type Extension, type SelectionRange, Transaction, type TransactionSpec } from "@codemirror/state";
+import { fencedBlockAt, fencesOf, markerSpanEnd, notAPlace } from "./blocks";
 
 /** The nearest place line from `n` in `direction` (exclusive), or null when there is none. */
 function placeLineFrom(state: EditorState, n: number, direction: 1 | -1): number | null {
@@ -63,15 +63,66 @@ export function placeFor(state: EditorState, head: number, from: number, column:
   return start;
 }
 
+/**
+ * Where one end of a selection rests — decision 169. Where a caret would, by `placeFor`, with one
+ * rule of its own: a code block is held whole or from inside it. An end on a fence line, or on a
+ * code line while the other end is outside the block, goes to the block's far side, so typing over
+ * a selection never deletes one fence and leaves the other.
+ */
+export function placeRangeEnd(state: EditorState, end: number, from: number, other: number, moving = true): number {
+  const doc = state.doc;
+  // A selection that starts in a block's code stays in it, as Typora's does.
+  const home = codeInside(state, other);
+  if (home && (end < home.from || end > home.to)) return end < home.from ? home.from : home.to;
+  const block = fencedBlockAt(state, end, 1) ?? fencedBlockAt(state, end, -1);
+  if (block) {
+    const { first, last, closed } = fencesOf(state, block);
+    const n = doc.lineAt(end).number;
+    const firstCode = first + 1;
+    const lastCode = closed ? last - 1 : last;
+    const within = n >= first && n <= last;
+    if (within && lastCode >= firstCode) {
+      const inside = { from: doc.line(firstCode).from, to: doc.line(lastCode).to };
+      if (other >= inside.from && other <= inside.to) {
+        if (n === first) return inside.from;
+        if (closed && n === last) return inside.to;
+        return end;
+      }
+      if (n === first || (closed && n === last) || other < doc.line(first).from || other > doc.line(last).to) {
+        if (other < doc.line(first).from) {
+          const after = closed ? last + 1 : last;
+          return after <= doc.lines ? placeFor(state, doc.line(Math.min(after, doc.lines)).from, doc.line(first).from, undefined) : doc.length;
+        }
+        return first > 1 ? placeFor(state, doc.line(first - 1).to, doc.line(first).from, undefined) : 0;
+      }
+    }
+  }
+  // The end that stays put is not stepped off a break or a rule: what was selected stays selected.
+  if (!moving && notAPlace(state, doc.lineAt(end).number)) return end;
+  return placeFor(state, end, from, undefined);
+}
+
+/** The code lines of the fenced block `pos` is on, when `pos` is on one of them rather than a fence. */
+function codeInside(state: EditorState, pos: number): { from: number; to: number } | null {
+  const block = fencedBlockAt(state, pos, 1) ?? fencedBlockAt(state, pos, -1);
+  if (!block) return null;
+  const { first, last, closed } = fencesOf(state, block);
+  const lastCode = closed ? last - 1 : last;
+  const n = state.doc.lineAt(pos).number;
+  if (n <= first || n > lastCode) return null;
+  return { from: state.doc.line(first + 1).from, to: state.doc.line(lastCode).to };
+}
+
 export function caretPlaces(): Extension {
   return EditorState.transactionFilter.of((tr: Transaction) => {
     const sel = tr.newSelection;
-    if (sel.ranges.length !== 1 || !sel.main.empty) return tr;
+    if (sel.ranges.length !== 1) return tr;
     if (!tr.selection && !tr.docChanged) return tr;
     // A person's own edit is never second-guessed: typing `---` under a line makes a setext
     // underline of the line the caret is on, and moving the caret off it would scatter the rest of
     // what they type. The keyboard rules put the caret where they mean to; this is for arrivals.
     if (tr.docChanged && (tr.isUserEvent("input") || tr.isUserEvent("delete") || tr.isUserEvent("move"))) return tr;
+    if (!sel.main.empty) return placeRange(tr);
     const state = tr.state;
     const head = sel.main.head;
     const line = state.doc.lineAt(head);
@@ -99,4 +150,31 @@ export function caretPlaces(): Extension {
       scrollIntoView: tr.scrollIntoView,
     };
   });
+}
+
+/** The transaction again with its selection's ends at places (169); `caretPlaces` for a range. */
+function placeRange(tr: Transaction): Transaction | TransactionSpec {
+  const state = tr.state;
+  const range = tr.newSelection.main;
+  // ⌘A's whole note is the one range that keeps every byte, markers and all.
+  if (range.from === 0 && range.to === state.doc.length) return tr;
+  // A vertical extension carries a goal column; ⇧↑ and ⇧↓ finish their own step (`arrows.ts`).
+  if (range.goalColumn !== undefined && notAPlace(state, state.doc.lineAt(range.head).number)) return tr;
+  const before = tr.startState.selection.main;
+  const mapped = (pos: number) => tr.changes.mapPos(Math.min(pos, tr.changes.length));
+  const head = placeRangeEnd(state, range.head, mapped(before.head), range.anchor);
+  const anchor = placeRangeEnd(state, range.anchor, mapped(before.anchor), head, false);
+  if (head === range.head && anchor === range.anchor) return tr;
+  return rebuilt(tr, anchor === head ? EditorSelection.cursor(head) : EditorSelection.range(anchor, head, range.goalColumn));
+}
+
+/** `tr` with its selection replaced, keeping its changes, effects and the annotations that matter. */
+function rebuilt(tr: Transaction, selection: EditorSelection | SelectionRange): TransactionSpec {
+  const annotations: Annotation<unknown>[] = [];
+  const kinds: AnnotationType<any>[] = [Transaction.userEvent, Transaction.addToHistory, Transaction.time, Transaction.remote];
+  for (const kind of kinds) {
+    const value = tr.annotation(kind);
+    if (value !== undefined) annotations.push(kind.of(value));
+  }
+  return { changes: tr.changes, selection, effects: tr.effects, annotations, scrollIntoView: tr.scrollIntoView };
 }

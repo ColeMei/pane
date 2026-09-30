@@ -48,7 +48,7 @@ import { findHighlighting, mountFind } from "./find";
 import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
 import { backspace } from "./keyboard/backspace";
-import { arrowDown, arrowUp } from "./keyboard/arrows";
+import { arrowDown, arrowUp, shiftArrowDown, shiftArrowUp } from "./keyboard/arrows";
 import { deleteForward } from "./keyboard/delete";
 import { caretPlaces } from "./caret";
 import { fencesOf, markerSpanEnd, notAPlace, ruleLine } from "./blocks";
@@ -671,9 +671,10 @@ function baseExtensions(): Extension[] {
         { key: "Shift-Enter", run: shiftEnterKey },
         { key: "Enter", run: enterKey },
         { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
-        // ↑ and ↓ step over every line that is not a place, keeping their column (146, 151).
-        { key: "ArrowUp", run: arrowUp },
-        { key: "ArrowDown", run: arrowDown },
+        // ↑ and ↓ step over every line that is not a place, keeping their column (146, 151); ⇧↑ and
+        // ⇧↓ do the same with the selection's head (169).
+        { key: "ArrowUp", run: arrowUp, shift: shiftArrowUp },
+        { key: "ArrowDown", run: arrowDown, shift: shiftArrowDown },
         // ⌦ cannot pull a fence or a rule up into the line above (151).
         { key: "Delete", run: keyCommand(deleteForward) },
         { key: "Mod-a", run: selectBlockThenAll },

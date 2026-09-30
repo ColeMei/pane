@@ -2270,6 +2270,65 @@ export function runGestures(view, doc) {
     r.check(`${name}: …and selects nothing`, true, sel().empty);
   }
 
+  // 169: a selection's ends rest where a caret may. Typing over one never deletes a hidden marker
+  // on its own, a fence line on its own, or half of a paragraph break.
+  const shift = (key) => d.press(key, { shiftKey: true });
+  const lineOf = (pos) => view.state.doc.lineAt(pos).number;
+  const selected = () => view.state.sliceDoc(sel().from, sel().to);
+  const overtype = () => { d.type("Q"); return d.text(); };
+
+  for (const [name, block] of [["heading", "## Head words"], ["bullet", "- Head words"], ["task", "- [ ] Head words"], ["quote", "> Head words"]]) {
+    d.load(`top\n\n${block}\n\nPARA\n`);
+    d.at("Head");
+    shift("ArrowLeft");
+    r.check(`${name}: ⇧← at the text start reaches the end of the line above (169)`, "top".length, sel().head);
+    d.at("Head");
+    shift("ArrowUp");
+    r.check(`${name}: ⇧↑ from the text start does not end inside a marker`, false,
+      sel().head > view.state.doc.line(lineOf(sel().head)).from && sel().head < d.text().indexOf("Head") && lineOf(sel().head) === 3);
+  }
+  d.load("- item one\n- Item words\n\nPARA\n");
+  d.at("Item words");
+  shift("ArrowUp");
+  r.check("⇧↑ from an item's text start does not land inside the item above's marker (169)", true, sel().head >= 2, `head ${sel().head}`);
+  r.check("…so typing over it keeps the first item a list item", true, overtype().startsWith("- "));
+  d.load("## Head words\n\nPARA\n");
+  d.at("Head");
+  shift("ArrowUp");
+  r.check("⇧↑ on a heading that starts the note selects nothing (169)", true, sel().empty);
+  r.check("…and typing keeps the heading", "## QHead words", overtype().split("\n")[0]);
+
+  const FENCE = "top\n\n```\nfirst code\nlast code\n```\n\nPARA\n";
+  d.load(FENCE); d.at("first code");
+  shift("ArrowUp");
+  r.check("⇧↑ from the first code line does not select the opening fence (169)", false, selected().includes("```"));
+  d.load(FENCE); d.at("last code", "last code".length);
+  shift("ArrowDown");
+  r.check("⇧↓ from the last code line does not select the closing fence (169)", false, selected().includes("```"));
+  d.load(FENCE); d.at("top", 3);
+  shift("ArrowDown"); shift("ArrowDown");
+  r.check("a selection into a code block from above takes the block whole or not at all (169)", true,
+    (selected().match(/```/g) ?? []).length !== 1, JSON.stringify(selected()));
+
+  const PARAS = "top\n\nfirst para words\n\nsecond para words\n\nPARA\n";
+  d.load(PARAS); d.at("second para words", "second para words".length);
+  shift("ArrowUp");
+  r.check("one ⇧↑ across a paragraph break reaches the paragraph above (169)", 3, lineOf(sel().head));
+  d.load(PARAS); d.at("second");
+  shift("ArrowLeft");
+  r.check("⇧← at a paragraph's start reaches the end of the one above (169)", d.text().indexOf("first para words") + 16, sel().head);
+  d.load(PARAS); d.at("first para words", 16);
+  shift("ArrowRight");
+  r.check("⇧→ at a paragraph's end reaches the start of the one below (169)", d.text().indexOf("second"), sel().head);
+  d.load(PARAS); d.at("second para words", "second para words".length);
+  shift("ArrowDown");
+  r.check("⇧↓ across a paragraph break reaches the paragraph below (169)", 7, lineOf(sel().head));
+
+  d.load("- first item words\n- second item words\n\nPARA\n");
+  d.load("top\n\n## Head words\n\nPARA\n"); d.at("Head");
+  view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+  r.check("⌘A's whole note is left alone, markers and all (169)", view.state.doc.length, sel().to - sel().from);
+
   return r;
 }
 
