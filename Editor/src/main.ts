@@ -56,6 +56,7 @@ import { fencesOf, markerSpanEnd, notAPlace, ruleLine } from "./blocks";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { splitSpans } from "./keyboard/spans";
+import { openAbove, openAboveLeft, openBelow, openBelowRight } from "./keyboard/fence-exit";
 import { moveBlockDown, moveBlockUp, nothing, selectBlockEnd, selectBlockStart } from "./keyboard/move-block";
 import { shiftTab, tab } from "./keyboard/tab";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
@@ -694,8 +695,11 @@ function baseExtensions(): Extension[] {
         { key: "Alt-Backspace", run: deleteWordAtStart(backspaceKey) },
         // ↑ and ↓ step over every line that is not a place, keeping their column (146, 151); ⇧↑ and
         // ⇧↓ do the same with the selection's head (169).
-        { key: "ArrowUp", run: arrowUp, shift: shiftArrowUp },
-        { key: "ArrowDown", run: arrowDown, shift: shiftArrowDown },
+        { key: "ArrowUp", run: chain(openAbove, arrowUp), shift: shiftArrowUp },
+        { key: "ArrowDown", run: chain(openBelow, arrowDown), shift: shiftArrowDown },
+        // Out of a code block at the note's edge, or next to another block, a line is opened (175).
+        { key: "ArrowRight", run: openBelowRight },
+        { key: "ArrowLeft", run: openAboveLeft },
         // ⌦ cannot pull a fence or a rule up into the line above (151).
         { key: "Delete", run: keyCommand(deleteForward) },
         // …and at a line's end, ⌥⌦ and ⌘⌦ are ⌦: the break goes whole (172).

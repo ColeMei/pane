@@ -2450,6 +2450,22 @@ export function runGestures(view, doc) {
   r.check("⌘⌥↑ does nothing (174)", P3, d.text());
   r.check("…and adds no second caret", 1, view.state.selection.ranges.length);
 
+  // 175: a code block can always be left by ↑ or ↓: a line is opened where there is none.
+  const leave = (text, needle, offset, key) => { d.load(text); d.at(needle, offset); d.press(key); d.type("Q"); return d.text(); };
+  r.check("↓ on the last line of a block that ends the note opens a line below it (175)", "top\n\n```\ncode\n```\n\nQ",
+    leave("top\n\n```\ncode\n```", "code", 4, "ArrowDown"));
+  r.check("…and so does → at the end of that line", "top\n\n```\ncode\n```\n\nQ", leave("top\n\n```\ncode\n```", "code", 4, "ArrowRight"));
+  r.check("↑ on the first line of a block that starts the note opens a line above it (175)", "Q\n\n```\ncode\n```\n\nend\n",
+    leave("```\ncode\n```\n\nend\n", "code", 0, "ArrowUp"));
+  r.check("…and so does ← at the start of that line", "Q\n\n```\ncode\n```\n\nend\n", leave("```\ncode\n```\n\nend\n", "code", 0, "ArrowLeft"));
+  const TWO = "top\n\n```\nfirst\n```\n\n```\nsecond\n```\n\nend\n";
+  r.check("↓ from one block opens a line before the block right under it (175)", "top\n\n```\nfirst\n```\n\nQ\n\n```\nsecond\n```\n\nend\n",
+    leave(TWO, "first", 5, "ArrowDown"));
+  r.check("↑ from the lower block opens the same line (175)", "top\n\n```\nfirst\n```\n\nQ\n\n```\nsecond\n```\n\nend\n",
+    leave(TWO, "second", 0, "ArrowUp"));
+  r.check("↓ from a block with a paragraph under it just moves there (175)", "top\n\n```\ncode\n```\n\nQend\n",
+    leave("top\n\n```\ncode\n```\n\nend\n", "code", 0, "ArrowDown"));
+
   // 172: ⌦ at a paragraph's end takes the whole break, as ⌫ does from below.
   const forward = (text, needle, keys = {}) => { d.load(text); d.at(needle, needle.length); d.press("Delete", keys); return d.text(); };
   r.check("⌦ at a paragraph's end joins the next one (172)", "top\n\nfirst para wordssecond para words\n\nPARA\n", forward(PARAS, "first para words"));
