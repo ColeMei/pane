@@ -2329,6 +2329,51 @@ export function runGestures(view, doc) {
   view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
   r.check("⌘A's whole note is left alone, markers and all (169)", view.state.doc.length, sel().to - sel().from);
 
+  // 170: a line's edges are its text's edges — outside an inline construct, after a block marker.
+  const cmd = (key, extra = {}) => d.press(key, { metaKey: true, ...extra });
+  const typedLine = (n) => { d.type("Q"); return view.state.doc.line(n).text; };
+  for (const [name, open, close, word] of STYLED) {
+    const construct = `${open}${word} words${close}`;
+    d.load(`top\n\naa ${construct}\n\nPARA\n`); d.at("PARA"); d.at("aa ");
+    cmd("ArrowRight");
+    r.check(`${name}: ⌘→ on a line ending in it lands after it (170)`, `aa ${construct}Q`, typedLine(3));
+    d.load(`top\n\n${construct} zz\n\nPARA\n`); d.at(" zz", 3);
+    cmd("ArrowLeft");
+    r.check(`${name}: ⌘← on a line starting with it lands before it (170)`, `Q${construct} zz`, typedLine(3));
+  }
+  d.load("top\n\n**bold words** zz\n\nPARA\n"); d.at("bold", 2);
+  cmd("ArrowLeft");
+  r.check("⌘← from inside a construct that starts the line lands before it (170)", "Q**bold words** zz", typedLine(3));
+  d.load("top\n\naa **bold words**\n\nPARA\n"); d.at("aa ");
+  cmd("ArrowRight"); d.press("Enter");
+  r.check("⌘→ then ⏎ on a line ending in bold leaves the bold whole (170)", "aa **bold words**", view.state.doc.line(3).text);
+
+  for (const [name, block] of [["heading", "## Head words"], ["bullet", "- Head words"], ["task", "- [ ] Head words"], ["quote", "> Head words"]]) {
+    const marker = block.slice(0, block.indexOf("Head"));
+    d.load(`top\n\n${block}\n\nPARA\n`); d.at("Head");
+    cmd("ArrowLeft");
+    r.check(`${name}: ⌘← at the text start stays there (170)`, d.text().indexOf("Head"), head());
+    d.load(`top\n\n${block}\n\nPARA\n`); d.at("words", 2);
+    cmd("ArrowLeft", { shiftKey: true });
+    r.check(`${name}: ⇧⌘← from the middle selects the text only (170)`, "Head wo", selected());
+    d.load(`top\n\n${block}\n\nPARA\n`); d.at("words", 2);
+    cmd("Backspace");
+    r.check(`${name}: ⌘⌫ from the middle deletes the text only (170)`, `${marker}rds`, view.state.doc.line(3).text);
+    d.load(`top\n\n${block}\n\nPARA\n`); d.at("Head");
+    cmd("Backspace");
+    const viaBackspace = (() => { const t = d.text(); d.load(`top\n\n${block}\n\nPARA\n`); d.at("Head"); d.press("Backspace"); return [t, d.text()]; })();
+    r.check(`${name}: ⌘⌫ at the text start is ⌫ (170)`, viaBackspace[1], viaBackspace[0]);
+  }
+  d.load(FENCE); d.at("first code");
+  d.press("Backspace", { altKey: true });
+  r.check("⌥⌫ at the first code line leaves the fence alone (170)", FENCE, d.text());
+  d.load(FENCE); d.at("first code");
+  cmd("Backspace");
+  r.check("⌘⌫ at the first code line leaves the fence alone (170)", FENCE, d.text());
+  d.load(PARAS); d.at("second");
+  d.press("Backspace", { altKey: true });
+  r.check("⌥⌫ at a paragraph's start joins it to the one above, as ⌫ does (170)", "first para wordssecond para words", view.state.doc.line(3).text);
+
   return r;
 }
 

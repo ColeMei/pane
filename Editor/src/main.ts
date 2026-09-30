@@ -16,7 +16,7 @@ import "./styles/switcher.css";
 import "./styles/action-panel.css";
 
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
+import { defaultKeymap, deleteCharBackward, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
 import {
   deleteMarkupBackward,
   markdown,
@@ -48,6 +48,7 @@ import { findHighlighting, mountFind } from "./find";
 import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
 import { backspace } from "./keyboard/backspace";
+import { deleteToLineStart, deleteWordAtStart, lineEnd, lineStart, selectLineEnd, selectLineStart } from "./keyboard/line-edge";
 import { arrowDown, arrowUp, shiftArrowDown, shiftArrowUp } from "./keyboard/arrows";
 import { deleteForward } from "./keyboard/delete";
 import { caretPlaces } from "./caret";
@@ -465,6 +466,9 @@ const SELECTABLE_BLOCKS = new Set([
 
 /** ⌘A selects the block; when the selection already is the block this declines and CodeMirror's
  * `selectAll` takes the note (decision 65). */
+/** ⌫ as the key does it: the table, then CodeMirror's markup delete, then one character (170 reuses it). */
+const backspaceKey = chain(keyCommand(backspace), deleteMarkupBackward, deleteCharBackward);
+
 function selectBlockThenAll(view: EditorView): boolean {
   const state = view.state;
   const range = state.selection.main;
@@ -671,6 +675,12 @@ function baseExtensions(): Extension[] {
         { key: "Shift-Enter", run: shiftEnterKey },
         { key: "Enter", run: enterKey },
         { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
+        // A line's edges are its text's: outside an inline construct, after a block's marker, and
+        // ⌥⌫ or ⌘⌫ at the text start is ⌫ (170).
+        { key: "Mod-ArrowLeft", run: lineStart, shift: selectLineStart },
+        { key: "Mod-ArrowRight", run: lineEnd, shift: selectLineEnd },
+        { key: "Mod-Backspace", run: deleteToLineStart(backspaceKey) },
+        { key: "Alt-Backspace", run: deleteWordAtStart(backspaceKey) },
         // ↑ and ↓ step over every line that is not a place, keeping their column (146, 151); ⇧↑ and
         // ⇧↓ do the same with the selection's head (169).
         { key: "ArrowUp", run: arrowUp, shift: shiftArrowUp },
