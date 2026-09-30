@@ -81,8 +81,9 @@ function stepOverBreak(move: Command): Command {
   };
 }
 
-/** The same step for ⇧↑ and ⇧↓: the head moves on, the anchor stays (169). */
-function extendOverBreak(move: Command): Command {
+/** The same step for ⇧↑ and ⇧↓: the head moves on, the anchor stays (169). With nowhere to go,
+ * it goes to its own line's edge, as ⇧↓ on a note's last line does. */
+function extendOverBreak(move: Command, direction: 1 | -1): Command {
   return (view) => {
     const before = view.state.selection.main;
     const column = drawnColumn(view, before.head);
@@ -91,7 +92,9 @@ function extendOverBreak(move: Command): Command {
     const range = view.state.selection.main;
     if (!notAPlace(view.state, view.state.doc.lineAt(range.head).number)) return true;
 
-    const target = placeRangeEnd(view.state, beyond(view, range.head, before.head, column), before.head, range.anchor);
+    let target = placeRangeEnd(view.state, beyond(view, range.head, before.head, column), before.head, range.anchor);
+    const own = view.state.doc.lineAt(before.head);
+    if (target >= own.from && target <= own.to) target = direction > 0 ? own.to : markerSpanEnd(view.state, own.number);
     if (target !== range.head) {
       view.dispatch({ selection: EditorSelection.range(range.anchor, target), userEvent: "select", scrollIntoView: true });
     }
@@ -101,5 +104,5 @@ function extendOverBreak(move: Command): Command {
 
 export const arrowUp = stepOverBreak(cursorLineUp);
 export const arrowDown = stepOverBreak(cursorLineDown);
-export const shiftArrowUp = extendOverBreak(selectLineUp);
-export const shiftArrowDown = extendOverBreak(selectLineDown);
+export const shiftArrowUp = extendOverBreak(selectLineUp, -1);
+export const shiftArrowDown = extendOverBreak(selectLineDown, 1);

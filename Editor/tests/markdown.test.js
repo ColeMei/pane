@@ -2310,6 +2310,13 @@ export function runGestures(view, doc) {
   r.check("a selection into a code block from above takes the block whole or not at all (169)", true,
     (selected().match(/```/g) ?? []).length !== 1, JSON.stringify(selected()));
 
+  d.load("top\n\n```\nfirst code\nlast code\n```"); d.at("last code");
+  shift("ArrowDown");
+  r.check("⇧↓ on the last code line of a block that ends the note selects to the line's end (169)", "last code", selected());
+  d.load("```\nfirst code\nlast code\n```\n\nPARA\n"); d.at("first code", 10);
+  shift("ArrowUp");
+  r.check("⇧↑ on the first code line of a block that starts the note selects to its start (169)", "first code", selected());
+
   const PARAS = "top\n\nfirst para words\n\nsecond para words\n\nPARA\n";
   d.load(PARAS); d.at("second para words", "second para words".length);
   shift("ArrowUp");
