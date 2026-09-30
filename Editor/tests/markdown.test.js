@@ -2407,6 +2407,15 @@ export function runGestures(view, doc) {
   d.press("Enter");
   d.content.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", keyCode: 90, metaKey: true, bubbles: true, cancelable: true }));
   r.check("one ⌘Z takes the whole split back (171)", "top\n\naa **bold words** zz\n\nPARA\n", d.text());
+  // 172: ⌦ at a paragraph's end takes the whole break, as ⌫ does from below.
+  const forward = (text, needle, keys = {}) => { d.load(text); d.at(needle, needle.length); d.press("Delete", keys); return d.text(); };
+  r.check("⌦ at a paragraph's end joins the next one (172)", "top\n\nfirst para wordssecond para words\n\nPARA\n", forward(PARAS, "first para words"));
+  r.check("…and so does ⌥⌦", "top\n\nfirst para wordssecond para words\n\nPARA\n", forward(PARAS, "first para words", { altKey: true }));
+  r.check("⌦ above a rule deletes the rule, and nothing becomes a heading (172)", "para above\n\npara below\n",
+    forward("para above\n\n---\n\npara below\n", "para above"));
+  r.check("⌦ above a code block does nothing (172)", "para\n\n```\ncode\n```\n", forward("para\n\n```\ncode\n```\n", "para"));
+  r.check("⌦ above a heading joins its text, not its hashes (172)", "paraHead\n", forward("para\n\n## Head\n", "para"));
+
   d.load("top\n\n```\naa **bold** zz\n```\n\nPARA\n"); d.at("bold", 2);
   d.press("Enter");
   r.check("⏎ in a code block writes a newline and nothing else (171)", "top\n\n```\naa **bo\nld** zz\n```\n\nPARA\n", d.text());

@@ -689,6 +689,9 @@ function baseExtensions(): Extension[] {
         { key: "ArrowDown", run: arrowDown, shift: shiftArrowDown },
         // ⌦ cannot pull a fence or a rule up into the line above (151).
         { key: "Delete", run: keyCommand(deleteForward) },
+        // …and at a line's end, ⌥⌦ and ⌘⌦ are ⌦: the break goes whole (172).
+        { key: "Alt-Delete", run: keyCommand(deleteForward) },
+        { key: "Mod-Delete", run: keyCommand(deleteForward) },
         { key: "Mod-a", run: selectBlockThenAll },
       ])
     ),
