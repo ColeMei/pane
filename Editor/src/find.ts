@@ -53,13 +53,20 @@ const findField = StateField.define<FindState | null>({
     // the next keystroke anyway, but mapping here stops the highlight visibly lagging one character
     // behind the text underneath it.
     if (tr.docChanged) {
-      return {
-        ...value,
-        matches: value.matches.map((m) => ({
-          from: tr.changes.mapPos(m.from),
-          to: tr.changes.mapPos(m.to, 1),
-        })),
-      };
+      // A match whose text was deleted maps to an empty range, and CodeMirror throws on an empty
+      // mark — out of whatever dispatch did it, which for a note switch left the write model deaf
+      // (164). So a match that is gone is dropped, and `current` stays on the same match or falls
+      // back to the one before it.
+      const mapped = value.matches.map((m) => ({
+        from: tr.changes.mapPos(m.from),
+        to: tr.changes.mapPos(m.to, 1),
+      }));
+      const matches = mapped.filter((m) => m.from < m.to);
+      if (matches.length === mapped.length) return { ...value, matches };
+      const before = mapped.slice(0, value.current).filter((m) => m.from < m.to).length;
+      const survived = value.current >= 0 && mapped[value.current]!.from < mapped[value.current]!.to;
+      const current = matches.length === 0 ? -1 : survived ? before : Math.max(0, before - 1);
+      return { ...value, matches, current };
     }
     return value;
   },

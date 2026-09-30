@@ -1170,7 +1170,7 @@ export function run(view, bar, doc) {
   let checked = 0;
 
   for (const suite of [runUndo, runRenumber, runLayout, runBackspace, runTooltips, runListKinds,
-                       runFooterCount, runLinkOpening, runMarkerSelection]) {
+                       runFooterCount, runLinkOpening, runMarkerSelection, runFindSurvives]) {
     const result = suite(view, doc, bar);
     checked += result.checked;
     failures.push(...result.failures);
@@ -1216,6 +1216,69 @@ export function run(view, bar, doc) {
     }
   }
 
+  return { checked, failures };
+}
+
+/**
+ * An open find bar survives anything that empties a match — decision 164.
+ *
+ * Found by using it: find open on a match, then ⌘N. The note switch replaced the whole document,
+ * every match mapped to an empty range, CodeMirror refused an empty mark decoration and threw out
+ * of `loadNote` — so the new note never loaded, and `applyingRemoteEdit` stayed set, so no edit
+ * after it ever reached Swift or the disk. Asserted on the **message**, because an edit that never
+ * leaves the web layer is exactly what the write model cannot see.
+ */
+export function runFindSurvives(view, doc) {
+  const failures = [];
+  let checked = 0;
+  const check = (name, want, got) => {
+    checked += 1;
+    if (got !== want) failures.push({ case: `find survives · ${name}`, want, got });
+  };
+
+  const sent = [];
+  const host = (window.webkit ??= {});
+  const handlers = (host.messageHandlers ??= {});
+  const real = handlers.pane;
+  handlers.pane = { postMessage: (m) => { sent.push(m); real?.postMessage?.(m); } };
+
+  const content = doc.querySelector(".cm-content");
+  const input = doc.querySelector(".find__input");
+  const openFind = (query) => {
+    content.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "f", code: "KeyF", metaKey: true, bubbles: true, cancelable: true,
+    }));
+    input.value = query;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const closeFind = () =>
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  const guarded = (fn) => { try { fn(); return "ok"; } catch (e) { return `threw: ${e.message}`; } };
+  const editReachesSwift = () => {
+    sent.length = 0;
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "Z" } });
+    return sent.some((m) => m.type === "edited");
+  };
+
+  // A note switch with a match on screen: what ⌘N, ⌘P and an external reload all go through.
+  window.paneHost.loadNote("a.md", "one pass here\n", 0, false);
+  openFind("pass");
+  check("the fixture really has a match", true, !!doc.querySelector(".cm-find-match"));
+  check("loading a note over a match does not throw",
+    "ok", guarded(() => window.paneHost.loadNote("", "", 0, false)));
+  check("and the new note is the one on screen", "", view.state.doc.toString());
+  check("and an edit after it still reaches Swift", true, editReachesSwift());
+  closeFind();
+
+  // Deleting a whole match by hand empties it the same way, with no note switch involved.
+  window.paneHost.loadNote("b.md", "one pass here\n", 0, false);
+  openFind("pass");
+  check("deleting a whole match does not throw",
+    "ok", guarded(() => view.dispatch({ changes: { from: 4, to: 8 } })));
+  check("and the deletion happened", "one  here\n", view.state.doc.toString());
+  closeFind();
+
+  handlers.pane = real;
   return { checked, failures };
 }
 

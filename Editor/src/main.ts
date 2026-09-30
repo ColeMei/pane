@@ -992,17 +992,22 @@ const host = {
     currentFilename = filename || null;
 
     const clamped = Math.max(0, Math.min(caret, text.length));
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: text },
-      selection: { anchor: clamped },
-      scrollIntoView: true,
-      // Loading a note is not an edit: without this annotation the first ⌘Z undid the load, emptied the
-      // note, and the write model flushed the empty buffer (decision 80).
-      annotations: Transaction.addToHistory.of(false),
-    });
-    // And a fresh stack, so undo cannot reach back past this note into the last one.
-    clearHistory();
-    applyingRemoteEdit = false;
+    // `finally`, because a throw here used to leave the flag set for the rest of the session: every
+    // later edit was then silently never sent, so never written (164).
+    try {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+        selection: { anchor: clamped },
+        scrollIntoView: true,
+        // Loading a note is not an edit: without this annotation the first ⌘Z undid the load, emptied
+        // the note, and the write model flushed the empty buffer (decision 80).
+        annotations: Transaction.addToHistory.of(false),
+      });
+      // And a fresh stack, so undo cannot reach back past this note into the last one.
+      clearHistory();
+    } finally {
+      applyingRemoteEdit = false;
+    }
 
     paneEl.toggleAttribute("data-pinned", pinned);
     document.getElementById("pin")!.setAttribute("aria-pressed", String(pinned));
