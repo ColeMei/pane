@@ -55,6 +55,7 @@ import { caretPlaces } from "./caret";
 import { fencesOf, markerSpanEnd, notAPlace, ruleLine } from "./blocks";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
+import { splitSpans } from "./keyboard/spans";
 import { shiftTab, tab } from "./keyboard/tab";
 import { caretBlankLineSlack, livePreview } from "./live-preview";
 import { renumberOrderedLists } from "./renumber";
@@ -672,8 +673,9 @@ function baseExtensions(): Extension[] {
     // hand-bound at all: CodeMirror's default makes a tight list loose instead of exiting it.
     Prec.high(
       keymap.of([
-        { key: "Shift-Enter", run: shiftEnterKey },
-        { key: "Enter", run: enterKey },
+        // Inside an inline construct, both close it and open it again after the break (171).
+        { key: "Shift-Enter", run: splitSpans(shiftEnterKey, "\n") },
+        { key: "Enter", run: splitSpans(enterKey, "\n\n") },
         { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
         // A line's edges are its text's: outside an inline construct, after a block's marker, and
         // ⌥⌫ or ⌘⌫ at the text start is ⌫ (170).

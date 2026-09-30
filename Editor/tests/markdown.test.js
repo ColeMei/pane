@@ -2374,6 +2374,43 @@ export function runGestures(view, doc) {
   d.press("Backspace", { altKey: true });
   r.check("⌥⌫ at a paragraph's start joins it to the one above, as ⌫ does (170)", "first para wordssecond para words", view.state.doc.line(3).text);
 
+  // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
+  // Typora does; at its inner edge they step outside it first, so nothing is split.
+  const enterIn = (text, needle, offset, keys = {}) => {
+    d.load(`top\n\n${text}\n\nPARA\n`); d.at(needle, offset);
+    d.press("Enter", keys);
+    const lines = d.text().split("\n").slice(2, -3);
+    d.type("Q");
+    return [lines.join("⏎"), view.state.doc.lineAt(head()).text];
+  };
+  const SPLITS = [
+    ["bold, mid-word", "aa **bold words** zz", "bold", 2, {}, "aa **bo**⏎⏎**ld words** zz", "**Qld words** zz"],
+    ["bold, ⇧⏎", "aa **bold words** zz", "bold", 2, { shiftKey: true }, "aa **bo**⏎**ld words** zz", "**Qld words** zz"],
+    ["bold, between words: the space goes, so both halves stay bold", "aa **bold words** zz", " words", 0, {}, "aa **bold**⏎⏎**words** zz", "**Qwords** zz"],
+    ["bold, at its inner end", "aa **bold words** zz", "words", 5, {}, "aa **bold words**⏎⏎ zz", "Q zz"],
+    ["bold, at its inner start at the line start", "**bold words** zz", "bold", 0, {}, "⏎**bold words** zz", "**Qbold words** zz"],
+    ["italic", "aa *slant words* zz", "slant", 2, {}, "aa *sl*⏎⏎*ant words* zz", "*Qant words* zz"],
+    ["strike", "aa ~~gone words~~ zz", "gone", 2, {}, "aa ~~go~~⏎⏎~~ne words~~ zz", "~~Qne words~~ zz"],
+    ["highlight", "aa ==mark words== zz", "mark", 2, {}, "aa ==ma==⏎⏎==rk words== zz", "==Qrk words== zz"],
+    ["underline", "aa <u>under words</u> zz", "under", 2, {}, "aa <u>un</u>⏎⏎<u>der words</u> zz", "<u>Qder words</u> zz"],
+    ["inline code", "aa `code words` zz", "code", 2, {}, "aa `co`⏎⏎`de words` zz", "`Qde words` zz"],
+    ["link label", "aa [link words](https://x.com) zz", "link", 2, {}, "aa [li](https://x.com)⏎⏎[nk words](https://x.com) zz", "[Qnk words](https://x.com) zz"],
+    ["italic inside bold", "aa **bold *slant* x** zz", "slant", 2, {}, "aa **bold *sl***⏎⏎***ant* x** zz", "***Qant* x** zz"],
+    ["in a list item", "- aa **bold words** zz", "bold", 2, {}, "- aa **bo**⏎- **ld words** zz", "- **Qld words** zz"],
+  ];
+  for (const [name, text, needle, offset, keys, want, caretLine] of SPLITS) {
+    const [got, line] = enterIn(text, needle, offset, keys);
+    r.check(`${name}: ⏎ closes and reopens the construct (171)`, want, got);
+    r.check(`${name}: …and the caret lands inside the reopened half`, caretLine, line);
+  }
+  d.load("top\n\naa **bold words** zz\n\nPARA\n"); d.at("bold", 2);
+  d.press("Enter");
+  d.content.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", keyCode: 90, metaKey: true, bubbles: true, cancelable: true }));
+  r.check("one ⌘Z takes the whole split back (171)", "top\n\naa **bold words** zz\n\nPARA\n", d.text());
+  d.load("top\n\n```\naa **bold** zz\n```\n\nPARA\n"); d.at("bold", 2);
+  d.press("Enter");
+  r.check("⏎ in a code block writes a newline and nothing else (171)", "top\n\n```\naa **bo\nld** zz\n```\n\nPARA\n", d.text());
+
   return r;
 }
 

@@ -87,7 +87,7 @@ const doneTaskText = Decoration.mark({ class: "pane-task-done-text" });
 
 /** `==highlight==` and `<u>` have no parser node, so they are matched on the line's text and checked
  * against the tree — a `==` inside code is code (decision 61). */
-const TEXT_CONSTRUCTS: { pattern: RegExp; open: number; close: number; class: string }[] = [
+export const TEXT_CONSTRUCTS: { pattern: RegExp; open: number; close: number; class: string }[] = [
   // No space just inside the delimiters, the same rule `**bold**` follows — without it a line like
   // "a total of == two == equals" was a highlight containing the word "two".
   { pattern: /==(?!\s)([^=\n]+?)(?<!\s)==/g, open: 2, close: 2, class: "pane-mark" },
