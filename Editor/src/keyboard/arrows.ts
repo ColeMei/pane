@@ -21,20 +21,59 @@
 
 import { cursorLineDown, cursorLineUp, selectLineDown, selectLineUp } from "@codemirror/commands";
 import { EditorSelection } from "@codemirror/state";
-import { notAPlace } from "../blocks";
+import { EditorView } from "@codemirror/view";
+import { markerSpanEnd, notAPlace } from "../blocks";
 import { placeFor, placeRangeEnd } from "../caret";
 import type { Command } from "./edit";
+
+/** Hidden ranges — replaced markers and widgets — overlapping `from..to`, as offsets into it. */
+function hiddenIn(view: EditorView, from: number, to: number): { from: number; to: number }[] {
+  const hidden: { from: number; to: number }[] = [];
+  for (const set of view.state.facet(EditorView.atomicRanges).map((f) => f(view))) {
+    set.between(from, to, (a, b, value) => {
+      if (value.point && b > a) hidden.push({ from: Math.max(a, from), to: Math.min(b, to) });
+    });
+  }
+  return hidden;
+}
+
+/** How many drawn characters precede `pos` on its line: the hidden markers do not count (173). */
+function drawnColumn(view: EditorView, pos: number): number {
+  const line = view.state.doc.lineAt(pos);
+  const skipped = hiddenIn(view, line.from, pos).reduce((n, r) => n + (r.to - r.from), 0);
+  return pos - line.from - skipped;
+}
+
+/** The offset on line `n` after `column` drawn characters, never before its text starts. */
+function atDrawnColumn(view: EditorView, n: number, column: number): number {
+  const line = view.state.doc.line(n);
+  const hidden = hiddenIn(view, line.from, line.to).sort((a, b) => a.from - b.from);
+  let pos = line.from;
+  let left = column;
+  for (const range of hidden) {
+    if (range.from - pos >= left) break;
+    left -= Math.max(0, range.from - pos);
+    pos = Math.max(pos, range.to);
+  }
+  return Math.max(markerSpanEnd(view.state, n), Math.min(pos + left, line.to));
+}
+
+/** Where a vertical step that stopped on a line that is not a place goes on to (146, 173). */
+function beyond(view: EditorView, head: number, from: number, column: number): number {
+  const n = view.state.doc.lineAt(placeFor(view.state, head, from, 0)).number;
+  return atDrawnColumn(view, n, column);
+}
 
 function stepOverBreak(move: Command): Command {
   return (view) => {
     const before = view.state.selection.main;
-    const column = before.head - view.state.doc.lineAt(before.head).from;
+    const column = drawnColumn(view, before.head);
     if (!move(view)) return false;
 
     const range = view.state.selection.main;
     if (!range.empty || !notAPlace(view.state, view.state.doc.lineAt(range.head).number)) return true;
 
-    const target = placeFor(view.state, range.head, before.head, column);
+    const target = beyond(view, range.head, before.head, column);
     if (target !== range.head) {
       view.dispatch({ selection: EditorSelection.cursor(target), userEvent: "select", scrollIntoView: true });
     }
@@ -46,13 +85,13 @@ function stepOverBreak(move: Command): Command {
 function extendOverBreak(move: Command): Command {
   return (view) => {
     const before = view.state.selection.main;
-    const column = before.head - view.state.doc.lineAt(before.head).from;
+    const column = drawnColumn(view, before.head);
     if (!move(view)) return false;
 
     const range = view.state.selection.main;
     if (!notAPlace(view.state, view.state.doc.lineAt(range.head).number)) return true;
 
-    const target = placeRangeEnd(view.state, placeFor(view.state, range.head, before.head, column), before.head, range.anchor);
+    const target = placeRangeEnd(view.state, beyond(view, range.head, before.head, column), before.head, range.anchor);
     if (target !== range.head) {
       view.dispatch({ selection: EditorSelection.range(range.anchor, target), userEvent: "select", scrollIntoView: true });
     }

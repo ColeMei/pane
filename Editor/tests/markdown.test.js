@@ -2407,6 +2407,25 @@ export function runGestures(view, doc) {
   d.press("Enter");
   d.content.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", keyCode: 90, metaKey: true, bubbles: true, cancelable: true }));
   r.check("one ⌘Z takes the whole split back (171)", "top\n\naa **bold words** zz\n\nPARA\n", d.text());
+  // 173: the column ↑ and ↓ carry over a break counts what is drawn, not the hidden markers.
+  for (const [name, open, close, word] of STYLED) {
+    const construct = `${open}${word} words${close}`;
+    d.load(`top\n\naa ${construct} zz\n\naa ${word} words zz plain\n\nPARA\n`);
+    d.at(`${word} words zz plain`, 2);
+    d.press("ArrowUp");
+    const from = d.text().indexOf(construct);
+    r.check(`${name}: ↑ from a plain line lands where it aimed in the styled word (173)`, from + open.length + 2, head());
+  }
+  for (const [name, block] of [["heading", "## Head words"], ["bullet", "- Head words"], ["quote", "> Head words"]]) {
+    d.load(`top line\n\n${block}\n\nend line\n`); d.at("Head");
+    d.press("ArrowUp");
+    r.check(`${name}: ↑ from the text start lands at the start of the line above (173)`, 0, head());
+    if (name === "quote") continue; // ↓ from a quote moves by pixels and matches Typora already
+    d.load(`top line\n\n${block}\n\nend line\n`); d.at("Head");
+    d.press("ArrowDown");
+    r.check(`${name}: ↓ from the text start lands at the start of the line below (173)`, d.text().indexOf("end line"), head());
+  }
+
   // 172: ⌦ at a paragraph's end takes the whole break, as ⌫ does from below.
   const forward = (text, needle, keys = {}) => { d.load(text); d.at(needle, needle.length); d.press("Delete", keys); return d.text(); };
   r.check("⌦ at a paragraph's end joins the next one (172)", "top\n\nfirst para wordssecond para words\n\nPARA\n", forward(PARAS, "first para words"));
