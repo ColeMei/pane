@@ -456,7 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.update { $0.announcedUpdate = announced }
             return
         }
-        pane.showToast("Pane \(version) is available", dwell: 5000)
+        pane.showToast("Pane \(version) is available", dwell: PaneController.newsDwell)
     }
 
     /// Note titles by filename, kept warm for the menu bar.

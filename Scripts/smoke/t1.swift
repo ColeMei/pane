@@ -197,6 +197,22 @@ func caretOffset() -> Int? {
     return range.location
 }
 
+/// The text drawn inside the element carrying `className` — `pane__banner`, `pane__toast`. WebKit
+/// hands the DOM class list to AX as `AXDOMClassList`, and a `hidden` element is not in the tree.
+func surface(_ className: String) -> String {
+    func walk(_ el: AXUIElement, _ inside: Bool, _ depth: Int, _ out: inout [String]) {
+        if depth > 16 { return }
+        let here = inside || ((attr(el, "AXDOMClassList") as? [String]) ?? []).contains(className)
+        if here, attr(el, kAXRoleAttribute) as? String == "AXStaticText",
+           let v = attr(el, kAXValueAttribute) as? String, !v.isEmpty { out.append(v) }
+        for kid in (attr(el, kAXChildrenAttribute) as? [AXUIElement]) ?? [] { walk(kid, here, depth + 1, &out) }
+    }
+    guard let pane = paneElement() else { return "" }
+    var out: [String] = []
+    walk(pane, false, 0, &out)
+    return out.joined(separator: " ")
+}
+
 // MARK: - The vault
 
 let fm = FileManager.default
@@ -486,6 +502,39 @@ func itemDeleteIntoRecentlyDeleted() {
     if let m = moved { _ = try? fm.removeItem(atPath: recentlyDeleted + "/" + m) }
 }
 
+/// Decision 176: the open note deleted elsewhere is a toast naming it, never a banner over the next
+/// note — which read as the note on screen being the deleted one, and stayed until a note switch.
+func itemDeletedElsewhere() {
+    let item = "elsewhere"
+    let day = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
+    let gone = NSHomeDirectory() + "/.trash-t1-" + day
+    try? fm.createDirectory(atPath: gone, withIntermediateDirectories: true)
+    guard let a = freshNote(item + "A") else { return check(item, "the note appeared", false) }
+    settle()
+    guard let b = freshNote(item + "B") else { return check(item, "the note appeared", false) }
+    settle()
+    let bTitle = "T1 \(item)B " + String(b.split(separator: "-").last!.dropLast(3))
+
+    // With the pane up: another process takes the file, as iCloud does for the other Mac's ⌃X.
+    try? fm.moveItem(atPath: vault + "/" + b, toPath: gone + "/" + b)
+    _ = waitFor("the pane to move on") { renderedText().hasPrefix("T1 \(item)A") }
+    check(item, "the pane moves on to the last note", renderedText().hasPrefix("T1 \(item)A"))
+    check(item, "no banner over the note it moved to", surface("pane__banner").isEmpty, surface("pane__banner"))
+    check(item, "a toast names the deleted note", surface("pane__toast") == "Deleted on another device: \(bTitle)", surface("pane__toast"))
+    sleepMs(6000)
+    check(item, "…and leaves", surface("pane__toast").isEmpty && surface("pane__banner").isEmpty, surface("pane__toast"))
+    check(item, "the note stays deleted (117)", !fm.fileExists(atPath: vault + "/" + b))
+
+    // With the pane parked: the toast waits for the summon, because nobody saw it otherwise.
+    dismiss()
+    try? fm.moveItem(atPath: vault + "/" + a, toPath: gone + "/" + a)
+    sleepMs(1500)
+    summon(); sleepMs(300)
+    check(item, "parked, the toast waits for the summon", surface("pane__toast") == "Deleted on another device: T1 \(item)A " + String(a.split(separator: "-").last!.dropLast(3)), surface("pane__toast"))
+    check(item, "…with no banner", surface("pane__banner").isEmpty, surface("pane__banner"))
+    made.remove(a); made.remove(b)
+}
+
 func itemBoldWritesMarkers() {
     let item = "bold"
     guard let name = freshNote(item, body: "word") else { return check(item, "the note appeared", false) }
@@ -521,6 +570,7 @@ let items: [(String, () -> Void)] = [
     ("rule", itemRule),
     ("oneitem", itemOneListItemPerLine),
     ("ctrlx", itemDeleteIntoRecentlyDeleted),
+    ("elsewhere", itemDeletedElsewhere),
     ("bold", itemBoldWritesMarkers),
 ]
 

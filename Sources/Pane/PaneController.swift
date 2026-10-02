@@ -20,14 +20,12 @@ final class PaneController: NSObject {
     enum Banner {
         case conflict
         case downloading
-        case deletedElsewhere
         case problem(String)
 
         var kind: String {
             switch self {
             case .conflict: return "conflict"
             case .downloading: return "downloading"
-            case .deletedElsewhere: return "deleted"
             case .problem: return "problem"
             }
         }
@@ -50,11 +48,6 @@ final class PaneController: NSObject {
                 return "This note changed elsewhere."
             case .downloading:
                 return "Downloading from iCloud…"
-            case .deletedElsewhere:
-                // Decision 76 again: the name of the thing that happened. Not "your note was deleted
-                // but don't worry, it's in Recently Deleted" — the toast after ⌃X already teaches
-                // where deleted notes go, and this row has no width for the second sentence.
-                return "Deleted on another device."
             case .problem(let message):
                 return message
             }
@@ -247,6 +240,21 @@ final class PaneController: NSObject {
         editor.call("showToast", dwell.map { [text, $0] as [Any] } ?? [text])
     }
 
+    /// How long a toast that is news stays up, against a receipt's 1900 ms (decision 136).
+    static let newsDwell = 5000
+
+    /// A toast that is news about something that happened while nobody was looking (decision 176).
+    /// Into a parked pane it would fade unseen, so it waits for the next summon instead.
+    private var pendingNews: String?
+
+    private func showNews(_ text: String) {
+        if isVisible {
+            showToast(text, dwell: Self.newsDwell)
+        } else {
+            pendingNews = text
+        }
+    }
+
     /// When the last toggle ran, so one press cannot be delivered twice — see the note on the menu
     /// bar's summon item. Carbon and AppKit can both hand us the same combination while the Settings
     /// window is frontmost, and two toggles in a row is a summon that immediately dismisses itself.
@@ -326,6 +334,11 @@ final class PaneController: NSObject {
         }
 
         onSummoned?()
+
+        if let news = pendingNews {
+            pendingNews = nil
+            showToast(news, dwell: Self.newsDwell)
+        }
 
         // `isDraft` as well as the filename: a draft has no filename by design, and opening the
         // last-used note over the top of one would throw away whatever had been typed into it.
@@ -507,7 +520,7 @@ final class PaneController: NSObject {
         panel.applyCollectionBehaviour(pinned: noteState.isPinned)
 
         editor.call("loadNote", [filename, text, noteState.caretOffset, noteState.isPinned])
-        hideBannerUnlessHeld()
+        hideBanner()
         if isVisible { editor.focusEditor() }
 
         // Decision 105b, on load as well as on a vault change: a losing version can have been filed
@@ -544,7 +557,7 @@ final class PaneController: NSObject {
         // Empty filename rather than a made-up one: the web layer reads it as "no note", so ⌃X and
         // the pin decline rather than acting on a file that does not exist.
         editor.call("loadNote", ["", "", 0, false])
-        hideBannerUnlessHeld()
+        hideBanner()
         if isVisible { editor.focusEditor() }
     }
 
@@ -1163,7 +1176,7 @@ final class PaneController: NSObject {
     /// nothing is written: the note is already in *that* machine's Recently Deleted, and a second
     /// copy here would be one the reader never made.
     ///
-    /// Then the banner names what happened and the pane moves on, exactly as it does after ⌃X.
+    /// Then a toast names what happened and the pane moves on, exactly as it does after ⌃X.
     private func noteDeletedElsewhere(_ filename: String) {
         // First, and before anything can schedule another one: stop the write that would put the
         // file back. Same ordering argument as `delete` — all vault I/O is one serial queue, and a
@@ -1175,6 +1188,7 @@ final class PaneController: NSObject {
 
         let unsavedEdits = baselineHash != nil && bufferHash != baselineHash
         let text = bufferText
+        let title = MarkdownDocument.title(of: text)
 
         // The buffer is no longer bound to a file, so nothing downstream can flush it back.
         currentFilename = nil
@@ -1186,9 +1200,10 @@ final class PaneController: NSObject {
 
         let finish: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
-            self.showBanner(.deletedElsewhere)
-            // Set before the open, because the open is what would clear it.
-            self.bannerHeldThroughNextLoad = true
+            // A toast that names the note, not a banner (decision 176): the banner is the row about
+            // the note under it, and this one would sit over the next note saying it was deleted.
+            // The event first, so a long title is what the ellipsis takes.
+            self.showNews(title.isEmpty ? "Deleted on another device" : "Deleted on another device: \(title)")
             self.openLastUsedNote()
             self.refreshSwitcherIfOpen()
         }
@@ -1286,23 +1301,8 @@ final class PaneController: NSObject {
         editor.call("showBanner", [banner.kind, banner.text])
     }
 
-    /// A banner normally belongs to the note it was raised for, so loading a note clears it.
-    ///
-    /// One state has to outlive that, and it is decision 117's: "Deleted on another device" is
-    /// raised *because* the pane is about to switch notes, so the switch it explains would otherwise
-    /// be the thing that erased it. Held for exactly one load and then released — a flag rather than
-    /// a second banner channel, because the banner is one row (decision 25) and this is one of its
-    /// states, not a new piece of chrome.
-    private var bannerHeldThroughNextLoad = false
-
-    private func hideBannerUnlessHeld() {
-        if bannerHeldThroughNextLoad {
-            bannerHeldThroughNextLoad = false
-            return
-        }
-        hideBanner()
-    }
-
+    /// A banner belongs to the note it was raised for, so loading a note clears it — with no
+    /// exception, since news about a note that has left the pane is a toast (decision 176).
     private func hideBanner() {
         editor.call("hideBanner")
     }
