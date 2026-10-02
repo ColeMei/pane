@@ -380,9 +380,10 @@ func itemRenumberOnDelete() {
     type("\n\n1. alpha"); key(K.ret); type("beta"); key(K.ret); type("gamma")
     settle()
     guard (read(name) ?? "").contains("1. alpha\n2. beta\n3. gamma") else { return check(item, "the list was written", false, read(name) ?? "") }
-    // Delete the first item: caret to its line end, select to line start, ⌫ twice (text, then the marker's ⏎).
-    key(K.up); key(K.up); key(K.right, .maskCommand)
-    key(K.left, [.maskCommand, .maskShift]); key(K.delete); key(K.delete)
+    // Delete the first item: from beta's text start, ⇧↑ to alpha's text start, ⌫. ⇧⌘← stops at the
+    // text's edge since 170, so selecting the line and ⌫ ⌫ only emptied the item (109's row 4).
+    key(K.up); key(K.left, .maskCommand)
+    key(K.up, .maskShift); key(K.delete)
     settle()
     check(item, "deleting the first item renumbers the rest from 1", (read(name) ?? "").contains("1. beta\n2. gamma"), (read(name) ?? "").split(separator: "\n").suffix(3).joined(separator: "⏎"))
     key(K.z, .maskCommand); settle()
