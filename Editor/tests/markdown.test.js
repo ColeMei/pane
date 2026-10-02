@@ -2486,6 +2486,76 @@ export function runGestures(view, doc) {
   d.press("Enter");
   r.check("⏎ in a code block writes a newline and nothing else (171)", "top\n\n```\naa **bo\nld** zz\n```\n\nPARA\n", d.text());
 
+  // 177: a construct's markers are not a stop and not a character. Arrows pass the place between a
+  // marker and its text, and no key takes one marker of a pair.
+  const on = (construct, needle, offset, key, mods = {}) => {
+    d.load(`top\n\naa ${construct} zz\n\nPARA\n`); d.at(needle, offset);
+    d.press(key, mods);
+    d.type("Q");
+    return view.state.doc.line(3).text;
+  };
+  const edited = (construct, needle, offset, key, mods = {}) => {
+    d.load(`top\n\naa ${construct} zz\n\nPARA\n`); d.at(needle, offset);
+    d.press(key, mods);
+    return view.state.doc.line(3).text;
+  };
+  for (const [name, open, close, word] of STYLED) {
+    const construct = `${open}${word} words${close}`;
+    const tail = ` words${close} zz`;
+    const outer = `${construct} zz`;
+    r.check(`${name}: → from before it lands after its first letter (177)`,
+      `aa ${open}${word[0]}Q${word.slice(1)}${tail}`, on(construct, outer, 0, "ArrowRight"));
+    r.check(`${name}: ← from after its first letter lands before it (177)`,
+      `aa Q${construct} zz`, on(construct, `${word} words`, 1, "ArrowLeft"));
+    r.check(`${name}: → from before its last letter lands after it (177)`,
+      `aa ${construct}Q zz`, on(construct, ` zz`, -close.length - 1, "ArrowRight"));
+    r.check(`${name}: ← from after it lands before its last letter (177)`,
+      `aa ${open}${word} wordQs${close} zz`, on(construct, " zz", 0, "ArrowLeft"));
+    r.check(`${name}: ⌥→ from before it lands after its first word (177)`,
+      `aa ${open}${word}Q${tail}`, on(construct, outer, 0, "ArrowRight", { altKey: true }));
+    r.check(`${name}: ⌥← from inside its first word lands before it (177)`,
+      `aa Q${construct} zz`, on(construct, `${word} words`, 2, "ArrowLeft", { altKey: true }));
+    r.check(`${name}: ⌥→ from inside its last word lands after it (177)`,
+      `aa ${construct}Q zz`, on(construct, "words", 2, "ArrowRight", { altKey: true }));
+    r.check(`${name}: ⇧→ from before it, typed over, keeps both markers (177)`,
+      `aa ${open}Q${word.slice(1)}${tail}`, on(construct, outer, 0, "ArrowRight", { shiftKey: true }));
+    r.check(`${name}: ⇧⌥→ from before it, typed over, keeps both markers (177)`,
+      `aa ${open}Q${tail}`, on(construct, outer, 0, "ArrowRight", { shiftKey: true, altKey: true }));
+    r.check(`${name}: ⇧⌘→ from inside, typed over, keeps the closing marker (177)`,
+      `aa ${open}${word.slice(0, 2)}Q${close}`, on(construct, word, 2, "ArrowRight", { shiftKey: true, metaKey: true }));
+    r.check(`${name}: ⌦ before it takes its first letter, not its marker (177)`,
+      `aa ${open}${word.slice(1)}${tail}`, edited(construct, outer, 0, "Delete"));
+    r.check(`${name}: ⌫ after it takes its last letter, not its marker (177)`,
+      `aa ${open}${word} word${close} zz`, edited(construct, " zz", 0, "Backspace"));
+    r.check(`${name}: ⌥⌦ before it takes its first word and the space after it (177)`,
+      `aa ${open}words${close} zz`, edited(construct, outer, 0, "Delete", { altKey: true }));
+    r.check(`${name}: ⌥⌫ after it takes its last word and the space before it (177)`,
+      `aa ${open}${word}${close} zz`, edited(construct, " zz", 0, "Backspace", { altKey: true }));
+    r.check(`${name}: ⌫ just inside its opening marker takes the space before it (177)`,
+      `aa${construct} zz`, edited(construct, `${word} words`, 0, "Backspace"));
+  }
+  r.check("⌦ before a one-letter construct takes the construct whole (177)", "aa  zz", edited("**b**", "**b**", 0, "Delete"));
+  r.check("⌫ after a one-letter construct takes the construct whole (177)", "aa  zz", edited("**b**", " zz", 0, "Backspace"));
+  r.check("⌥⌫ after a construct takes all of it, markers too (177)", "aa  zz", edited("**bold**", " zz", 0, "Backspace", { altKey: true }));
+  r.check("⌫ just inside a marker at the line start joins the paragraph above (177)", "top**bold words** zz",
+    (() => { d.load("top\n\n**bold words** zz\n\nPARA\n"); d.at("bold"); d.press("Backspace"); return view.state.doc.line(1).text; })());
+  r.check("⌦ just inside a closing marker at the line end joins the paragraph below (177)", "aa **bold words**PARA",
+    (() => { d.load("top\n\naa **bold words**\n\nPARA\n"); d.at("words", 5); d.press("Delete"); return view.state.doc.line(3).text; })());
+  d.load("top\n\naa **bold words** zz\n\nPARA\n"); d.at("aa ", 1);
+  view.dispatch({ selection: { anchor: d.text().indexOf("aa "), head: d.text().indexOf("bold") + 1 } });
+  d.press("Backspace");
+  r.check("⌫ over a selection that takes one marker leaves the other's pair whole (177)", "**old words** zz", view.state.doc.line(3).text);
+  d.load("top\n\naa **bold** and **next** zz\n\nPARA\n");
+  view.dispatch({ selection: { anchor: d.text().indexOf("bold") + 2, head: d.text().indexOf("next") + 2 } });
+  d.type("Q");
+  r.check("typing over a selection across two of the same construct joins them (177)", "aa **boQxt** zz", view.state.doc.line(3).text);
+  d.load("top\n\naa ***both*** zz\n\nPARA\n"); d.at("***both", 0);
+  d.press("ArrowRight"); d.type("Q");
+  r.check("→ before two nested constructs passes both openings (177)", "aa ***bQoth*** zz", view.state.doc.line(3).text);
+  d.load("top\n\naa **bold *slant* x** zz\n\nPARA\n"); d.at("slant", 2);
+  d.press("Backspace", { altKey: true });
+  r.check("⌥⌫ inside a nested construct stops at its own text (177)", "aa **bold *ant* x** zz", view.state.doc.line(3).text);
+
   return r;
 }
 

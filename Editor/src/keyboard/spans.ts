@@ -19,7 +19,7 @@ import type { EditorView } from "@codemirror/view";
 import { TEXT_CONSTRUCTS } from "../decorate";
 import type { Command } from "./edit";
 
-interface Span {
+export interface Span {
   from: number;
   to: number;
   /** Where the construct's text starts and ends, inside its markers. */
@@ -76,6 +76,46 @@ export function spansAt(state: EditorState, pos: number): Span[] {
     }
   }
   return [...found.values()].sort((a, b) => a.from - b.from || b.to - a.to);
+}
+
+/** Is `pos` inside code — inline or a block — where a `==` is two equals signs (61)? */
+function inAnyCode(state: EditorState, pos: number): boolean {
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent) {
+    if (node.name === "InlineCode" || node.name === "FencedCode" || node.name === "CodeBlock") return true;
+  }
+  return false;
+}
+
+/** Every construct that overlaps or touches `from..to`, outermost first (177). */
+export function spansIn(state: EditorState, from: number, to: number): Span[] {
+  const found = new Map<string, Span>();
+  syntaxTree(state).iterate({
+    from,
+    to,
+    enter: (ref) => {
+      const span = spanOf(ref.node);
+      if (span) found.set(`${span.from}:${span.to}`, span);
+    },
+  });
+  const doc = state.doc;
+  for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) {
+    const line = doc.line(n);
+    for (const construct of TEXT_CONSTRUCTS) {
+      construct.pattern.lastIndex = 0;
+      for (let match; (match = construct.pattern.exec(line.text)) !== null; ) {
+        const start = line.from + match.index;
+        const end = start + match[0].length;
+        if (end < from || start > to || inAnyCode(state, start + 1)) continue;
+        found.set(`${start}:${end}`, { from: start, to: end, textFrom: start + construct.open, textTo: end - construct.close });
+      }
+    }
+  }
+  return [...found.values()].sort((a, b) => a.from - b.from || b.to - a.to);
+}
+
+/** Is `pos` between a construct's marker and its text, or inside a marker — not a place to stop (177)? */
+export function isSeam(state: EditorState, pos: number): boolean {
+  return spansIn(state, pos, pos).some((s) => pos > s.from && pos < s.to && (pos <= s.textFrom || pos >= s.textTo));
 }
 
 interface Plan {

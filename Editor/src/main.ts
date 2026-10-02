@@ -16,7 +16,7 @@ import "./styles/switcher.css";
 import "./styles/action-panel.css";
 
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, deleteCharBackward, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
+import { defaultKeymap, deleteCharBackward, deleteCharForward, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
 import {
   deleteMarkupBackward,
   markdown,
@@ -56,6 +56,7 @@ import { fencesOf, markerSpanEnd, notAPlace, ruleLine } from "./blocks";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { splitSpans } from "./keyboard/spans";
+import { deleteOverMarks, keepPairs, moveOverSeams } from "./keyboard/pairs";
 import { openAbove, openAboveLeft, openBelow, openBelowRight } from "./keyboard/fence-exit";
 import { moveBlockDown, moveBlockUp, nothing, selectBlockEnd, selectBlockStart } from "./keyboard/move-block";
 import { shiftTab, tab } from "./keyboard/tab";
@@ -471,6 +472,7 @@ const SELECTABLE_BLOCKS = new Set([
  * `selectAll` takes the note (decision 65). */
 /** ⌫ as the key does it: the table, then CodeMirror's markup delete, then one character (170 reuses it). */
 const backspaceKey = chain(keyCommand(backspace), deleteMarkupBackward, deleteCharBackward);
+const deleteKey = chain(keyCommand(deleteForward), deleteCharForward);
 
 function selectBlockThenAll(view: EditorView): boolean {
   const state = view.state;
@@ -650,6 +652,8 @@ function baseExtensions(): Extension[] {
     // Where the caret may rest: past every block marker, never on a break, a fence line or a
     // rule — one filter for every way a caret arrives (146, 151).
     caretPlaces(),
+    // No delete takes one marker of a construct and leaves its partner (177).
+    keepPairs(),
     findHighlighting(),
     // Ordered lists count themselves. A filter that writes to the document, so it declares the
     // transactions it is *for* rather than the ones it is against — see the file's own note, and
@@ -678,7 +682,8 @@ function baseExtensions(): Extension[] {
         // Inside an inline construct, both close it and open it again after the break (171).
         { key: "Shift-Enter", run: splitSpans(shiftEnterKey, "\n") },
         { key: "Enter", run: splitSpans(enterKey, "\n\n") },
-        { key: "Backspace", run: chain(keyCommand(backspace), deleteMarkupBackward) },
+        // ⌫ and ⌦ against a construct's marker reach past it to the text (177).
+        { key: "Backspace", run: chain(keyCommand(backspace), deleteOverMarks(false, false, backspaceKey), deleteMarkupBackward) },
         // A line's edges are its text's: outside an inline construct, after a block's marker, and
         // ⌥⌫ or ⌘⌫ at the text start is ⌫ (170).
         // ⌥↑ and ⌥↓ move the caret's block, and ⌃⌘↑ and ⌃⌘↓ are the same under Raycast's key;
@@ -692,18 +697,21 @@ function baseExtensions(): Extension[] {
         { key: "Mod-ArrowLeft", run: lineStart, shift: selectLineStart },
         { key: "Mod-ArrowRight", run: lineEnd, shift: selectLineEnd },
         { key: "Mod-Backspace", run: deleteToLineStart(backspaceKey) },
-        { key: "Alt-Backspace", run: deleteWordAtStart(backspaceKey) },
+        { key: "Alt-Backspace", run: chain(deleteWordAtStart(backspaceKey), deleteOverMarks(false, true, backspaceKey)) },
         // ↑ and ↓ step over every line that is not a place, keeping their column (146, 151); ⇧↑ and
         // ⇧↓ do the same with the selection's head (169).
         { key: "ArrowUp", run: chain(openAbove, arrowUp), shift: shiftArrowUp },
         { key: "ArrowDown", run: chain(openBelow, arrowDown), shift: shiftArrowDown },
         // Out of a code block at the note's edge, or next to another block, a line is opened (175).
-        { key: "ArrowRight", run: openBelowRight },
-        { key: "ArrowLeft", run: openAboveLeft },
+        { key: "ArrowRight", run: chain(openBelowRight, moveOverSeams(true, false, false)), shift: moveOverSeams(true, false, true) },
+        { key: "ArrowLeft", run: chain(openAboveLeft, moveOverSeams(false, false, false)), shift: moveOverSeams(false, false, true) },
+        // →, ← and the ⌥ forms never stop between a construct's marker and its text (177).
+        { key: "Alt-ArrowRight", run: moveOverSeams(true, true, false), shift: moveOverSeams(true, true, true) },
+        { key: "Alt-ArrowLeft", run: moveOverSeams(false, true, false), shift: moveOverSeams(false, true, true) },
         // ⌦ cannot pull a fence or a rule up into the line above (151).
-        { key: "Delete", run: keyCommand(deleteForward) },
+        { key: "Delete", run: chain(keyCommand(deleteForward), deleteOverMarks(true, false, deleteKey)) },
         // …and at a line's end, ⌥⌦ and ⌘⌦ are ⌦: the break goes whole (172).
-        { key: "Alt-Delete", run: keyCommand(deleteForward) },
+        { key: "Alt-Delete", run: chain(keyCommand(deleteForward), deleteOverMarks(true, true, deleteKey)) },
         { key: "Mod-Delete", run: keyCommand(deleteForward) },
         { key: "Mod-a", run: selectBlockThenAll },
       ])
