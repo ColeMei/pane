@@ -2556,6 +2556,23 @@ export function runGestures(view, doc) {
   d.press("Backspace", { altKey: true });
   r.check("⌥⌫ inside a nested construct stops at its own text (177)", "aa **bold *ant* x** zz", view.state.doc.line(3).text);
 
+  // 178: ⏎ at a heading's text start pushes the heading down whole, and the caret stays with it.
+  for (const [name, mark] of [["h1", "# "], ["h2", "## "], ["h3", "### "]]) {
+    d.load(`top\n\n${mark}Head words\n\nPARA\n`); d.at("Head");
+    d.press("Enter"); d.type("Q");
+    r.check(`${name}: ⏎ at its text start opens a line above it (178)`, `top\n\n\n\n${mark}QHead words\n\nPARA\n`, d.text());
+  }
+  d.load("## Head words\n\nPARA\n"); d.at("Head");
+  d.press("Enter"); d.type("Q");
+  r.check("⏎ at the start of a heading that starts the note opens a line above it (178)", "\n\n## QHead words\n\nPARA\n", d.text());
+  d.load("top\n\n## Head words\n\nPARA\n"); d.at("Head");
+  d.press("Enter"); d.press("ArrowUp"); d.type("Z");
+  r.check("…and ↑ from the heading reaches a line above it, leaving the heading whole (178)", true,
+    d.text().includes("Z\n## Head words\n") || d.text().includes("Z\n\n## Head words\n"), JSON.stringify(d.text()));
+  d.load("top\n\n## Head words\n\nPARA\n"); d.at(" words");
+  d.press("Enter"); d.type("Q");
+  r.check("⏎ in the middle of a heading still leaves the rest as a paragraph (178)", "top\n\n## Head\n\nQ words\n\nPARA\n", d.text());
+
   return r;
 }
 

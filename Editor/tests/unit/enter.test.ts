@@ -38,6 +38,12 @@ export const cases: Case[] = [
   { name: "empty `- [ ] ` leaves the list", doc: "exits:- [ ] one\n- [ ] |", want: "- [ ] one\n\n|" },
   { name: "an empty nested item is CodeMirror's to outdent", doc: "exits:- one\n  - |", want: FALLTHROUGH },
   { name: "an item with text is CodeMirror's to continue", doc: "exits:- one|", want: FALLTHROUGH },
+
+  // 6. A heading's text start pushes the heading down (178)
+  { name: "⏎ at a heading's text start opens a line above it, the caret staying with the heading", doc: "exits:top\n\n## |Head", want: "top\n\n\n\n## |Head" },
+  { name: "…at the note's start too", doc: "exits:# |Head", want: "\n\n# |Head" },
+  { name: "…but not in the middle of a heading", doc: "exits:## He|ad", want: FALLTHROUGH },
+  { name: "…nor on an empty heading", doc: "exits:## |", want: FALLTHROUGH },
   { name: "a quoted list item is not this row's", doc: "exits:> - one\n> - |", want: FALLTHROUGH },
 
   // 5. A paragraph break (63)

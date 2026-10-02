@@ -12,12 +12,14 @@
  *   3. leaving a list leaves one blank line, adding one only when there is not one already (108)
  *   4. `nonTightLists: false` — CodeMirror's own Enter would make the list loose instead of exiting it
  *   5. ⏎ starts a paragraph, `\n\n`, and one `\n` when the line being left is already blank (63)
+ *   6. ⏎ at a heading's text start pushes the heading down whole, the caret staying with it (178)
  */
 
 import { insertNewlineContinueMarkupCommand } from "@codemirror/lang-markdown";
 import type { LineContext } from "./context";
 import { keyCommand } from "./context";
 import { chain, rows, type KeyEdit } from "./edit";
+import { markerSpanEnd } from "../blocks";
 
 const INPUT = "input";
 
@@ -79,6 +81,19 @@ export function newParagraph(ctx: LineContext): KeyEdit | null {
   };
 }
 
-export const enterExits = rows(exitEmptyBlockquote, closeOpenFence, exitListToParagraph);
+/** 6. At a heading's text start: a line opens above it, in 175's shape, and the heading moves down whole. */
+export function pushHeadingDown(ctx: LineContext): KeyEdit | null {
+  if (!ctx.selectionEmpty || ctx.caret.inBlockquote || ctx.inListItem) return null;
+  const marks = /^ {0,3}#{1,6}[ \t]+\S/.exec(ctx.line.text);
+  if (!marks || ctx.head !== markerSpanEnd(ctx.state, ctx.line.number)) return null;
+  return {
+    changes: [{ from: ctx.line.from, insert: "\n\n" }],
+    anchor: ctx.head + 2,
+    userEvent: INPUT,
+    scrollIntoView: true,
+  };
+}
+
+export const enterExits = rows(exitEmptyBlockquote, closeOpenFence, exitListToParagraph, pushHeadingDown);
 
 export const enterKey = chain(keyCommand(enterExits), continueMarkup, keyCommand(newParagraph));
