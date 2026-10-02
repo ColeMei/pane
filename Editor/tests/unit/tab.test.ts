@@ -29,8 +29,12 @@ export const cases: Case[] = [
   { name: "⇥ on a nested first item does nothing", doc: "tab:- a\n  - |b", want: "noop" },
   // The caret stays before the inserted spaces: it maps through the change rather than being placed.
   { name: "⇥ from the marker itself still nests the item", doc: "tab:- a\n|- b", want: "- a\n|  - b" },
-  { name: "⇥ in prose is CodeMirror's", doc: "tab:hel|lo", want: FALLTHROUGH },
-  { name: "⇥ in a fence is CodeMirror's", doc: "tab:```\nco|de\n```", want: FALLTHROUGH },
+  // ⇥ outside a list writes no hidden spaces (179)
+  { name: "⇥ in prose writes nothing (179)", doc: "tab:hel|lo", want: "noop" },
+  { name: "⇥ in a heading writes nothing (179)", doc: "tab:## He|ad", want: "noop" },
+  { name: "⇥ in a quote writes nothing (179)", doc: "tab:> qu|ote", want: "noop" },
+  { name: "⇥ in a fence indents at the caret, to the next two-column stop (179)", doc: "tab:```\nco|de\n```", want: "```\nco  |de\n```" },
+  { name: "…one space from an odd column (179)", doc: "tab:```\ncod|e\n```", want: "```\ncod |e\n```" },
 
   // ⇧⇥ (108)
   { name: "⇧⇥ backs a nested bullet out to its parent's indent", doc: "shift:- a\n  - |b", want: "- a\n- |b" },

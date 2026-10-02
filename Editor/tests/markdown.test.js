@@ -2573,6 +2573,24 @@ export function runGestures(view, doc) {
   d.press("Enter"); d.type("Q");
   r.check("⏎ in the middle of a heading still leaves the rest as a paragraph (178)", "top\n\n## Head\n\nQ words\n\nPARA\n", d.text());
 
+  // 179: ⇥ never writes spaces nobody can see. In a heading or a quote it does nothing; in code it
+  // indents at the caret, to the next two-column stop.
+  const tabbed = (text, needle, offset, times) => {
+    d.load(text); d.at(needle, offset);
+    for (let i = 0; i < times; i++) d.press("Tab");
+    return d.text();
+  };
+  for (const [name, block] of [["heading", "## Head words"], ["quote", "> Head words"], ["paragraph", "Head words"]]) {
+    const text = `top\n\n${block}\n\nPARA\n`;
+    r.check(`${name}: ⇥ twice writes nothing (179)`, text, tabbed(text, "words", 2, 2));
+    r.check(`${name}: ⇥ at the text start writes nothing (179)`, text, tabbed(text, "Head", 0, 1));
+  }
+  const CODE = "top\n\n```\ncode words\n```\n\nPARA\n";
+  r.check("⇥ in a code line indents at the caret (179)", "top\n\n```\ncode   words\n```\n\nPARA\n", tabbed(CODE, "code words", 4, 1));
+  r.check("…to the next two-column stop (179)", "top\n\n```\ncod e words\n```\n\nPARA\n", tabbed(CODE, "code words", 3, 1));
+  r.check("⇥ at a code line's start indents it (179)", "top\n\n```\n  code words\n```\n\nPARA\n", tabbed(CODE, "code words", 0, 1));
+  r.check("⇥ in a list item still nests it (108)", "- one\n  - two\n\nPARA\n", tabbed("- one\n- two\n\nPARA\n", "two", 0, 1));
+
   return r;
 }
 
