@@ -205,6 +205,19 @@ final class PanePanel: NSPanel {
 
     var isSummoned: Bool { onscreenFrame != nil && !parked }
 
+    /// Hit-tests the nearest point inside the pane against the Window Server's window order.
+    /// Projecting an outside point keeps the 16 pt resize margin usable without hovering through
+    /// another window covering the edge. This also works while another app remains frontmost.
+    func isExposed(near point: CGPoint) -> Bool {
+        guard isSummoned, isVisible, isOnActiveSpace else { return false }
+        let inset = frame.insetBy(dx: 1, dy: 1)
+        let inside = CGPoint(
+            x: min(max(point.x, inset.minX), inset.maxX),
+            y: min(max(point.y, inset.minY), inset.maxY)
+        )
+        return NSWindow.windowNumber(at: inside, belowWindowWithWindowNumber: 0) == windowNumber
+    }
+
     /// Puts the pane back where it was, on the Space you are on now.
     ///
     /// - Parameter frame: where to appear. Rule 3 — "only a drag moves a pane" — so this is the

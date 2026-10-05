@@ -144,6 +144,7 @@ final class PaneController: NSObject {
     private var lastContentHeight: CGFloat = PanePanel.defaultHeight
     private let autoSizeBadge = AutoSizeBadge()
     private var mouseMonitors: [Any] = []
+    private var hoverTimer: Timer?
     private var isHovered = false
     private var isCloseHovered = false
     private var switcherIsOpen = false
@@ -305,9 +306,7 @@ final class PaneController: NSObject {
         // Decision 41: the chrome follows the cursor, and summoning moves the pane rather than the
         // cursor — so a pane that opens under a stationary pointer gets no `mouseenter` and would
         // sit dimmed until the mouse moved. Only Swift knows the new frame and the pointer at once.
-        isHovered = frame.contains(NSEvent.mouseLocation)
-        editor.call("setHover", [isHovered])
-        refreshCloseHover()
+        refreshHover()
         // The height the note wanted may have moved while the pane was away — an external edit, or a
         // note switched from the menu bar. Reconciling here rather than waiting for the web layer's
         // next report keeps the first frame the user sees the right size.
@@ -1767,11 +1766,21 @@ extension PaneController: NSWindowDelegate {
         }) {
             mouseMonitors.append(local)
         }
+        // Other windows can move over the pane while the pointer stays still. Occlusion-state
+        // notifications only report full visibility changes, so they miss a covered bottom edge.
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshAutoSizeBadge() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        hoverTimer = timer
+        refreshAutoSizeBadge()
     }
 
     private func stopTrackingResizeEdge() {
         for monitor in mouseMonitors { NSEvent.removeMonitor(monitor) }
         mouseMonitors.removeAll()
+        hoverTimer?.invalidate()
+        hoverTimer = nil
         autoSizeBadge.hide()
     }
 
@@ -1783,8 +1792,8 @@ extension PaneController: NSWindowDelegate {
     /// the pane sitting over another app you are working in. These monitors already watch the
     /// pointer for the pill and do not care which app is active, so hover comes from the same place.
     private func refreshHover() {
-        guard panel.isSummoned else { return }
-        let inside = panel.frame.contains(NSEvent.mouseLocation)
+        let pointer = NSEvent.mouseLocation
+        let inside = panel.frame.contains(pointer) && panel.isExposed(near: pointer)
         if inside != isHovered {
             isHovered = inside
             editor.call("setHover", [inside])
@@ -1837,9 +1846,11 @@ extension PaneController: NSWindowDelegate {
         // Never over an open overlay: the switcher and ⌘K own the pane's whole height while they are
         // up, so the pill would be captioning a panel rather than the note.
         let frame = panel.frame
-        let near = !switcherIsOpen && !actionsIsOpen
-            && AutoSizeBadge.isNearResizeEdge(NSEvent.mouseLocation, of: frame)
-        autoSizeBadge.update(near: frame, autoSizing: paneState.autoSizing, visible: near)
+        let pointer = NSEvent.mouseLocation
+        let near = !panel.inLiveResize && !switcherIsOpen && !actionsIsOpen
+            && AutoSizeBadge.isNearResizeEdge(pointer, of: frame)
+            && panel.isExposed(near: pointer)
+        autoSizeBadge.update(near: panel, autoSizing: paneState.autoSizing, visible: near)
     }
 
     /// Rule 3, "stay put": the drag is the only thing that moves a pane, so the drag is the only

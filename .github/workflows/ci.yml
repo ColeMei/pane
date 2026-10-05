@@ -36,6 +36,9 @@ jobs:
       - name: Test PaneKit
         run: Scripts/test.sh
 
+      - name: Test native windows
+        run: Scripts/test-window.sh
+
       # The four editor suites, all on the same `editor-probe`: a real WKWebView in a real NSWindow.
       # They are the ones that catch what reading the code cannot — a decoration in the wrong place,
       # a rectangle under a gradient, a panel that resizes the window as you filter it. The bundle is

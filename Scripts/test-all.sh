@@ -8,6 +8,7 @@ status=0
 step() { echo; echo "==> $1"; shift; "$@" || { status=1; echo "✗ FAILED: $*"; }; }
 
 step "PaneKit"            Scripts/test.sh
+step "Native windows"     Scripts/test-window.sh
 step "Typecheck"          bash -c 'cd Editor && npm run --silent typecheck'
 step "Keyboard tables"    Scripts/test-keyboard.sh
 step "Editor bundle"      bash -c 'cd Editor && node build.mjs >/dev/null'

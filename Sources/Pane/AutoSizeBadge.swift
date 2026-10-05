@@ -37,11 +37,8 @@ final class AutoSizeBadge {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.level = .floating
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
-        // Same rule as the pane (decision 33): it must show up on whatever Space the pane is on.
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 
         let background = NSVisualEffectView()
         background.material = .popover
@@ -84,29 +81,40 @@ final class AutoSizeBadge {
         panel.contentView = background
     }
 
-    /// Shows the pill under `paneFrame`, or hides it.
+    /// Shows the pill under the pane, following its window level and Space, or hides it.
     ///
     /// - Parameter autoSizing: what the pill should say. Both states are worth showing: near the
     ///   edge with auto-sizing on it warns that dragging will end it, and with auto-sizing off it
     ///   explains why the pane stopped following the note.
-    func update(near paneFrame: CGRect, autoSizing: Bool, visible: Bool) {
+    func update(near pane: NSWindow, autoSizing: Bool, visible: Bool) {
+        if panel.level != pane.level { panel.level = pane.level }
+        if panel.collectionBehavior != pane.collectionBehavior {
+            panel.collectionBehavior = pane.collectionBehavior
+        }
         guard visible else {
             hide()
             return
         }
 
-        label.stringValue = autoSizing ? "⇕  Auto-size" : "⇕  Auto-size off"
+        if panel.parent !== pane {
+            panel.parent?.removeChildWindow(panel)
+            pane.addChildWindow(panel, ordered: .above)
+        }
+        let paneFrame = pane.frame
+        let title = autoSizing ? "⇕  Auto-size" : "⇕  Auto-size off"
+        if label.stringValue != title { label.stringValue = title }
         let size = CGSize(width: label.intrinsicContentSize.width + 28, height: 26)
         let origin = CGPoint(
             x: (paneFrame.midX - size.width / 2).rounded(),
             y: (paneFrame.minY - size.height - Self.offset).rounded()
         )
-        panel.setFrame(CGRect(origin: origin, size: size), display: true)
+        let frame = CGRect(origin: origin, size: size)
+        if panel.frame != frame { panel.setFrame(frame, display: true) }
 
         guard !isShowing else { return }
         isShowing = true
         panel.alphaValue = 0
-        panel.orderFrontRegardless()
+        panel.order(.above, relativeTo: pane.windowNumber)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             // Not fully opaque. This is a caption on somebody else's screen, and it sits over
