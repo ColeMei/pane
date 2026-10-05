@@ -202,6 +202,92 @@ export async function run(view, bar, doc) {
     window.paneHost.setHover(false);
   }
 
+  // A bubble can exist in the DOM and still be behind the dialog it names. Include it in
+  // hit-testing temporarily so the Window Server's WebKit engine tells us what is painted on top.
+  function paintedOnTop(el) {
+    const box = el.getBoundingClientRect();
+    const pointerEvents = el.style.pointerEvents;
+    el.style.pointerEvents = "auto";
+    try {
+      return [box.top + 3, box.top + box.height / 2, box.bottom - 3].every((y) => {
+        const hit = doc.elementFromPoint(box.left + box.width / 2, y);
+        return hit === el || el.contains(hit);
+      });
+    } finally {
+      el.style.pointerEvents = pointerEvents;
+    }
+  }
+
+  async function hoverRowButton(button) {
+    window.paneHost.setPointer(4, 4);
+    window.paneHost.setHover(true);
+    button.closest(".switcher__row")?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    const box = button.getBoundingClientRect();
+    window.paneHost.setPointer(box.left + box.width / 2, box.top + box.height / 2);
+    await sleep(DELAY + 200);
+  }
+
+  // ---- Dialog controls and toast overlap ------------------------------------------------------
+  {
+    const host = window.paneHost;
+    host.loadNote("tooltip-test.md", "Tooltip test", 0, false);
+    host.openSwitcher();
+    host.showNotes([
+      { filename: "tooltip-test.md", title: "Tooltip test", time: "now", preview: "", current: true },
+      { filename: "other.md", title: "Other note", time: "1h", preview: "" },
+      { filename: "third.md", title: "Third note", time: "2h", preview: "" },
+    ], 3, "");
+    const row = doc.querySelector('.switcher__row[data-index="1"]');
+    for (const [selector, label, shortcut] of [
+      ["[data-pin]", "Pin", "⌘⏎"],
+      ["[data-delete]", "Delete", "⌃X"],
+    ]) {
+      await hoverRowButton(row.querySelector(selector));
+      check(`${label} tooltip appears over the note list`, "visible above dialog", text(), shown() && paintedOnTop(tip()));
+      check(`${label} tooltip retains its shortcut`, shortcut, tip().querySelector("kbd")?.textContent,
+        tip().querySelector("kbd")?.textContent === shortcut);
+      check(`${label} tooltip does not intercept clicks`, "none", getComputedStyle(tip()).pointerEvents,
+        getComputedStyle(tip()).pointerEvents === "none");
+    }
+
+    // The explicit tooltip label can change while a hover is waiting out its delay.
+    host.setPointer(4, 4);
+    const deleteButton = row.querySelector("[data-delete]");
+    const box = deleteButton.getBoundingClientRect();
+    host.setPointer(box.left + box.width / 2, box.top + box.height / 2);
+    deleteButton.dataset.tip = "Delete ⌥X";
+    await sleep(DELAY + 200);
+    check("a delayed tooltip reads its current explicit label", "⌥X", tip().querySelector("kbd")?.textContent,
+      tip().querySelector("kbd")?.textContent === "⌥X");
+
+    host.setPointer(4, 4);
+    host.openActions();
+    const deletedAction = [...doc.querySelectorAll(".actions__row")]
+      .find((el) => el.textContent.includes("Recently Deleted"));
+    deletedAction.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    host.showDeleted([
+      { filename: "deleted-1.md", title: "Deleted one", time: "1h", preview: "" },
+      { filename: "deleted-2.md", title: "Deleted two", time: "2h", preview: "" },
+      { filename: "deleted-3.md", title: "Deleted three", time: "3h", preview: "" },
+    ]);
+    await hoverRowButton(doc.querySelector('.switcher__row[data-index="1"] [data-forget]'));
+    check("permanent delete tooltip appears over Recently Deleted", "Delete permanently above dialog", text(),
+      shown() && text() === "Delete permanently" && paintedOnTop(tip()));
+
+    host.setPointer(4, 4);
+    host.openSwitcher();
+    host.showToast("This note was deleted elsewhere. Your other notes are still here.", 5000);
+    await hoverRowButton(doc.getElementById("browse"));
+    const tooltipBox = tip().getBoundingClientRect();
+    const toastBox = doc.getElementById("toast").getBoundingClientRect();
+    const overlaps = tooltipBox.left < toastBox.right && tooltipBox.right > toastBox.left
+      && tooltipBox.top < toastBox.bottom && tooltipBox.bottom > toastBox.top;
+    check("the toast fixture overlaps the title bar tooltip", "overlap", String(overlaps), overlaps);
+    check("a title bar tooltip is painted above an overlapping toast", "visible above toast", text(),
+      shown() && paintedOnTop(tip()));
+    host.setHover(false);
+  }
+
   // ---- The transient surfaces are one family --------------------------------------------------
   //
   // A guard on two declarations rather than on behaviour, and deliberately so. Three things in the

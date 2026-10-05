@@ -64,7 +64,7 @@ function scheduleFor(button: HTMLElement, text: string): void {
     pendingEl = null;
     // Read the label again rather than trusting the string captured half a second ago: a rebind can
     // land inside the delay, and `describe` exists precisely so a bubble cannot print a stale key.
-    showFor(button, button.getAttribute("aria-label") ?? button.dataset.tip ?? text);
+    showFor(button, button.dataset.tip ?? button.getAttribute("aria-label") ?? text);
   }, SHOW_DELAY_MS);
 }
 

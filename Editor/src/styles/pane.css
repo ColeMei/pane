@@ -185,7 +185,8 @@ body {
   color: var(--text-primary);
   white-space: nowrap;
   pointer-events: none;
-  z-index: 8;
+  /* Names controls inside the dialogs too, so it must sit above the overlays and toast. */
+  z-index: 13;
 }
 
 /* `display: flex` above beats the user agent's `[hidden] { display: none }`, so without this the
