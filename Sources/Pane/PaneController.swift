@@ -261,7 +261,7 @@ final class PaneController: NSObject {
     /// window is frontmost, and two toggles in a row is a summon that immediately dismisses itself.
     private var lastToggle = Date.distantPast
 
-    /// The hotkey. Rule 5: a pinned pane ignores the dismiss half of it.
+    /// The hotkey toggles a focused pane and recalls an unfocused one, pinned or not.
     func toggle() {
         guard Date().timeIntervalSince(lastToggle) > 0.25 else { return }
         lastToggle = Date()
@@ -269,7 +269,6 @@ final class PaneController: NSObject {
         if SummonPolicy.shouldDismiss(
             isSummoned: isVisible,
             isKeyWindow: panel.isKeyWindow,
-            isPinned: isPinned,
             dismissMode: settings.value.dismissMode
         ) {
             dismiss()

@@ -179,8 +179,8 @@ final class PanePanel: NSPanel {
     /// silently rather than loudly.
     ///
     /// `.canJoinAllSpaces` has neither problem: the pane is on every Space already, so summoning is
-    /// only ever a matter of moving it back on screen. Pinning keeps the two meanings that are
-    /// actually about the note and the pane — top of the switcher, and ignores the dismiss hotkey.
+    /// only ever a matter of moving it back on screen. Pinning sorts the note to the top of the
+    /// switcher; it does not change how the summon hotkey hides or shows the pane.
     ///
     /// `.fullScreenAuxiliary` joins a fullscreen app as an overlay rather than forcing a Space
     /// switch out of it.

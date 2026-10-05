@@ -120,8 +120,8 @@ public struct NoteState: Codable, Equatable, Sendable {
     /// every open stamps this, launch included, so ordering by it moved notes nobody had edited.
     public var lastOpened: Date?
 
-    /// Pinned notes sort into the switcher's Pinned group, appear in the menu bar, and make the pane
-    /// holding them ignore the dismiss hotkey.
+    /// Pinned notes sort into the switcher's Pinned group and appear in the menu bar. Hiding the
+    /// pane leaves this flag intact, so the note is still pinned when it is summoned again.
     public var isPinned: Bool
 
     public init(

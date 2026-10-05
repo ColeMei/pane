@@ -6,9 +6,8 @@ public enum SummonPolicy {
     public static func shouldDismiss(
         isSummoned: Bool,
         isKeyWindow: Bool,
-        isPinned: Bool,
         dismissMode: Settings.DismissMode
     ) -> Bool {
-        isSummoned && isKeyWindow && !isPinned && dismissMode == .sameHotkeyToggles
+        isSummoned && isKeyWindow && dismissMode == .sameHotkeyToggles
     }
 }

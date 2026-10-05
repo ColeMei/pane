@@ -112,6 +112,17 @@ struct WindowProbe {
               "a pinned pane can be brought back above another window")
         cover.orderOut(nil)
 
+        check(SummonPolicy.shouldDismiss(
+            isSummoned: pane.isSummoned, isKeyWindow: pane.isKeyWindow,
+            dismissMode: .sameHotkeyToggles
+        ), "a focused pinned pane can be dismissed by the global hotkey")
+        pane.dismiss()
+        check(!pane.isSummoned, "a pinned pane can be parked")
+        pane.summon(at: frame, pinned: true)
+        await settle()
+        check(pane.isKeyWindow && pane.isExposed(near: center) && pane.level == .floating,
+              "a dismissed pinned pane returns focused and floating")
+
         badge.update(near: pane, autoSizing: false, visible: true)
         await settle()
         guard let pill = pane.childWindows?.first else {
