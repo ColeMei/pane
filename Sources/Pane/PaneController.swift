@@ -265,13 +265,12 @@ final class PaneController: NSObject {
         guard Date().timeIntervalSince(lastToggle) > 0.25 else { return }
         lastToggle = Date()
 
-        if isVisible {
-            guard !isPinned || settings.value.dismissMode == .escapeOnly else {
-                // Pinned and already up: put the caret back rather than doing nothing, so the
-                // hotkey still has an effect the user can feel.
-                editor.focusEditor()
-                return
-            }
+        if SummonPolicy.shouldDismiss(
+            isSummoned: isVisible,
+            isKeyWindow: panel.isKeyWindow,
+            isPinned: isPinned,
+            dismissMode: settings.value.dismissMode
+        ) {
             dismiss()
         } else {
             summon()
@@ -279,6 +278,7 @@ final class PaneController: NSObject {
     }
 
     func summon() {
+        let beginsSession = !isVisible
         // The active display is the one the pointer is on — Spotlight's convention, and the only
         // definition that matches where the user is looking.
         //
@@ -317,7 +317,8 @@ final class PaneController: NSObject {
         // A summon is a new sitting with the note, and undo belongs to the sitting — see
         // `resetHistory`. Without it ⌘Z reaches back across the dismissal and can empty a note that
         // was written in one burst.
-        editor.call("resetHistory")
+        // Refocusing a pane that stayed open continues the same sitting.
+        if beginsSession { editor.call("resetHistory") }
         editor.focusEditor()
 
         // Re-assert key status once the current event has finished.
