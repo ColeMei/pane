@@ -30,6 +30,9 @@ interface SwitcherOptions {
   onCreate: (title: string) => void;
   onPin: (filename: string) => void;
   onDelete: (filename: string) => void;
+  /** Delete Note's binding in force, so ⌃X deletes the selected row and its ✕ names the key (182). */
+  isDeleteKey: (event: KeyboardEvent) => boolean;
+  deleteKeyCaps: () => string;
   /** Recently Deleted (decision 20). `storedName` is the timestamped name in the holding folder. */
   onRestore: (storedName: string) => void;
   onRequestDeleted: () => void;
@@ -317,7 +320,7 @@ export function mountSwitcher(options: SwitcherOptions) {
               <button class="switcher__action" data-pin
                       aria-label="Pin" data-tip="Pin ⌘⏎">${PIN_OUTLINE_SVG}</button>
               <button class="switcher__action" data-delete
-                      aria-label="Delete" data-tip="Delete ⌃X">✕</button>
+                      aria-label="Delete" data-tip="Delete ${options.deleteKeyCaps()}">✕</button>
             </span>`
             }
           </div>
@@ -431,6 +434,13 @@ export function mountSwitcher(options: SwitcherOptions) {
   });
 
   search.addEventListener("keydown", (event) => {
+    // Decision 182: Delete Note's key acts on the selected row here, as ⌘⏎ pins it. Not in Recently
+    // Deleted, where the row's only delete has no undo behind it.
+    if (mode === "notes" && rows.length > 0 && options.isDeleteKey(event)) {
+      event.preventDefault();
+      options.onDelete(rows[selected]!.filename);
+      return;
+    }
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();

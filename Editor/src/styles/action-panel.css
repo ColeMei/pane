@@ -17,7 +17,7 @@
    * and the position before it has run. */
   top: var(--overlay-top-min);
   transform: translateX(-50%);
-  z-index: 11;
+  z-index: var(--layer-actions);
 
   display: flex;
   flex-direction: column;
@@ -89,7 +89,7 @@
 .pane__scrim {
   position: absolute;
   inset: 0;
-  z-index: 9;
+  z-index: var(--layer-scrim);
   display: none;
 }
 

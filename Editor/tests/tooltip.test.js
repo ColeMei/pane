@@ -202,6 +202,68 @@ export async function run(view, bar, doc) {
     window.paneHost.setHover(false);
   }
 
+  // ---- Issue 7: a bubble is never under the thing it names, and it keeps its key ----------------
+  //
+  // Decision 182. Reported: resting on a row's pin or ✕ in ⌘P showed no bubble — it was painted
+  // under the list — and over a toast the title bar's bubbles were cut off. And the rows' bubbles
+  // said "Pin" and "Delete" with no key. Driven the way the pane really is, through Swift's
+  // `setPointer`, and asserted on paint order: the bubble's own centre is hit-tested with its
+  // `pointer-events` let through for the one read, so what comes back is whatever is drawn on top.
+  {
+    const centre = (el) => {
+      const r = el.getBoundingClientRect();
+      return [r.left + r.width / 2, r.top + r.height / 2];
+    };
+    const onTop = () => {
+      const el = tip();
+      if (!el || el.hidden) return "no bubble";
+      const was = el.style.pointerEvents;
+      el.style.pointerEvents = "auto";
+      const [x, y] = centre(el);
+      const hit = doc.elementFromPoint(x, y);
+      el.style.pointerEvents = was;
+      return hit && (hit === el || el.contains(hit)) ? "bubble" : (hit?.className || hit?.tagName || "nothing");
+    };
+    const restOn = async (el) => {
+      window.paneHost.setHover(true);
+      window.paneHost.setPointer(...centre(el));
+      await sleep(DELAY * 1.3);
+    };
+    const leave = async () => {
+      window.paneHost.setPointer(4, 4);
+      window.paneHost.setHover(false);
+      await sleep(60);
+    };
+    const notes = Array.from({ length: 6 }, (_, i) => ({
+      filename: `2026-10-0${i + 1}-1200-tip-${i}.md`,
+      title: `Tip note ${i}`,
+      time: "9 Oct",
+      preview: "",
+      band: "Today",
+    }));
+
+    await leave();
+    doc.getElementById("browse").click();
+    window.paneHost.showNotes(notes, notes.length, "");
+    for (const [what, selector, want] of [
+      ["pin", "[data-pin]", "Pin ⌘⏎"],
+      ["✕", "[data-delete]", "Delete ⌃X"],
+    ]) {
+      const button = doc.querySelector(`.switcher__row ${selector}`);
+      await restOn(button);
+      check(`(182) a row's ${what} in ⌘P: the bubble is drawn over the list`, "bubble", onTop(), onTop() === "bubble");
+      check(`(182) a row's ${what} in ⌘P: the bubble carries its key`, want, text(), squash(text()) === squash(want));
+      await leave();
+    }
+    doc.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    doc.getElementById("switcher-search")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+
+    window.paneHost.showToast("A long receipt that runs the whole width of the pane, under the title bar's buttons", 5000);
+    await restOn(doc.getElementById("browse"));
+    check("(182) a title-bar bubble is drawn over a toast", "bubble", onTop(), onTop() === "bubble");
+    await leave();
+  }
+
   // ---- The transient surfaces are one family --------------------------------------------------
   //
   // A guard on two declarations rather than on behaviour, and deliberately so. Three things in the

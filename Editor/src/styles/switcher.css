@@ -23,7 +23,7 @@
    * calculation. This literal is the floor and the pre-script position. */
   top: var(--overlay-top-min);
   transform: translateX(-50%);
-  z-index: 10;
+  z-index: var(--layer-switcher);
 
   display: flex;
   flex-direction: column;

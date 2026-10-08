@@ -511,5 +511,58 @@ export function run(view, bar, doc) {
     );
   }
 
+  // ---- (182) Delete Note's key deletes the selected row, and only in the notes list ---------------
+  //
+  // Issue 7 asked for the ✕'s bubble to show ⌃X. Measured first, on the debug build: in ⌘P, ⌃X did
+  // nothing at all, so printing it would have named a key that does not work there. Now it acts on
+  // the selected row, as ⌘⏎ pins it. Never in Recently Deleted, whose only delete has no undo.
+  {
+    const sent = [];
+    const host = (window.webkit ??= {});
+    const handlers = (host.messageHandlers ??= {});
+    const real = handlers.pane;
+    handlers.pane = { postMessage: (m) => { sent.push(m); real?.postMessage?.(m); } };
+    const key = (init) =>
+      search.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+    const deletes = () => sent.filter((m) => m.type === "deleteNote" || m.type === "forgetDeleted");
+
+    press("Escape");
+    openWith(6);
+    press("ArrowDown");
+    const second = notes(6)[1].filename;
+    sent.length = 0;
+    key({ key: "x", ctrlKey: true });
+    check(
+      "(182) ⌃X in ⌘P deletes the selected row",
+      second,
+      deletes().map((m) => m.filename).join(", ") || "nothing",
+      deletes().length === 1 && deletes()[0].filename === second
+    );
+
+    sent.length = 0;
+    key({ key: "x" });
+    check("(182) a plain x in ⌘P is typing, not a delete", "nothing", deletes().length ? "a delete" : "nothing", deletes().length === 0);
+
+    press("Escape");
+    doc.getElementById("open-actions").click();
+    actionsSearch.value = "Recently Deleted";
+    actionsSearch.dispatchEvent(new Event("input", { bubbles: true }));
+    actionsSearch.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    window.paneHost.showDeleted(notes(3));
+    sent.length = 0;
+    key({ key: "x", ctrlKey: true });
+    check(
+      "(182) ⌃X in Recently Deleted deletes nothing",
+      "nothing",
+      deletes().map((m) => m.type).join(", ") || "nothing",
+      deletes().length === 0
+    );
+    check("(182) …and that list really was open", "deleted rows", doc.querySelector("[data-forget]") ? "deleted rows" : "no deleted rows", !!doc.querySelector("[data-forget]"));
+
+    if (real) handlers.pane = real;
+    else delete handlers.pane;
+    press("Escape");
+  }
+
   return { checked, failures };
 }

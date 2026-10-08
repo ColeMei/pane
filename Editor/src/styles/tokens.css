@@ -47,6 +47,15 @@
    * read a stylesheet. The two have to move together. */
   --overlay-top-min: 54px;
   --overlay-gap-bottom: 16px;
+
+  /* The pane's stack, bottom to top, in one place (182). The tooltip is last by derivation: it names
+   * whatever the pointer rests on, and that can be inside any layer here. A layer added above the
+   * toast must become the base of `--layer-tip`. */
+  --layer-scrim: 9;
+  --layer-switcher: 10;
+  --layer-actions: 11;
+  --layer-toast: 12;
+  --layer-tip: calc(var(--layer-toast) + 1);
   --overlay-search-size: 15px;
   --overlay-search-padding: 13px 16px;
   --overlay-row-size: 13.5px;

@@ -64,8 +64,17 @@ function scheduleFor(button: HTMLElement, text: string): void {
     pendingEl = null;
     // Read the label again rather than trusting the string captured half a second ago: a rebind can
     // land inside the delay, and `describe` exists precisely so a bubble cannot print a stale key.
-    showFor(button, button.getAttribute("aria-label") ?? button.dataset.tip ?? text);
+    showFor(button, tipText(button) || text);
   }, SHOW_DELAY_MS);
+}
+
+/**
+ * What a control's bubble says. `data-tip` when it has one: a re-rendered row keeps its key there
+ * and leaves `aria-label` as the plain name. Otherwise `aria-label`, which `describe` keeps current.
+ * Every read goes through here, so the bubble cannot drop a key on one path only (182).
+ */
+function tipText(el: HTMLElement): string {
+  return el.dataset.tip ?? el.getAttribute("aria-label") ?? "";
 }
 
 /** Splits "Bold ⌘B" into its name and its key cap. Anything without a shortcut is just a name. */
@@ -122,7 +131,7 @@ export function mountTooltips(paneEl: HTMLElement): void {
    */
   document.addEventListener("mouseover", (event) => {
     const target = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-tip]");
-    if (target && target !== named) scheduleFor(target, target.dataset.tip ?? "");
+    if (target && target !== named) scheduleFor(target, tipText(target));
   });
 
   document.addEventListener("keydown", hideTooltip, true);
@@ -207,7 +216,7 @@ export function setPointer(x: number, y: number): void {
     return;
   }
   if (target === named || target === pendingEl) return;
-  scheduleFor(target, target.dataset.tip ?? target.getAttribute("aria-label") ?? "");
+  scheduleFor(target, tipText(target));
 }
 
 export function hideTooltip(): void {
@@ -261,7 +270,7 @@ export function describe(button: HTMLElement, text: string): void {
   button.dataset.paneDescribed = "1";
   button.setAttribute("data-pane-described", "");
 
-  const label = () => button.getAttribute("aria-label") ?? "";
+  const label = () => tipText(button);
   const hide = () => hideTooltip();
 
   button.addEventListener("mouseenter", () => scheduleFor(button, label()));

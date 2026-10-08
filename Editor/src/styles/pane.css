@@ -185,7 +185,7 @@ body {
   color: var(--text-primary);
   white-space: nowrap;
   pointer-events: none;
-  z-index: 8;
+  z-index: var(--layer-tip);
 }
 
 /* `display: flex` above beats the user agent's `[hidden] { display: none }`, so without this the
@@ -830,7 +830,7 @@ body {
   top: calc(var(--titlebar-height) + 10px);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 12;
+  z-index: var(--layer-toast);
   max-width: calc(100% - 48px);
   padding: 7px 14px;
   /* Capsule, for the reason in `.pane__tip` above. The literal this replaced was `8px` — one pixel
