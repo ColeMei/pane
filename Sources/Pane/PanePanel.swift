@@ -221,7 +221,10 @@ final class PanePanel: NSPanel {
         // `setIsVisible(false)` suspends it). A window that is already in the window list can be
         // re-fronted without AppKit reconsidering which Space it belongs on, which is rule 1
         // silently failing: summon on another Space and nothing appears.
-        applyCollectionBehaviour()
+        //
+        // Kept to a Space (93) and summoned from another one, the pane comes to the Space you are on
+        // and belongs to it from then on (180). Only a window ordered in again is placed afresh.
+        if !showsOnEverySpace && !isOnActiveSpace { orderOut(nil) }
 
         makeKeyAndOrderFront(nil)
         // `orderFrontRegardless` is the one that crosses a Space boundary without activating the
