@@ -89,3 +89,24 @@ export function desiredOverlayHeight(panel: HTMLElement, list: HTMLElement): num
   const chrome = panel.offsetHeight - list.clientHeight;
   return Math.min(chrome + list.scrollHeight, OVERLAY_PANEL_HEIGHT);
 }
+
+/**
+ * Whether a `mousemove` is the pointer moving (183). Scrolling a list under a still pointer makes
+ * WebKit send the row now beneath it a `mousemove` at the same screen point, and a list whose rows
+ * follow the pointer would hand that row the selection — the arrow keys jumped back every few rows.
+ * The first event after `reset` only records where the pointer is, so a list that opens under a
+ * resting pointer keeps its first row.
+ */
+export function pointerMotion(): { moved(event: MouseEvent): boolean; reset(): void } {
+  let last: { x: number; y: number } | null = null;
+  return {
+    moved(event) {
+      const was = last;
+      last = { x: event.screenX, y: event.screenY };
+      return was !== null && (was.x !== last.x || was.y !== last.y);
+    },
+    reset() {
+      last = null;
+    },
+  };
+}

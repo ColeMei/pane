@@ -19,7 +19,7 @@
  */
 
 import { icon } from "./format-bar";
-import { desiredOverlayHeight } from "./overlay";
+import { desiredOverlayHeight, pointerMotion } from "./overlay";
 
 export interface ActionRow {
   id: string;
@@ -176,6 +176,7 @@ export function mountActionPanel(options: ActionPanelOptions) {
     pane.setAttribute("data-actions", "");
     search.value = "";
     selected = 0;
+    pointer.reset();
     render("");
     // Back to the top, explicitly. The panel opens with row 0 selected, so a list left scrolled by
     // the previous visit shows a different row under the highlight than the one ⏎ will run — which
@@ -357,9 +358,12 @@ export function mountActionPanel(options: ActionPanelOptions) {
     true
   );
 
+  const pointer = pointerMotion();
   // `mousemove`, not `mouseover`: a re-render under a resting pointer fires mouseover and would
-  // yank the selection to wherever the mouse happens to be sitting.
+  // yank the selection to wherever the mouse happens to be sitting. And only a `mousemove` that
+  // moved: a scroll under a still pointer sends one too (183).
   list.addEventListener("mousemove", (event) => {
+    if (!pointer.moved(event)) return;
     const row = (event.target as HTMLElement).closest<HTMLElement>(".actions__row");
     if (row?.dataset.index) select(Number(row.dataset.index));
   });

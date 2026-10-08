@@ -564,5 +564,38 @@ export function run(view, bar, doc) {
     press("Escape");
   }
 
+  // ---- (183) Only a pointer that moved takes the selection -----------------------------------------
+  //
+  // Reported 2026-10-10: with the pointer resting over ⌘P or ⌘K, holding ↓ jumped back up every few
+  // rows. Measured on the debug build: 3 4 2 3 4 5 3 4 5 6 4 … — each scroll put a new row under the
+  // still pointer, WebKit sent that row a `mousemove`, and the row took the selection. A synthetic
+  // move reports the pointer where it already was, so that is what is replayed here.
+  {
+    const selectedIn = (listEl, rowClass) =>
+      [...listEl.querySelectorAll(`.${rowClass}`)].findIndex((r) => r.getAttribute("aria-selected") === "true");
+    const moveOver = (row, x, y) =>
+      row.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, screenX: x, screenY: y }));
+
+    for (const [name, openIt, listEl, field, rowClass] of [
+      ["⌘P", () => openWith(30), list, search, "switcher__row"],
+      ["⌘K", () => doc.getElementById("open-actions").click(), doc.getElementById("actions-list"), actionsSearch, "actions__row"],
+    ]) {
+      press("Escape");
+      openIt();
+      const rowsNow = () => listEl.querySelectorAll(`.${rowClass}`);
+      moveOver(rowsNow()[2], 300, 300);
+      check(`(183) ${name}: opening under a resting pointer keeps the first row`, 0, selectedIn(listEl, rowClass), selectedIn(listEl, rowClass) === 0);
+
+      for (let i = 0; i < 3; i++)
+        field.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+      moveOver(rowsNow()[1], 300, 300);
+      check(`(183) ${name}: a row scrolled under a still pointer does not take the selection`, 3, selectedIn(listEl, rowClass), selectedIn(listEl, rowClass) === 3);
+
+      moveOver(rowsNow()[1], 300, 318);
+      check(`(183) ${name}: a pointer that moves still takes it`, 1, selectedIn(listEl, rowClass), selectedIn(listEl, rowClass) === 1);
+    }
+    press("Escape");
+  }
+
   return { checked, failures };
 }

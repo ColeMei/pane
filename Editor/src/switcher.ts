@@ -6,7 +6,7 @@
  * recency bands, the relative-time format) live in Swift where they are unit-tested.
  */
 
-import { desiredOverlayHeight } from "./overlay";
+import { desiredOverlayHeight, pointerMotion } from "./overlay";
 
 export interface NoteSummary {
   filename: string;
@@ -111,6 +111,7 @@ export function mountSwitcher(options: SwitcherOptions) {
   function open(): void {
     if (isOpen()) return;
     mode = "notes";
+    pointer.reset();
     show();
     options.onQuery("");
   }
@@ -123,6 +124,7 @@ export function mountSwitcher(options: SwitcherOptions) {
    */
   function openDeleted(): void {
     mode = "deleted";
+    pointer.reset();
     deleted = [];
     show();
     options.onRequestDeleted();
@@ -468,7 +470,10 @@ export function mountSwitcher(options: SwitcherOptions) {
   // Programmatic scrolls fire this too, so the arrow keys are covered by the same line as the wheel.
   list.addEventListener("scroll", updateFade);
 
+  // Only a pointer that moved takes the selection (183).
+  const pointer = pointerMotion();
   list.addEventListener("mousemove", (event) => {
+    if (!pointer.moved(event)) return;
     const row = (event.target as HTMLElement).closest<HTMLElement>(".switcher__row");
     if (row?.dataset.index) select(Number(row.dataset.index));
   });
