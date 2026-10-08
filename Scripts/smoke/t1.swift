@@ -109,7 +109,10 @@ func summon() {
 func dismiss() {
     if !paneUp() { return }
     hotkey()
-    for _ in 0..<20 { if !paneUp() { return }; sleepMs(100) }
+    for _ in 0..<10 { if !paneUp() { return }; sleepMs(100) }
+    // Esc only (180): the hotkey leaves a focused pane up, and Esc is what dismisses it.
+    if focusInPane() { key(K.escape) }
+    for _ in 0..<10 { if !paneUp() { return }; sleepMs(100) }
     print("!! the pane did not park"); exit(2)
 }
 
@@ -552,6 +555,57 @@ func itemBoldWritesMarkers() {
     check(item, "⌘A then ⌘B on a list item keeps the marker outside (153)", (read(list) ?? "").hasSuffix("1. **Hi**\n"), (read(list) ?? "").split(separator: "\n").last.map(String.init) ?? "")
 }
 
+/// Decision 180: the hotkey reads the focus, not just whether the pane is up, and a pin no longer
+/// changes what it does. Another app takes the focus by AppleScript, so no click is posted.
+func itemHotkeyReadsFocus() {
+    let item = "hotkey"
+    let toggles = (settings["dismissMode"] as? String ?? "sameHotkeyToggles") == "sameHotkeyToggles"
+    guard let name = freshNote(item) else { return check(item, "the note appeared", false) }
+    for pinned in [false, true] {
+        let tag = pinned ? "pinned" : "unpinned"
+        if pinned { key(K.p, [.maskCommand, .maskShift]); sleepMs(300) }
+
+        takeFocusElsewhere()
+        check(item, "\(tag): the pane stays up when another app takes the focus", paneUp() && !focusInPane())
+        hotkey()
+        let back = waitFor("focus back", timeoutMs: 1500) { paneUp() && focusInPane() }
+        check(item, "\(tag): the hotkey gives an unfocused pane the focus back, not a dismiss (180)", back,
+              back ? "" : (paneUp() ? "up, focus elsewhere" : "parked"))
+        summon(); sleepMs(300)
+
+        hotkey()
+        let parked = waitFor("parks", timeoutMs: 1200) { !paneUp() }
+        check(item, toggles ? "\(tag): the hotkey hides a focused pane (180)" : "\(tag): Esc only, the hotkey never hides the pane (180)",
+              parked == toggles, parked ? "parked" : "up")
+        sleepMs(300)   // past toggle()'s 0.25 s double-delivery guard, or the summon is swallowed
+        summon(); sleepMs(300)
+        if pinned { key(K.p, [.maskCommand, .maskShift]); sleepMs(300) }
+    }
+    track(name)
+    if startedCalculator {
+        NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == "com.apple.calculator" }?.terminate()
+    }
+}
+
+/// Another app takes the focus, by AppleScript rather than a click. Activating the app that is already
+/// frontmost moves nothing, so Calculator stands in when Finder was it, and is quit after if this
+/// started it.
+func takeFocusElsewhere() {
+    func activate(_ app: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        p.arguments = ["-e", "tell application \"\(app)\" to activate"]
+        try? p.run(); p.waitUntilExit()
+    }
+    activate("Finder")
+    if waitFor("focus leaves", timeoutMs: 1000, { !focusInPane() }) { return }
+    let wasRunning = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.calculator" }
+    activate("Calculator")
+    _ = waitFor("focus leaves", { !focusInPane() })
+    if !wasRunning { startedCalculator = true }
+}
+var startedCalculator = false
+
 // MARK: - Run
 
 let items: [(String, () -> Void)] = [
@@ -573,6 +627,7 @@ let items: [(String, () -> Void)] = [
     ("ctrlx", itemDeleteIntoRecentlyDeleted),
     ("elsewhere", itemDeletedElsewhere),
     ("bold", itemBoldWritesMarkers),
+    ("hotkey", itemHotkeyReadsFocus),
 ]
 
 let args = Array(CommandLine.arguments.dropFirst())

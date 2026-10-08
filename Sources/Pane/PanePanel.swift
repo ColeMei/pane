@@ -103,7 +103,7 @@ final class PanePanel: NSPanel {
         // `PanelGeometry.maximumHeight`, which is derived from the width cap rather than picked.
         maxSize = NSSize(width: PanelGeometry.maximumWidth, height: PanelGeometry.maximumHeight)
 
-        applyCollectionBehaviour(pinned: false)
+        applyCollectionBehaviour()
         observeScreenChanges()
     }
 
@@ -179,8 +179,8 @@ final class PanePanel: NSPanel {
     /// silently rather than loudly.
     ///
     /// `.canJoinAllSpaces` has neither problem: the pane is on every Space already, so summoning is
-    /// only ever a matter of moving it back on screen. Pinning keeps the two meanings that are
-    /// actually about the note and the pane — top of the switcher, and ignores the dismiss hotkey.
+    /// only ever a matter of moving it back on screen. Pinning keeps the meaning that is actually
+    /// about the note — top of the switcher. Decision 180 took the dismiss-hotkey half off it too.
     ///
     /// `.fullScreenAuxiliary` joins a fullscreen app as an overlay rather than forcing a Space
     /// switch out of it.
@@ -195,7 +195,7 @@ final class PanePanel: NSPanel {
         didSet { if showsOnEverySpace != oldValue { applyCollectionBehaviour() } }
     }
 
-    func applyCollectionBehaviour(pinned: Bool = false) {
+    func applyCollectionBehaviour() {
         var behaviour: NSWindow.CollectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
         if showsOnEverySpace { behaviour.insert(.canJoinAllSpaces) }
         collectionBehavior = behaviour
@@ -209,19 +209,19 @@ final class PanePanel: NSPanel {
     ///
     /// - Parameter frame: where to appear. Rule 3 — "only a drag moves a pane" — so this is the
     ///   remembered frame, already reconciled against the connected displays by `PanelGeometry`.
-    func summon(at frame: CGRect, pinned: Bool) {
+    func summon(at frame: CGRect) {
         onscreenFrame = frame
         parked = false
         setFrame(frame, display: false)
 
-        // Re-assert the collection behaviour on every summon, not just when the pin state changes.
+        // Re-assert the collection behaviour on every summon, not just when the setting changes.
         //
         // `.moveToActiveSpace` is evaluated when a window is *ordered front*, and this window is
         // never ordered out — dismiss parks it offscreen so the web view stays warm (measured:
         // `setIsVisible(false)` suspends it). A window that is already in the window list can be
         // re-fronted without AppKit reconsidering which Space it belongs on, which is rule 1
         // silently failing: summon on another Space and nothing appears.
-        applyCollectionBehaviour(pinned: pinned)
+        applyCollectionBehaviour()
 
         makeKeyAndOrderFront(nil)
         // `orderFrontRegardless` is the one that crosses a Space boundary without activating the

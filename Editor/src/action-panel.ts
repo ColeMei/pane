@@ -69,7 +69,7 @@ const GROUPS: ActionRow[][] = [
     { id: "browseNotes", label: "Browse Notes", svg: `<path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" />`, keys: ["⌘", "P"] },
   ],
   [
-    { id: "pinPane", label: "Pin Pane", svg: `<path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />`, keys: ["⇧", "⌘", "P"] },
+    { id: "pinPane", label: "Pin Note", svg: `<path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />`, keys: ["⇧", "⌘", "P"] },
     {
       id: "findInNote",
       label: "Find in Note",
@@ -211,10 +211,10 @@ export function mountActionPanel(options: ActionPanelOptions) {
   }
 
   function labelFor(row: ActionRow): string {
-    // The two rows whose label depends on state. "Pin Pane" on a pinned pane would be a lie about
+    // The two rows whose label depends on state. "Pin Note" on a pinned note would be a lie about
     // what pressing it does, and the same goes for a pane already hidden from capture — with no
     // checkmark column in this list, the label is the only place the current state can show.
-    if (row.id === "pinPane" && options.isPinned()) return "Unpin Pane";
+    if (row.id === "pinPane" && options.isPinned()) return "Unpin Note";
     if (row.id === "hideFromCapture" && options.isHiddenFromCapture()) {
       return "Show in Screen Capture";
     }

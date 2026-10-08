@@ -230,9 +230,9 @@ body {
 /* The pin never fades, unlike the buttons.
  *
  * It is not a control that is also state — it is state that can be clicked, and it is in the bar
- * only while it has something to say (see the note on `[data-pinned]` below). Whether this pane
- * ignores the dismiss hotkey is something you need to read at a glance precisely when you are not
- * looking straight at it. The close dot stays for the reason frame 1e gave — closing a pane you are
+ * only while it has something to say (see the note on `[data-pinned]` below). Whether this note
+ * is pinned is something you need to read at a glance precisely when you are not looking straight
+ * at it. The close dot stays for the reason frame 1e gave — closing a pane you are
  * not hovering should still be one click, not two. This is where Pane parts company with the
  * reference, which drops its window controls entirely.
  */
@@ -351,11 +351,11 @@ body {
  * chrome — decision 24's Pinned rule is explicit that this is all there is.
  *
  * So the pin must actually FILL, not merely change colour: an outline pin tinted accent is too close
- * to a hovered pin, and then nothing on screen tells you the pane will survive the dismiss hotkey.
+ * to a hovered pin, and then nothing on screen tells you the note is pinned.
  * `r` and `fill` are SVG geometry/paint properties and settable from CSS in this engine. */
 /* Not in the title bar at all unless the pane is pinned (decision 54). An always-present outline
  * pin was the one icon up here that could not be read off its own drawing: it looked like "keep on
- * top", it is spelled "ignores the dismiss hotkey, and sorts first in ⌘P", and three of the four
+ * top", it means "sorts first in ⌘P" (decision 180 took the hotkey half off), and three of the four
  * icons in a fixed bar were controls while this one was mostly a light. `display` is safe here —
  * the title bar's height is a token, so removing a button from it cannot move the pane's own
  * height, which is what decision 41 forbids. */

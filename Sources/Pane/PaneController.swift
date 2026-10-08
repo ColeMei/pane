@@ -260,22 +260,38 @@ final class PaneController: NSObject {
     /// window is frontmost, and two toggles in a row is a summon that immediately dismisses itself.
     private var lastToggle = Date.distantPast
 
-    /// The hotkey. Rule 5: a pinned pane ignores the dismiss half of it.
+    /// The hotkey. Decision 180: it reads the focus as well as whether the pane is up, and the pin
+    /// plays no part.
     func toggle() {
         guard Date().timeIntervalSince(lastToggle) > 0.25 else { return }
         lastToggle = Date()
 
-        if isVisible {
-            guard !isPinned || settings.value.dismissMode == .escapeOnly else {
-                // Pinned and already up: put the caret back rather than doing nothing, so the
-                // hotkey still has an effect the user can feel.
-                editor.focusEditor()
-                return
-            }
-            dismiss()
-        } else {
+        switch HotkeyPress.resolve(
+            isUp: isVisible,
+            onActiveSpace: panel.isOnActiveSpace,
+            hasFocus: panel.isKeyWindow,
+            dismissMode: settings.value.dismissMode
+        ) {
+        case .summon:
             summon()
+        case .bringHere:
+            dismiss()
+            summon()
+        case .focus:
+            refocus()
+        case .dismiss:
+            dismiss()
         }
+    }
+
+    /// The caret back in a pane that is already up, without starting a new sitting: undo history and
+    /// the unsettled name (103) carry on, which a dismiss and a summon would both reset.
+    private func refocus() {
+        panel.makeKeyAndOrderFront(nil)
+        // Above another app's floating window at the same level, which ordering alone does not do
+        // for a non-activating panel.
+        panel.orderFrontRegardless()
+        editor.focusEditor()
     }
 
     func summon() {
@@ -301,7 +317,7 @@ final class PaneController: NSObject {
             defaultHeight: max(PanelGeometry.minimumHeight, lastContentHeight)
         )
 
-        panel.summon(at: frame, pinned: isPinned)
+        panel.summon(at: frame)
         // Decision 41: the chrome follows the cursor, and summoning moves the pane rather than the
         // cursor — so a pane that opens under a stationary pointer gets no `mouseenter` and would
         // sit dimmed until the mouse moved. Only Swift knows the new frame and the pointer at once.
@@ -517,8 +533,6 @@ final class PaneController: NSObject {
         paneState = pane
 
         let noteState = state.value.note(filename)
-        panel.applyCollectionBehaviour(pinned: noteState.isPinned)
-
         editor.call("loadNote", [filename, text, noteState.caretOffset, noteState.isPinned])
         hideBanner()
         if isVisible { editor.focusEditor() }
@@ -680,7 +694,6 @@ final class PaneController: NSObject {
 
         if filename == currentFilename {
             editor.call("setPinned", [pinned])
-            panel.applyCollectionBehaviour(pinned: pinned)
         }
         onPinsChanged?()
         refreshSwitcherIfOpen()

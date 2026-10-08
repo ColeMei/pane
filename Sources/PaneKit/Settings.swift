@@ -102,8 +102,8 @@ public struct Settings: Codable, Equatable, Sendable {
             ("revealInFinder", "Reveal in Finder", "Alt-Mod-r", "This note"),
             ("exportNote", "Export…", "Shift-Mod-e", "This note"),
             ("deleteNote", "Delete Note", "Ctrl-x", "This note"),
+            ("pinPane", "Pin Note", "Shift-Mod-p", "This note"),
 
-            ("pinPane", "Pin Pane", "Shift-Mod-p", "The pane"),
             ("autoSizing", "Window Auto-sizing", "Shift-Mod-/", "The pane"),
             ("formatBar", "Show Format Bar", "Alt-Mod-,", "The pane"),
             ("spaceBehaviour", "Keep on This Space", "Alt-Mod-s", "The pane"),

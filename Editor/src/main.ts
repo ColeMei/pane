@@ -1025,7 +1025,7 @@ const host = {
     applyingRemoteEdit = true;
     // An empty name means a draft: ⌘N no longer touches the disk, so the pane can hold a note that
     // has no file yet. Stored as null rather than "" so every `currentFilename ?` guard here —
-    // Delete Note, Pin Pane — declines instead of naming a file that does not exist.
+    // Delete Note, Pin Note — declines instead of naming a file that does not exist.
     currentFilename = filename || null;
 
     const clamped = Math.max(0, Math.min(caret, text.length));

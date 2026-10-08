@@ -20,5 +20,6 @@ runReleaseCheckTests()
 runLinkTargetTests()
 runBuildProfileTests()
 runWelcomeNoteTests()
+runHotkeyPressTests()
 
 exit(Check.finish())
