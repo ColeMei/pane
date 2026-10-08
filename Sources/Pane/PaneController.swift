@@ -321,7 +321,7 @@ final class PaneController: NSObject {
         // Decision 41: the chrome follows the cursor, and summoning moves the pane rather than the
         // cursor — so a pane that opens under a stationary pointer gets no `mouseenter` and would
         // sit dimmed until the mouse moved. Only Swift knows the new frame and the pointer at once.
-        isHovered = frame.contains(NSEvent.mouseLocation)
+        isHovered = isPointerOnPane(NSEvent.mouseLocation)
         editor.call("setHover", [isHovered])
         refreshCloseHover()
         // The height the note wanted may have moved while the pane was away — an external edit, or a
@@ -1796,7 +1796,7 @@ extension PaneController: NSWindowDelegate {
     /// pointer for the pill and do not care which app is active, so hover comes from the same place.
     private func refreshHover() {
         guard panel.isSummoned else { return }
-        let inside = panel.frame.contains(NSEvent.mouseLocation)
+        let inside = isPointerOnPane(NSEvent.mouseLocation)
         if inside != isHovered {
             isHovered = inside
             editor.call("setHover", [inside])
@@ -1849,9 +1849,24 @@ extension PaneController: NSWindowDelegate {
         // Never over an open overlay: the switcher and ⌘K own the pane's whole height while they are
         // up, so the pill would be captioning a panel rather than the note.
         let frame = panel.frame
+        let pointer = NSEvent.mouseLocation
         let near = !switcherIsOpen && !actionsIsOpen
-            && AutoSizeBadge.isNearResizeEdge(NSEvent.mouseLocation, of: frame)
+            && AutoSizeBadge.isNearResizeEdge(pointer, of: frame)
+            && isExposed(PanelGeometry.bottomEdgeProbe(nearest: pointer, of: frame))
         autoSizeBadge.update(near: frame, autoSizing: paneState.autoSizing, visible: near)
+    }
+
+    /// Decision 181: the pointer is on the pane only where the pane can be seen. Another app's
+    /// floating window, Pane's own Settings, or the pane being on another Space all leave the
+    /// rectangle where it was and the pane out of reach.
+    private func isPointerOnPane(_ point: CGPoint) -> Bool {
+        panel.isSummoned && panel.frame.contains(point) && isExposed(point)
+    }
+
+    /// The window a click at `point` would reach is the pane's. Click-through windows, the pill
+    /// among them, are not counted.
+    private func isExposed(_ point: CGPoint) -> Bool {
+        NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0) == panel.windowNumber
     }
 
     /// Rule 3, "stay put": the drag is the only thing that moves a pane, so the drag is the only

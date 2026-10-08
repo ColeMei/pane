@@ -14,6 +14,24 @@ private let paneWidth: CGFloat = 692
 func runPanelGeometryTests() {
     Check.suite("Pane geometry") {
 
+        // MARK: - The edge the pointer reaches for (181)
+
+        Check.test("the edge probe sits on the bottom edge, inside the frame, under the pointer") {
+            let frame = CGRect(x: 100, y: 200, width: 500, height: 400)
+            let probe = PanelGeometry.bottomEdgeProbe(nearest: CGPoint(x: 350, y: 190), of: frame)
+            Check.equal(probe, CGPoint(x: 350, y: 201))
+            Check.expect(frame.contains(probe), "the probe is outside the pane")
+        }
+
+        Check.test("past a bottom corner, the edge probe stays on the pane") {
+            let frame = CGRect(x: 100, y: 200, width: 500, height: 400)
+            let left = PanelGeometry.bottomEdgeProbe(nearest: CGPoint(x: 90, y: 195), of: frame)
+            let right = PanelGeometry.bottomEdgeProbe(nearest: CGPoint(x: 612, y: 195), of: frame)
+            Check.equal(left, CGPoint(x: 101, y: 201))
+            Check.equal(right, CGPoint(x: 599, y: 201))
+            Check.expect(frame.contains(left) && frame.contains(right), "a corner probe left the pane")
+        }
+
         // MARK: - Rule 1, Summon
 
         Check.test("first launch centres horizontally in the top third") {

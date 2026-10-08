@@ -277,4 +277,10 @@ public enum PanelGeometry {
         guard let head = key.split(separator: "-").first, !head.isEmpty else { return false }
         return head.allSatisfy(\.isNumber)
     }
+
+    /// Where to ask whether the edge the pointer is reaching for can be seen: the point on the pane's
+    /// bottom edge nearest `pointer`, one point inside the frame. Screen coordinates, y up (181).
+    public static func bottomEdgeProbe(nearest pointer: CGPoint, of frame: CGRect) -> CGPoint {
+        CGPoint(x: min(max(pointer.x, frame.minX + 1), frame.maxX - 1), y: frame.minY + 1)
+    }
 }
