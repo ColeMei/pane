@@ -255,7 +255,33 @@ export async function run(view, bar, doc) {
       check(`(182) a row's ${what} in ⌘P: the bubble carries its key`, want, text(), squash(text()) === squash(want));
       await leave();
     }
-    doc.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    // A bubble's text read when the delay ends, not when it began (118's re-read, now `tipText`).
+    {
+      const button = doc.querySelector(".switcher__row [data-delete]");
+      const was = button.dataset.tip;
+      window.paneHost.setHover(true);
+      window.paneHost.setPointer(...centre(button));
+      button.dataset.tip = "Delete ⌥X";
+      await sleep(DELAY * 1.3);
+      check("(182) a row's bubble says what its label is when the delay ends", "Delete ⌥X", text(), squash(text()) === squash("Delete ⌥X"));
+      button.dataset.tip = was;
+      await leave();
+    }
+    doc.getElementById("switcher-search")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+
+    // Recently Deleted's trash is the other control inside the list.
+    doc.getElementById("open-actions").click();
+    const actionsSearch = doc.getElementById("actions-search");
+    actionsSearch.value = "Recently Deleted";
+    actionsSearch.dispatchEvent(new Event("input", { bubbles: true }));
+    actionsSearch.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    window.paneHost.showDeleted(notes.slice(0, 3));
+    const trash = doc.querySelector(".switcher__row [data-forget]");
+    await restOn(trash);
+    check("(182) Recently Deleted's trash: the bubble is drawn over the list", "bubble", onTop(), onTop() === "bubble");
+    check("(182) …and it names the control", "Delete permanently", text(), squash(text()) === squash("Delete permanently"));
+    await leave();
     doc.getElementById("switcher-search")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 
     window.paneHost.showToast("A long receipt that runs the whole width of the pane, under the title bar's buttons", 5000);
