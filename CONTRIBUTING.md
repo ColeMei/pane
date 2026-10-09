@@ -9,6 +9,9 @@ reason above.
 
 ## How issues and pull requests are handled
 
+Issues and pull requests are welcome in English or Mandarin. Code, comments and commit messages are
+in English.
+
 Every issue is read, reproduced on a real build, and answered. A bug that reproduces gets a fix and a
 test that fails without it. An idea gets a yes, a no with the reason, or a "later".
 
