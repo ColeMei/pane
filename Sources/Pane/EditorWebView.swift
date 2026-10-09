@@ -316,7 +316,9 @@ final class EditorWebView: NSView {
     /// or `</script>` is completely ordinary, and string-concatenating one into a JS expression would
     /// break the editor on exactly the content people write.
     func call(_ method: String, _ arguments: [Any] = []) {
-        let encoded = arguments.map(Self.json).joined(separator: ", ")
+        // A closure, not `map(Self.json)`: Swift 6.0, the floor Package.swift names, rejects the
+        // bare reference to a main-actor static here. Newer compilers accept both (reported in #6).
+        let encoded = arguments.map { Self.json($0) }.joined(separator: ", ")
         let script = "window.paneHost && window.paneHost.\(method)(\(encoded));"
 
         guard isReady else {
