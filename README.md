@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  English · <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ColeMei/pane?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/built_with-Swift-orange?logo=swift&style=flat-square" alt="Built with Swift">
   <img src="https://img.shields.io/badge/platform-macOS_14+-lightgrey?style=flat-square" alt="Platform: macOS 14+">
@@ -121,10 +125,10 @@ While a new note is open, its filename follows the title, for example
 timestamp stays fixed. This limits filename changes that sync tools need to reconcile.
 Use **Rename File…** in <kbd>⌘K</kbd> whenever you want to rename it yourself.
 
-To sync notes between Macs, pick **iCloud Drive** under Settings › Storage, or choose a folder
-your own sync tool manages. Pane reads and writes the files; the sync tool carries them between Macs.
-Pane normalizes trailing newlines when saving, so files are not guaranteed to be byte identical
-to text entered or edited elsewhere.
+To sync notes between Macs, pick **iCloud Drive** under Settings › Storage (recommended), or
+choose a folder your own sync tool manages. Pane reads and writes the files; the sync tool
+carries them between Macs. Pane normalizes trailing newlines when saving, so files are not
+guaranteed to be byte identical to text entered or edited elsewhere.
 
 </details>
 
