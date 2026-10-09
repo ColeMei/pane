@@ -7,6 +7,18 @@ the two apart before you write any code.
 **Open an issue before a pull request** for anything larger than a typo. Not for ceremony — for the
 reason above.
 
+## How issues and pull requests are handled
+
+Every issue is read, reproduced on a real build, and answered. A bug that reproduces gets a fix and a
+test that fails without it. An idea gets a yes, a no with the reason, or a "later".
+
+Pull requests are very welcome, and they are read as the most detailed kind of report. Pane is built
+against a set of design notes that live outside this repository, so changes are checked and written
+here against those notes. In practice the fix usually lands as its own commit rather than as a merge
+of yours. Your report, your approach and anything we take from it are credited in the commit and in
+the reply. If you want to help with code, an issue with exact steps, or a test that fails, is often
+the quickest way to get something fixed.
+
 ## The test for any new feature
 
 *Does it help the first ten seconds after the hotkey?*
@@ -39,8 +51,12 @@ point is wired, because a second pane is a second `WKWebView` and memory is a sh
 
 A few more decisions the product depends on, so a pull request does not have to discover them:
 
-- **Filenames are frozen.** A note's file is named from its creation time and its first line, and
-  after the note's first minutes it is never renamed. The title is the first line of the file.
+- **Filenames settle, then freeze.** A note's file is named from its creation time and its first
+  line. The name follows the first line while you are still writing, and freezes once you leave the
+  note (dismiss, switch notes, quit) or anything else touches the file. The timestamp never changes.
+  The title is the first line of the file.
+- **A pin is about the note.** Pinning sorts a note to the top of the list. It does not change how
+  the window behaves: a pinned note's pane hides and shows like any other.
 - **Summoning does not activate the app.** The pane is a non-activating panel; no app switch, no
   menu bar change. The Settings window is the only thing in Pane that activates.
 - **Unsigned, and no privacy permissions requested.** A new `NS*UsageDescription` in
@@ -58,17 +74,23 @@ say why. The bug form asks for the few details that otherwise cost a round trip.
 
 ## Working on the code
 
+You need the Command Line Tools with Swift 6.0 or newer, and Node (current LTS) for the editor
+bundle. Xcode is not needed.
+
 ```bash
 Scripts/test.sh                # the PaneKit suite — pure Foundation, runs anywhere
 Scripts/test-editor.sh         # the formatting commands, in a real WKWebView
 Scripts/test-markdown.sh       # typing markdown, and what it draws
 Scripts/test-switcher.sh       # the two overlays, measured as rectangles
 Scripts/test-tooltip.sh        # when a control names itself, and after how long
+Scripts/test-keyboard.sh       # the keyboard tables, in plain node
+Scripts/test-all.sh            # every suite above, against one bundle build
 Scripts/build-app.sh --debug   # assemble build/Pane.app
 ```
 
-**Run all four editor suites after touching anything in `Editor/src`.** They ask different
-questions and each has caught what the others could not. CI runs all five on every pull request.
+**Run every suite after touching anything in `Editor/src`** (`Scripts/test-all.sh` does it in one go).
+They ask different questions and each has caught what the others could not. CI runs all of them on
+every pull request.
 They run inside a real `WKWebView` (`Scripts/editor-probe.swift`) because most editor faults here
 are about what is painted, not what the DOM says; `pandoc -f commonmark -t html` is the independent
 oracle for what typed bytes mean, except for the three rules Pane reads differently from CommonMark,
