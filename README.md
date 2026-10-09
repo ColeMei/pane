@@ -77,7 +77,7 @@ Pane does not provide its own cloud service or an iPhone or iPad app. Folder syn
 notes between Macs; local settings and window state stay on each Mac.
 
 Raycast plan details: [pricing](https://www.raycast.com/pricing) and
-[Raycast Notes](https://www.raycast.com/core-features/notes), checked September 7, 2026.
+[Raycast Notes](https://www.raycast.com/core-features/notes), checked October 9, 2026.
 
 *Not affiliated with or endorsed by Raycast Technologies.*
 
@@ -90,8 +90,8 @@ Raycast plan details: [pricing](https://www.raycast.com/pricing) and
 
 - **Pick up where you left off.** Summon the panel over your current app with a global hotkey.
   Pane remembers your last note and each note's caret position.
-- **Write with structure.** Live Markdown keeps headings, lists and code blocks readable while
-  you edit. Raw syntax appears on the caret's line while the rest of the note stays rendered.
+- **Write with structure.** Markdown renders as you type. Headings, lists, quotes and code blocks
+  never show their symbols, and bold, links and other inline styles show theirs only under the caret.
 - **Stay in one panel.** <kbd>⌘P</kbd> switches notes with recency groups, fuzzy title matching and
   full text search. No results? <kbd>⏎</kbd> creates a note with your query as its title.
   <kbd>⌘K</kbd> brings up actions for find, export, reveal in Finder, file renaming, screen capture
@@ -121,8 +121,8 @@ While a new note is open, its filename follows the title, for example
 timestamp stays fixed. This limits filename changes that sync tools need to reconcile.
 Use **Rename File…** in <kbd>⌘K</kbd> whenever you want to rename it yourself.
 
-To sync notes between Macs, choose a folder managed by iCloud Drive or your preferred sync tool
-on each Mac. Pane reads and writes the files; the tool handles transferring them.
+To sync notes between Macs, pick **iCloud Drive** under Settings › Storage, or choose a folder
+your own sync tool manages. Pane reads and writes the files; the sync tool carries them between Macs.
 Pane normalizes trailing newlines when saving, so files are not guaranteed to be byte identical
 to text entered or edited elsewhere.
 
@@ -135,8 +135,8 @@ to text entered or edited elsewhere.
   <img src="artifacts/pane-dark.png" alt="The same note in dark mode" width="46%">
 </p>
 
-<kbd>⌘,</kbd> from any pane. Hotkey recorder, vault location, what "recent" means in the switcher,
-accent, text size, translucency, and shortcut recorders for navigation and panel actions.
+<kbd>⌘,</kbd> from any pane. Hotkey recorder, notes folder and iCloud sync, how the switcher sorts
+notes, accent, text size, translucency, and shortcut recorders for navigation and panel actions.
 Additional editor shortcut overrides are available in `settings.json`.
 
 It's all plain JSON in `settings.json`, which Pane watches and re-reads live — so editing it by
@@ -175,11 +175,7 @@ A SwiftPM package plus a web bundle. No Xcode project, on purpose — everything
 Command Line Tools alone.
 
 ```bash
-Scripts/test.sh                # the PaneKit suite — pure Foundation, runs anywhere
-Scripts/test-editor.sh         # the formatting commands, in a real WKWebView
-Scripts/test-markdown.sh       # typing markdown, and what it draws
-Scripts/test-switcher.sh       # the two overlays, measured as rectangles
-Scripts/test-tooltip.sh        # when a control names itself, and after how long
+Scripts/test-all.sh            # every test suite, against one bundle build
 Scripts/build-app.sh --debug   # assemble build/Pane.app
 ```
 
