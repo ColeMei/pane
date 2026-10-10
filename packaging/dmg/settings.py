@@ -11,7 +11,8 @@ app = defines["app"]  # noqa: F821 — injected by dmgbuild
 
 files = [app]
 symlinks = {"Applications": "/Applications"}
-hide_extensions = ["Pane.app"]
+# Not `hide_extensions`: it works by setting com.apple.FinderInfo on the bundle, and a strict signature
+# check refuses a bundle carrying it — the label would read "Pane" on an app that might not open.
 
 background = defines["background"]  # noqa: F821 — @2x beside it is picked up for Retina
 
