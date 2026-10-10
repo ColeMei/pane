@@ -87,18 +87,60 @@ public enum ReleaseCheck {
         return elapsed >= interval || elapsed < 0
     }
 
-    /// The version to announce once, or nil for "say nothing".
+    // MARK: - What a check leaves behind
+
+    /// What a check's answer leaves in `state.json`: the newer version it found, or nil for none.
     ///
-    /// Announcing is **once per version**, not once per check and not once per summon: the toast is
-    /// news, and news repeated is nagging. `announced` is the last version this machine has already
-    /// been told about, held in `state.json` rather than in settings because it is not a preference
-    /// (decision 11).
+    /// **One rule for both callers.** The summon check and the About button ask the same question
+    /// of the same endpoint, and their answers used to land in different places — the button said
+    /// "v0.6.6 is available" in its own window and the menu bar never heard about it. Both now go
+    /// through here.
     ///
-    /// Note what is *not* here: nothing marks the notice as read or dismissed. The menu bar item is
-    /// derived from the comparison itself and disappears when the running version catches up, so
-    /// there is no flag that can be wrong.
-    public static func announcement(status: Status, announced: String?) -> String? {
-        guard case .behind(let latest) = status else { return nil }
-        return latest == announced ? nil : latest
+    /// `.unknown` keeps what was there. A check that could not reach the network is not news that
+    /// the update went away — a captive portal must not silently retract the notice.
+    public static func remembered(after status: Status, previously: String?) -> String? {
+        switch status {
+        case .behind(let latest): return latest
+        case .current: return nil
+        case .unknown: return previously
+        }
+    }
+
+    /// The newer version still waiting, or nil — what the toast names, the menu item names and the
+    /// icon's dot stands for.
+    ///
+    /// **Re-compared against the running build, never trusted as stored.** On the first launch of
+    /// v0.6.6 the file still says `v0.6.6`; this answers nil, so upgrading clears every notice at
+    /// once rather than at the next check. There is no dismissed or read flag anywhere: the notice
+    /// is derived from the comparison, so it cannot go stale and it cannot be lost.
+    ///
+    /// **The toast repeats, once a day, until the upgrade** (amending decision 136's "once per
+    /// version"). Once per version was too easy to miss for good: one toast, perhaps into a pane
+    /// that was closing, and with the menu bar icon switched off nothing else ever said it again.
+    /// The toast follows the daily summon check and nothing else, so `checkInterval` is what keeps
+    /// it to once a day; switching the check off in Settings switches the toast off with it.
+    public static func pending(remembered: String?, running: String) -> String? {
+        guard let remembered,
+              case .behind(let version) = status(current: running, latest: remembered)
+        else { return nil }
+        return version
+    }
+
+    // MARK: - Where to send somebody
+
+    /// The release page for one tag, or nil when the tag is not plainly a version.
+    ///
+    /// "Update to v0.6.6…" opens the page for v0.6.6 — its notes and its download — rather than the
+    /// list of every release. The tag arrives over the network, so it is only put into a URL when it
+    /// reads as a version and holds nothing but the characters a version is made of; anything else
+    /// falls back to the list, which is still the right place, just one click further away.
+    public static func releasePage(tag: String, in releases: URL) -> URL? {
+        let allowed = CharacterSet(charactersIn:
+            "0123456789.-+abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        guard parse(tag) != nil,
+              tag.unicodeScalars.allSatisfy { allowed.contains($0) },
+              !tag.contains("..")
+        else { return nil }
+        return releases.appendingPathComponent("tag").appendingPathComponent(tag)
     }
 }

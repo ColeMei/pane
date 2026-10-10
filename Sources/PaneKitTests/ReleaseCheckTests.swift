@@ -95,30 +95,66 @@ func runReleaseCheckTests() {
                 true)
         }
 
-        // ---- when to say something ----------------------------------------------------------
+        // ---- what a check leaves behind ----------------------------------------------------
 
-        Check.test("being behind a version nobody has been told about announces it") {
+        Check.test("a check that finds a newer version remembers it") {
+            Check.equal(ReleaseCheck.remembered(after: .behind("v0.6.6"), previously: nil), "v0.6.6")
             Check.equal(
-                ReleaseCheck.announcement(status: .behind("v0.6.6"), announced: nil), "v0.6.6")
-            Check.equal(
-                ReleaseCheck.announcement(status: .behind("v0.6.6"), announced: "v0.6.5"), "v0.6.6")
+                ReleaseCheck.remembered(after: .behind("v0.6.7"), previously: "v0.6.6"), "v0.6.7")
         }
 
-        // The whole of "once per version". Without this the toast fires on every check, which on a
-        // user who does not upgrade is once a day forever — the nagging this is built to avoid.
-        Check.test("the same version is announced once and then never again") {
-            Check.equal(
-                ReleaseCheck.announcement(status: .behind("v0.6.6"), announced: "v0.6.6") == nil,
-                true)
+        Check.test("a check that finds nothing newer forgets") {
+            Check.equal(ReleaseCheck.remembered(after: .current, previously: "v0.6.6") == nil, true)
         }
 
-        Check.test("being current or unsure says nothing at all") {
-            Check.equal(ReleaseCheck.announcement(status: .current, announced: nil) == nil, true)
-            Check.equal(ReleaseCheck.announcement(status: .unknown, announced: nil) == nil, true)
-            // Including when a check that used to find something now cannot reach the network: a
-            // failed request is not news, and must not clear or re-fire the last thing found.
+        // A failed request is not news. Clearing here would let a captive portal retract the notice.
+        Check.test("a check that could not answer keeps what was there") {
+            Check.equal(ReleaseCheck.remembered(after: .unknown, previously: "v0.6.6"), "v0.6.6")
+            Check.equal(ReleaseCheck.remembered(after: .unknown, previously: nil) == nil, true)
+        }
+
+        // ---- what is still waiting ----------------------------------------------------------
+
+        // The whole of "once a day until the upgrade": the same remembered version is pending on
+        // every check for as long as the running build is behind it — nothing marks it as told.
+        Check.test("a remembered newer version stays pending until the upgrade") {
+            Check.equal(ReleaseCheck.pending(remembered: "v0.6.6", running: "0.6.5"), "v0.6.6")
+            Check.equal(ReleaseCheck.pending(remembered: "v0.6.6", running: "0.6.5"), "v0.6.6")
+        }
+
+        // The first launch after upgrading still has the old answer on disk. It must read as
+        // nothing, at once, not at the next check a day later.
+        Check.test("upgrading clears it without waiting for a check") {
+            Check.equal(ReleaseCheck.pending(remembered: "v0.6.6", running: "0.6.6") == nil, true)
+            Check.equal(ReleaseCheck.pending(remembered: "v0.6.6", running: "0.7.0") == nil, true)
+        }
+
+        Check.test("nothing remembered, or nothing readable, is nothing pending") {
+            Check.equal(ReleaseCheck.pending(remembered: nil, running: "0.6.5") == nil, true)
+            Check.equal(ReleaseCheck.pending(remembered: "nightly", running: "0.6.5") == nil, true)
+        }
+
+        // ---- where to send somebody ---------------------------------------------------------
+
+        let releases = URL(string: "https://github.com/ColeMei/pane/releases")!
+
+        Check.test("a version tag opens its own release page") {
             Check.equal(
-                ReleaseCheck.announcement(status: .unknown, announced: "v0.6.6") == nil, true)
+                ReleaseCheck.releasePage(tag: "v0.7.3", in: releases)?.absoluteString,
+                "https://github.com/ColeMei/pane/releases/tag/v0.7.3")
+            Check.equal(
+                ReleaseCheck.releasePage(tag: "v0.8.0-beta.1", in: releases)?.absoluteString,
+                "https://github.com/ColeMei/pane/releases/tag/v0.8.0-beta.1")
+        }
+
+        // The tag comes off the network. Anything that is not plainly a version stays out of the
+        // URL, and the caller opens the list instead.
+        Check.test("a tag that is not plainly a version is not put into a URL") {
+            Check.equal(ReleaseCheck.releasePage(tag: "nightly", in: releases) == nil, true)
+            Check.equal(ReleaseCheck.releasePage(tag: "v1/../../../evil", in: releases) == nil, true)
+            Check.equal(ReleaseCheck.releasePage(tag: "v1..2", in: releases) == nil, true)
+            Check.equal(ReleaseCheck.releasePage(tag: "v1.0?x=1", in: releases) == nil, true)
+            Check.equal(ReleaseCheck.releasePage(tag: "v1.0 ", in: releases) == nil, true)
         }
     }
 }

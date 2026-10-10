@@ -15,6 +15,12 @@ enum UpdateChecker {
     static let releasesAPI = URL(string: "https://api.github.com/repos/ColeMei/pane/releases/latest")!
     static let releasesPage = URL(string: "https://github.com/ColeMei/pane/releases")!
 
+    /// The page for one release — its notes and its download — or the list when the tag is not
+    /// plainly a version (`ReleaseCheck.releasePage` says why).
+    static func releasePage(for tag: String) -> URL {
+        ReleaseCheck.releasePage(tag: tag, in: releasesPage) ?? releasesPage
+    }
+
     /// `CFBundleShortVersionString`, which `build-app.sh` writes from the tag.
     static var runningVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"

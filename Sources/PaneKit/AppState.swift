@@ -40,13 +40,6 @@ public struct AppState: Codable, Equatable, Sendable {
     /// that governs whether it happens at all is `Settings.checkForUpdates`.
     public var lastUpdateCheck: Date?
 
-    /// The newest version this machine has already been told about, so the notice fires once.
-    ///
-    /// Only the *toast* reads this. The menu bar item is derived from the version comparison every
-    /// time, so it cannot be dismissed and cannot go stale — it is gone when the running build
-    /// catches up, with no flag to clear.
-    public var announcedUpdate: String?
-
     /// The newer version the last check found, or nil when it found none.
     ///
     /// **Persisted because the menu bar item is the part that waits**, and waiting has to survive a
@@ -54,9 +47,13 @@ public struct AppState: Codable, Equatable, Sendable {
     /// only, it was gone on the next launch and did not come back until the daily check came round
     /// again, which is a durable notice that is durable for less time than a session.
     ///
-    /// Still derived, never dismissed: every check overwrites it, and `AppDelegate` re-compares it
-    /// against the running version on the way out of the file, so upgrading clears it at once
-    /// rather than at the next check.
+    /// Still derived, never dismissed: every check's answer goes through `ReleaseCheck.remembered`,
+    /// and `ReleaseCheck.pending` re-compares it against the running version on the way out of the
+    /// file, so upgrading clears it at once rather than at the next check.
+    ///
+    /// There used to be an `announcedUpdate` beside it, so the toast fired once per version. The
+    /// toast now repeats daily until the upgrade, so it is gone; a state.json from an older build
+    /// still carries the key, and decoding ignores it.
     public var availableUpdate: String?
 
     public init(
@@ -65,7 +62,6 @@ public struct AppState: Codable, Equatable, Sendable {
         panes: [PaneState] = [],
         vaultEverCreated: Bool = false,
         lastUpdateCheck: Date? = nil,
-        announcedUpdate: String? = nil,
         availableUpdate: String? = nil
     ) {
         self.schemaVersion = schemaVersion
@@ -73,7 +69,6 @@ public struct AppState: Codable, Equatable, Sendable {
         self.panes = panes
         self.vaultEverCreated = vaultEverCreated
         self.lastUpdateCheck = lastUpdateCheck
-        self.announcedUpdate = announcedUpdate
         self.availableUpdate = availableUpdate
     }
 
@@ -90,7 +85,6 @@ public struct AppState: Codable, Equatable, Sendable {
         vaultEverCreated =
             try c.decodeIfPresent(Bool.self, forKey: .vaultEverCreated) ?? !notes.isEmpty
         lastUpdateCheck = try c.decodeIfPresent(Date.self, forKey: .lastUpdateCheck)
-        announcedUpdate = try c.decodeIfPresent(String.self, forKey: .announcedUpdate)
         availableUpdate = try c.decodeIfPresent(String.self, forKey: .availableUpdate)
     }
 }

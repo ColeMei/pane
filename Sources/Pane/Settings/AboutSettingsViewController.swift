@@ -29,6 +29,10 @@ final class AboutSettingsViewController: NSViewController {
     private static let releasesPage = UpdateChecker.releasesPage
     private static let repository = URL(string: "https://github.com/ColeMei/pane")!
 
+    /// Hands each answer to the same place the summon check's goes, so the menu bar item and the
+    /// icon's dot light from a press here too.
+    var onStatus: ((ReleaseCheck.Status) -> Void)?
+
     private var status: NSTextField!
     private var checkButton: NSButton!
 
@@ -129,6 +133,7 @@ final class AboutSettingsViewController: NSViewController {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.checkButton.isEnabled = true
+                    self.onStatus?(result)
 
                     switch result {
                     case .behind(let latest):

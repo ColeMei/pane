@@ -27,6 +27,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     init(
         settings: SettingsStore,
         onWillMoveNotes: @escaping () -> Void,
+        onUpdateStatus: @escaping (ReleaseCheck.Status) -> Void,
         onVaultChanged: @escaping (URL) -> Void
     ) {
         self.settings = settings
@@ -37,6 +38,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         about = AboutSettingsViewController()
         storage.onWillMoveNotes = onWillMoveNotes
         storage.onVaultChanged = onVaultChanged
+        about.onStatus = onUpdateStatus
 
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
