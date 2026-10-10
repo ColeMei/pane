@@ -32,6 +32,17 @@
 	<key>LSUIElement</key>
 	<true/>
 
+	<!-- Updates (Sparkle). The feed is the newest published release's appcast; every update in it
+	     must carry an EdDSA signature by the key whose public half is below, or it is refused.
+	     Sparkle never checks on its own: the news is Pane's daily summon check (decision 136), and
+	     Sparkle runs only when somebody presses Update. -->
+	<key>SUFeedURL</key>
+	<string>https://github.com/ColeMei/pane/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>__SPARKLE_PUBLIC_KEY__</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+
 	<!-- Deliberately absent: every NS*UsageDescription key. Global hotkeys go through
 	     RegisterEventHotKey, which needs no Accessibility permission, and no network code ships.
 	     Pane requests no privacy permissions at all — see decision 9. Adding a usage-description

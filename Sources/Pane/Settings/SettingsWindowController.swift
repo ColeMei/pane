@@ -28,6 +28,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         settings: SettingsStore,
         onWillMoveNotes: @escaping () -> Void,
         onUpdateStatus: @escaping (ReleaseCheck.Status) -> Void,
+        onInstallUpdate: @escaping (String) -> Void,
         onVaultChanged: @escaping (URL) -> Void
     ) {
         self.settings = settings
@@ -39,6 +40,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         storage.onWillMoveNotes = onWillMoveNotes
         storage.onVaultChanged = onVaultChanged
         about.onStatus = onUpdateStatus
+        about.onInstall = onInstallUpdate
 
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar

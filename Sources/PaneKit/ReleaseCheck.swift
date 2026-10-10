@@ -143,4 +143,28 @@ public enum ReleaseCheck {
         else { return nil }
         return releases.appendingPathComponent("tag").appendingPathComponent(tag)
     }
+
+    // MARK: - When installing does not work
+
+    /// Whether an update that stopped with this Sparkle error should send the reader to the release
+    /// page instead.
+    ///
+    /// Sparkle has already said what went wrong by the time this is asked. The question is only
+    /// whether there is still somewhere to go: after a failed download, a refused signature, an app
+    /// running from the disk image or from a translocated copy, the release page is the way to get
+    /// the version by hand. After "you're up to date" or a cancel there is nothing to do, and opening
+    /// a browser would be the app acting on a press nobody made.
+    ///
+    /// The codes are Sparkle's `SUError` values (SUErrors.h), as plain integers so this stays in
+    /// PaneKit, which does not link Sparkle.
+    public static func fallsBackToReleasePage(sparkleErrorCode code: Int) -> Bool {
+        switch code {
+        case 1001,  // SUNoUpdateError: already current
+             4007,  // SUInstallationCanceledError: the reader said no
+             4008:  // SUInstallationAuthorizeLaterError: the reader said later
+            return false
+        default:
+            return true
+        }
+    }
 }

@@ -19,8 +19,8 @@ final class MenuBarController: NSObject {
     var onActions: (() -> Void)?
     var onOpenNote: ((String) -> Void)?
     var onSettings: (() -> Void)?
-    /// Opens the release page for the version the menu item names.
-    var onOpenRelease: ((String) -> Void)?
+    /// "Update to X…": installs that version, or opens its release page where installing cannot.
+    var onUpdate: ((String) -> Void)?
 
     /// Supplies the pinned notes as (filename, title) pairs, most recently used first.
     var pinnedNotes: () -> [(filename: String, title: String)] = { [] }
@@ -150,7 +150,7 @@ final class MenuBarController: NSObject {
         if let version = updateAvailable {
             let update = NSMenuItem(
                 title: "Update to \(version)…",
-                action: #selector(openRelease),
+                action: #selector(installUpdate),
                 keyEquivalent: ""
             )
             update.target = self
@@ -263,9 +263,9 @@ final class MenuBarController: NSObject {
     @objc private func actionPanel() { onActions?() }
     @objc private func settings() { onSettings?() }
     @objc private func quit() { NSApp.terminate(nil) }
-    @objc private func openRelease() {
+    @objc private func installUpdate() {
         guard let version = updateAvailable else { return }
-        onOpenRelease?(version)
+        onUpdate?(version)
     }
 
     @objc private func openPinned(_ sender: NSMenuItem) {

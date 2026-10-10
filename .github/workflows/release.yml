@@ -14,6 +14,10 @@ permissions:
 jobs:
   release:
     runs-on: macos-latest
+    # The `release` environment holds the update-signing key and needs the maintainer's approval
+    # before this job starts. That key decides what every installed Pane will accept as an update,
+    # so nothing reads it without a person saying yes to this tag.
+    environment: release
     steps:
       - uses: actions/checkout@v5
 
@@ -50,9 +54,21 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      # A release must ship a real update key: the placeholder would make Sparkle refuse to start,
+      # and every install of this version would be stuck opening the release page by hand.
+      - name: Check the update key is set
+        run: |
+          if grep -q "__SPARKLE_PUBLIC_KEY__" Scripts/Info.plist; then
+            echo "::error::SUPublicEDKey in Scripts/Info.plist is still the placeholder"
+            exit 1
+          fi
+
+      # CFBundleVersion is what Sparkle compares, so it is the version itself. The fallback in
+      # build-app.sh, the commit count, is 1 on this shallow checkout for every release.
       - name: Build Pane.app (universal)
         env:
           PANE_VERSION: ${{ steps.version.outputs.version }}
+          PANE_BUILD: ${{ steps.version.outputs.version }}
         run: Scripts/build-app.sh --universal
 
       - name: Package
@@ -86,6 +102,46 @@ jobs:
           test -f /tmp/verify/.DS_Store
           ls /tmp/verify/.background.*
 
+      # The EdDSA signature Sparkle checks before installing. Made by Sparkle's own sign_update, from
+      # a release tarball pinned by checksum; the key goes in on stdin and never touches the disk.
+      # Kept beside the DMG as a .edsig asset; appcast.yml writes it into the feed on publish.
+      - name: Sign the update
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          SPARKLE_VERSION: "2.10.0"
+          SPARKLE_SHA256: c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
+        run: |
+          set -euo pipefail
+          if [[ -z "$SPARKLE_ED_PRIVATE_KEY" ]]; then
+            echo "::error::SPARKLE_ED_PRIVATE_KEY is not set on the release environment"
+            exit 1
+          fi
+          curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          echo "$SPARKLE_SHA256  $RUNNER_TEMP/sparkle.tar.xz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle" ./bin/sign_update
+
+          DMG="build/${{ steps.package.outputs.name }}"
+          SIG="$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" \
+            | "$RUNNER_TEMP/sparkle/bin/sign_update" --ed-key-file - -p "$DMG")"
+          [[ -n "$SIG" ]]
+
+          # Check the signature against the public key the app ships, not the private key that made
+          # it: a secret that does not match Info.plist would sign updates no installed Pane accepts.
+          PUBLIC="$(plutil -extract SUPublicEDKey raw build/Pane.app/Contents/Info.plist)"
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet --disable-pip-version-check cryptography
+          "$RUNNER_TEMP/venv/bin/python" - "$PUBLIC" "$SIG" "$DMG" <<'PY'
+          import base64, sys
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+          public, sig, path = sys.argv[1:]
+          Ed25519PublicKey.from_public_bytes(base64.b64decode(public)).verify(
+              base64.b64decode(sig), open(path, "rb").read())
+          print("signature verifies against SUPublicEDKey")
+          PY
+          printf '%s\n' "$SIG" > "$DMG.edsig"
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,7 +150,8 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
             --draft \
-            "build/${{ steps.package.outputs.name }}"
+            "build/${{ steps.package.outputs.name }}" \
+            "build/${{ steps.package.outputs.name }}.edsig"
 
           echo "::notice title=sha256::${{ steps.package.outputs.sha256 }}"
 

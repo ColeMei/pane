@@ -16,9 +16,17 @@ let package = Package(
         .executable(name: "Pane", targets: ["Pane"]),
         .library(name: "PaneKit", targets: ["PaneKit"]),
     ],
+    // Sparkle installs updates (part 2 of the update work). Pinned exactly: it is the code that
+    // replaces the app on every machine, so a new version of it is a decision, not a resolve.
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+    ],
     targets: [
         .target(name: "PaneKit"),
-        .executableTarget(name: "Pane", dependencies: ["PaneKit"]),
+        .executableTarget(
+            name: "Pane",
+            dependencies: ["PaneKit", .product(name: "Sparkle", package: "Sparkle")]
+        ),
 
         // Not a .testTarget: neither XCTest nor swift-testing ships with the Command Line Tools, so
         // `swift test` cannot run without Xcode installed. The suite is an executable instead —

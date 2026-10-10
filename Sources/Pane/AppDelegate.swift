@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkey: GlobalHotkey!
     private var watcher: VaultWatcher?
     private var settingsWindow: SettingsWindowController?
+    private let updater = AppUpdater()
 
     /// Where `vault` is currently pointed, so a settings change can tell a vault move from any other
     /// edit. Read back from the service instead would mean hopping onto its queue to answer a
@@ -155,7 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.pane.flush(trigger: .noteSwitched)
                     self?.vault.drain()
                 },
-                onUpdateStatus: { [weak self] in self?.recordUpdateStatus($0) }
+                onUpdateStatus: { [weak self] in self?.recordUpdateStatus($0) },
+                onInstallUpdate: { [weak self] in self?.installUpdate($0) }
             ) { [weak self] url in
                 guard let self else { return }
                 // Same as the hand-edited path above, and this is the one people actually use: the
@@ -367,7 +369,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onBrowse = { [weak self] in self?.pane.openSwitcher() }
         menuBar.onActions = { [weak self] in self?.pane.openActions() }
         menuBar.onSettings = { [weak self] in self?.openSettingsWindow() }
-        menuBar.onOpenRelease = { NSWorkspace.shared.open(UpdateChecker.releasePage(for: $0)) }
+        // Installs in place when this build can (part 2), and opens the release page when it cannot:
+        // a build from before Sparkle, a scratch build, or an install that just failed.
+        menuBar.onUpdate = { [weak self] in self?.installUpdate($0) }
         // An item installed after a check has already run — the icon can be switched back on in
         // Settings — starts out knowing what the last check found.
         menuBar.setUpdateAvailable(latestAvailableVersion)
@@ -398,8 +402,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// **Decision 136, and it amends decision 94's "nothing on launch, nothing scheduled".** The
     /// half that survives is the important one: this is not a timer and not a launch hook, so it
-    /// only ever runs with somebody at the keyboard — a summon is a keypress. Nothing is
-    /// downloaded, installed or opened, and nothing about the machine is sent.
+    /// only ever runs with somebody at the keyboard — a summon is a keypress. It only asks; nothing
+    /// is downloaded or installed until somebody presses "Update to X…", and nothing about the
+    /// machine is sent.
     ///
     /// The notice is in two parts on purpose. The **toast** is the part that fires: once a day, on
     /// the summon that ran the check, for as long as the running build is behind. A badge on a menu
@@ -426,6 +431,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    /// "Update to X…", from the menu bar item or the About tab.
+    ///
+    /// Installs in place when this build can (`AppUpdater`), and opens the version's release page
+    /// when it cannot — a scratch build, or an install that just failed.
+    private func installUpdate(_ version: String) {
+        let page = UpdateChecker.releasePage(for: version)
+        guard updater.isAvailable else {
+            NSWorkspace.shared.open(page)
+            return
+        }
+        updater.onFallback = { NSWorkspace.shared.open(page) }
+        updater.checkForUpdates()
     }
 
     /// Where every check's answer goes, whichever caller asked — the summon check above, or the

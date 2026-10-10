@@ -7,9 +7,9 @@ import PaneKit
 /// the second caller, and two copies of a request would be two User-Agent strings, two timeouts and
 /// two ways to parse the same JSON — the shape of fault decision 74 keeps finding, one file over.
 ///
-/// What it does **not** do is unchanged from decision 94, and the list is the promise: it does not
-/// download, install, or open anything, it sends nothing about the machine, and it never fires on
-/// its own. Both callers are a press or a keypress.
+/// What it does **not** do is the promise: it does not download, install, or open anything, it sends
+/// nothing about the machine, and it never fires on its own. Both callers are a press or a keypress.
+/// Installing is `AppUpdater`'s, and only on "Update to X…".
 enum UpdateChecker {
 
     static let releasesAPI = URL(string: "https://api.github.com/repos/ColeMei/pane/releases/latest")!

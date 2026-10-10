@@ -1,0 +1,83 @@
+name: Appcast
+
+# Writes the update feed when a release is published, and attaches it to that release. Installed
+# copies read it from `releases/latest/download/appcast.xml`, which always follows the newest
+# published release — so a draft is never offered, and a pre-release never either.
+#
+# On publish rather than in the release build, so the notes Sparkle shows are the ones you edited
+# and published, not the generated draft. The signature was made in release.yml, behind its approval,
+# and arrives here as the .edsig asset; this workflow never sees the signing key.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to write the appcast for, e.g. v0.8.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  appcast:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Write and attach appcast.xml
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$TAG' is not a release tag"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          NAME="Pane-${VERSION}.dmg"
+          cd "$RUNNER_TEMP"
+
+          # A release from before in-app updates has no signature, and gets no feed. Not an error.
+          if ! gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$NAME.edsig"; then
+            echo "::notice::$TAG has no $NAME.edsig, so no appcast"
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > release.json
+
+          python3 - "$VERSION" "$NAME" <<'PY'
+          import json, sys, email.utils, datetime
+          version, name = sys.argv[1:]
+          release = json.load(open("release.json"))
+          asset = next(a for a in release["assets"] if a["name"] == name)
+          signature = open(name + ".edsig").read().strip()
+          published = datetime.datetime.fromisoformat(release["published_at"].replace("Z", "+00:00"))
+          notes = (release.get("body") or "").replace("]]>", "]]]]><![CDATA[>")
+          url = asset["browser_download_url"]
+
+          def esc(s):
+              return s.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;")
+
+          # sparkle:version matches CFBundleVersion, which release.yml sets to the version itself.
+          feed = f"""<?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Pane</title>
+              <item>
+                <title>Pane {esc(version)}</title>
+                <sparkle:version>{esc(version)}</sparkle:version>
+                <sparkle:shortVersionString>{esc(version)}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <sparkle:fullReleaseNotesLink>{esc(release["html_url"])}</sparkle:fullReleaseNotesLink>
+                <description sparkle:format="markdown"><![CDATA[{notes}]]></description>
+                <pubDate>{email.utils.format_datetime(published)}</pubDate>
+                <enclosure url="{esc(url)}" length="{asset["size"]}" type="application/octet-stream" sparkle:edSignature="{esc(signature)}"/>
+              </item>
+            </channel>
+          </rss>
+          """
+          open("appcast.xml", "w").write(feed)
+          PY
+
+          python3 -c "import xml.dom.minidom; xml.dom.minidom.parse('appcast.xml')"
+          gh release upload "$TAG" appcast.xml --repo "$GITHUB_REPOSITORY" --clobber

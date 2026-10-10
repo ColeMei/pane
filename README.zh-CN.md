@@ -43,6 +43,8 @@ Applications。
 > xattr -dr com.apple.quarantine /Applications/Pane.app
 > ```
 
+之后有新版本时，在菜单栏里点「Update to …」就能直接更新。
+
 ## 和 Raycast Notes 比
 
 |          | Raycast Notes          | Pane                                 |
@@ -99,7 +101,7 @@ frontmatter，也没有数据库，用什么编辑器打开都行。
 
 ## 隐私
 
-Pane 不会去申请任何系统权限，没有统计，没有账号，也没有服务器，也没有加入 AI 功能的打算。这里唯一联网就是去 GitHub 看看有没有新版本更新，也同样可以在设置里关掉。
+Pane 不会去申请任何系统权限，没有统计，没有账号，也没有服务器，也没有加入 AI 功能的打算。这里唯一联网就是去 GitHub 看看有没有新版本更新，也同样可以在设置里关掉。只有当你在菜单栏里点了「Update to …」，Pane 才会下载并安装更新，而且只接受带有项目更新签名的版本。
 
 ## 从源码构建
 

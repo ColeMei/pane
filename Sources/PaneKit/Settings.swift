@@ -303,8 +303,9 @@ public struct Settings: Codable, Equatable, Sendable {
     /// nothing scheduled*. The reason it changes: Pane is unsigned and installed by hand or by a
     /// cask, so a user on an old build has no way to find out that the thing annoying them was
     /// fixed a month ago — and the release they most need to hear about is the one they are not
-    /// running. What is kept from 94 is everything else: nothing is downloaded, nothing is
-    /// installed, nothing is opened, and no request is made on launch or on a timer.
+    /// running. What is kept from 94: no request is made on launch or on a timer. Installing is
+    /// separate and needs its own press — "Update to X…" (`AppUpdater`) — so this setting governs
+    /// the news, not the update.
     public var checkForUpdates: Bool
 
     // MARK: Defaults

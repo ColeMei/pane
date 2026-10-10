@@ -66,6 +66,9 @@ jobs:
           test -f "$APP/Contents/Resources/Editor/index.html"
           test -f "$APP/Contents/Resources/AppIcon.icns"
           test -f "$APP/Contents/Resources/MenuBar@2x.png"
+          # Sparkle is linked, so a bundle without it does not launch at all.
+          test -d "$APP/Contents/Frameworks/Sparkle.framework"
+          plutil -extract SUEnableAutomaticChecks raw "$APP/Contents/Info.plist" | grep -qx false
           codesign --verify --deep --strict "$APP"
 
           # Decision 9 is a promise the build can keep on its own: Pane requests no privacy

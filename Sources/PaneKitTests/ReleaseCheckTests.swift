@@ -156,5 +156,20 @@ func runReleaseCheckTests() {
             Check.equal(ReleaseCheck.releasePage(tag: "v1.0?x=1", in: releases) == nil, true)
             Check.equal(ReleaseCheck.releasePage(tag: "v1.0 ", in: releases) == nil, true)
         }
+
+        // ---- when installing does not work --------------------------------------------------
+
+        Check.test("a failed install sends the reader to the release page") {
+            for code in [1000, 1002, 1003, 1005, 2001, 3000, 3001, 3002, 4000, 4005, 4012] {
+                Check.equal(ReleaseCheck.fallsBackToReleasePage(sparkleErrorCode: code), true)
+            }
+        }
+
+        // Nothing failed in these: opening a browser would be acting on a press nobody made.
+        Check.test("up to date, cancelled or later opens nothing") {
+            for code in [1001, 4007, 4008] {
+                Check.equal(ReleaseCheck.fallsBackToReleasePage(sparkleErrorCode: code), false)
+            }
+        }
     }
 }

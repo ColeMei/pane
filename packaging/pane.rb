@@ -19,6 +19,8 @@ cask "pane" do
   homepage "https://github.com/ColeMei/pane"
 
   depends_on macos: :sonoma
+  # Pane installs its own updates (Sparkle), so `brew upgrade` leaves it alone unless --greedy.
+  auto_updates true
 
   app "Pane.app"
 
@@ -52,8 +54,9 @@ cask "pane" do
     RegisterEventHotKey, which needs no Accessibility access. The only request it
     ever makes to the network is asking GitHub whether a newer release exists --
     when you press the button under Settings > About, and once a day when you
-    summon the pane. It downloads and installs nothing, and sends nothing about
-    you. Switch the daily one off under Settings > General. Your notes are plain
-    .md files in ~/Documents/Pane.
+    summon the pane -- and it sends nothing about you. Switch the daily one off
+    under Settings > General. An update is downloaded and installed only when you
+    choose "Update to ..." from the menu bar item, and only if it carries the
+    project's update signature. Your notes are plain .md files in ~/Documents/Pane.
   EOS
 end

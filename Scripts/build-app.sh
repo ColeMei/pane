@@ -34,6 +34,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 VERSION="${PANE_VERSION:-0.1.0}"
+# CFBundleVersion is what Sparkle compares, so a release passes PANE_BUILD equal to its version (see
+# release.yml). The commit count is only a fallback for local builds — on CI's shallow checkout it is
+# 1 for every commit, which would make every release look like the same build.
 BUILD_NUMBER="${PANE_BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 
 APP="$ROOT/build/Pane.app"
@@ -70,9 +73,22 @@ BIN="$(swift build -c "$CONFIG" ${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"} --product Pane
 # ---- 3. bundle layout -------------------------------------------------------------------------
 say "Assembling $APP"
 rm -rf "$APP"
-mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
+mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources" "$CONTENTS/Frameworks"
 
 cp "$BIN" "$CONTENTS/MacOS/Pane"
+
+# Sparkle, which installs updates. The binary links it, so it is in every bundle — without it dyld
+# refuses to launch the app at all. SwiftPM leaves the framework beside the binary; `ditto` keeps its
+# symlinks, which `cp -R` would flatten into copies and break the framework's signature.
+#
+# It keeps the signature it arrives with rather than being re-signed ad hoc with the app. Pane has no
+# hardened runtime, so library validation does not refuse it.
+SPARKLE="$(dirname "$BIN")/Sparkle.framework"
+[[ -d "$SPARKLE" ]] || { echo "error: Sparkle.framework not found beside $BIN" >&2; exit 1; }
+ditto "$SPARKLE" "$CONTENTS/Frameworks/Sparkle.framework"
+if ! otool -l "$CONTENTS/MacOS/Pane" | grep -q "@executable_path/../Frameworks"; then
+	install_name_tool -add_rpath "@executable_path/../Frameworks" "$CONTENTS/MacOS/Pane"
+fi
 cp -R "$ROOT/Editor/dist/." "$CONTENTS/Resources/Editor/"
 
 # Static bundle resources — currently the menu bar template images. Flat rather than in a
@@ -103,6 +119,9 @@ sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" \
 # rule. --release never gets the key, so a release bundle cannot come out of this script scratched.
 if [[ "$CONFIG" == "debug" ]]; then
 	/usr/libexec/PlistBuddy -c "Add :PaneScratchBuild bool true" "$CONTENTS/Info.plist" >/dev/null
+	# And a scratch build never updates itself: without a feed and a key, Sparkle does not start,
+	# so "Update to…" in a debug build opens the release page instead of replacing the build.
+	/usr/libexec/PlistBuddy -c "Delete :SUFeedURL" -c "Delete :SUPublicEDKey" "$CONTENTS/Info.plist" >/dev/null
 fi
 
 printf 'APPL????' > "$CONTENTS/PkgInfo"

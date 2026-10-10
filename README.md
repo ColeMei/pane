@@ -58,6 +58,9 @@ and drag `Pane.app` onto the `Applications` folder beside it.
 > xattr -dr com.apple.quarantine /Applications/Pane.app
 > ```
 
+After that, Pane updates itself: when a new version is out, choose **Update to …** from its menu bar
+item, or from Settings → About.
+
 ## Coming from Raycast Notes
 
 Pane is built around familiar Raycast Notes habits: summon a floating note, start typing, and use
@@ -163,9 +166,12 @@ Anything else in the file is ordinary CSS against the editor's own classes, and 
 Pane requests **no privacy permissions at all** — the global hotkey needs no Accessibility access.
 No telemetry, no account, no server. The only network call it ever makes is asking GitHub whether
 a newer release exists — when you press the button under Settings → About, and once a day when you
-summon the pane, so you find out that something you reported has been fixed. It never downloads,
-installs or opens anything, and nothing about you or your machine is sent. Turn the daily one off
-with **Check for updates** in Settings → General; the button still works.
+summon the pane, so you find out that something you reported has been fixed. Nothing about you or
+your machine is sent. Turn the daily one off with **Check for updates** in Settings → General; the
+button still works.
+
+Pane downloads and installs an update only when you choose **Update to …**, and only one signed with
+the project's update key — anything else is refused.
 
 ## Build from source
 

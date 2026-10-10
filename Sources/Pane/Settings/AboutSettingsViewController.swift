@@ -19,10 +19,9 @@ import PaneKit
 /// at the keyboard. This button remains the way to ask on purpose, and it works with the setting
 /// switched off, because pressing it is asking.
 ///
-/// It also does not download, install, or open anything. Pane is unsigned (decision 9), so an
-/// auto-updater would need a signing story the project does not have — and the install path is a
-/// Homebrew cask, which already knows how to upgrade. The button's whole job is to answer the
-/// question; `brew upgrade --cask pane` or the Releases link does the rest.
+/// It does not download, install, or open anything on the press that checks. Once it has found a
+/// newer version it becomes "Update to X…", the same install as the menu bar item's (`AppUpdater`)
+/// — a second, separate press.
 @MainActor
 final class AboutSettingsViewController: NSViewController {
 
@@ -33,8 +32,15 @@ final class AboutSettingsViewController: NSViewController {
     /// icon's dot light from a press here too.
     var onStatus: ((ReleaseCheck.Status) -> Void)?
 
+    /// "Update to X…", the same press as the menu bar item's — for whoever has the icon switched off,
+    /// for whom this tab is the only place it can be.
+    var onInstall: ((String) -> Void)?
+
     private var status: NSTextField!
     private var checkButton: NSButton!
+
+    /// Set once a check here has found a newer version: the button then installs it.
+    private var newer: String?
 
     /// `CFBundleShortVersionString`, which `build-app.sh` writes from the tag.
     private var version: String { UpdateChecker.runningVersion }
@@ -125,6 +131,10 @@ final class AboutSettingsViewController: NSViewController {
     }
 
     @objc private func checkForUpdates() {
+        if let newer, let onInstall {
+            onInstall(newer)
+            return
+        }
         checkButton.isEnabled = false
         status.stringValue = "Checking…"
 
@@ -141,6 +151,11 @@ final class AboutSettingsViewController: NSViewController {
                         // request to open a browser — the Releases link below is right there, and
                         // launching one unasked is the app doing something you did not press.
                         self.status.stringValue = "\(latest) is available"
+                        // The question is answered; the press that follows is the install.
+                        if self.onInstall != nil {
+                            self.newer = latest
+                            self.checkButton.title = "Update to \(latest)…"
+                        }
                     case .current:
                         self.status.stringValue = "Pane is up to date"
                     case .unknown:
