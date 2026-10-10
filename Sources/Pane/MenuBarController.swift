@@ -144,7 +144,7 @@ final class MenuBarController: NSObject {
 
         menu.addItem(.separator())
         // Above Settings, and only while there is one. This is the durable half of decision 136:
-        // the toast fires once and is gone, and this waits — in the app-level surface, because
+        // the toast comes and goes once a day, and this waits — in the app-level surface, because
         // updating the app is not something ⌘K does. ⌘K's fifteen rows all act on the note or the
         // pane, and a sixteenth that opened a browser would be the odd one out.
         if let version = updateAvailable {
