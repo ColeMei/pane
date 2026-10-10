@@ -93,9 +93,7 @@ jobs:
             --draft \
             "build/${{ steps.package.outputs.name }}"
 
-          # The sha256 the Homebrew cask needs, in the job log rather than only in the artifact —
-          # bumping the cask is the next manual step and this saves re-downloading to compute it.
-          echo "::notice title=Cask sha256::${{ steps.package.outputs.sha256 }}"
+          echo "::notice title=sha256::${{ steps.package.outputs.sha256 }}"
 
       - name: Summary
         run: |
@@ -109,5 +107,5 @@ jobs:
             echo "sha256: ${{ steps.package.outputs.sha256 }}"
             echo '```'
             echo
-            echo "Next: bump \`Casks/pane.rb\` in \`ColeMei/homebrew-pane\` with that url and sha256."
+            echo "Publishing it bumps the Homebrew cask (\`cask.yml\`)."
           } >> "$GITHUB_STEP_SUMMARY"

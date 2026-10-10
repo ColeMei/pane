@@ -1,0 +1,122 @@
+name: Cask
+
+# Bumps the Homebrew cask when a release is published, so `brew upgrade` never lags the in-app
+# notice. This used to be the one manual step after a release, and the in-app check reads
+# `releases/latest` — so a forgotten bump meant Pane telling people about a version brew did not
+# have yet.
+#
+# On **published**, not on the tag: the release workflow creates a draft, and a cask pointing at a
+# draft's asset is a 404 for everyone who runs `brew upgrade` before you press Publish.
+#
+# Two writes, both of `packaging/pane.rb` with the new version and sha256:
+#   - `Casks/pane.rb` in `ColeMei/homebrew-pane`, which is what Homebrew reads. Needs the
+#     `HOMEBREW_TAP_TOKEN` secret: a fine-grained token with Contents read/write on that one repo
+#     and nothing else.
+#   - `packaging/pane.rb` on `dev` here, the reviewed source copy, so the two never drift.
+on:
+  release:
+    types: [published]
+  # By hand, for a release published before this workflow existed or whose run failed.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to bump the cask to, e.g. v0.7.3"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cask
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: dev
+
+      - name: Version and sha256 of the published asset
+        id: asset
+        run: |
+          set -euo pipefail
+          # Only maintainers can publish or dispatch, but the tag still goes into sed patterns and
+          # file names below, so it is held to the shape a release tag has.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$TAG' is not a release tag"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          NAME="Pane-${VERSION}.dmg"
+
+          # Computed from the file people download, not copied from the release log, and checked
+          # against the digest GitHub recorded at upload. A mismatch stops here rather than
+          # shipping a cask that fails `brew install` for everyone.
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$NAME" --dir "$RUNNER_TEMP"
+          SHA="$(sha256sum "$RUNNER_TEMP/$NAME" | cut -d' ' -f1)"
+          RECORDED="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq ".assets[] | select(.name == \"$NAME\") | .digest")"
+          if [[ -n "$RECORDED" && "$RECORDED" != "sha256:$SHA" ]]; then
+            echo "::error::$NAME sha256 is $SHA but GitHub recorded $RECORDED"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Render the cask
+        env:
+          VERSION: ${{ steps.asset.outputs.version }}
+          SHA: ${{ steps.asset.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          sed -i -E \
+            -e "s/^(  version \")[^\"]*(\")\$/\\1${VERSION}\\2/" \
+            -e "s/^(  sha256 \")[^\"]*(\")\$/\\1${SHA}\\2/" \
+            packaging/pane.rb
+          # Both lines must have landed, or the sed patterns no longer match the file's shape.
+          grep -qxF "  version \"${VERSION}\"" packaging/pane.rb
+          grep -qxF "  sha256 \"${SHA}\"" packaging/pane.rb
+
+      - name: Push to the tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TAP_TOKEN" ]]; then
+            echo "::error::HOMEBREW_TAP_TOKEN is not set — see the comment at the top of cask.yml"
+            exit 1
+          fi
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/ColeMei/homebrew-pane.git" "$RUNNER_TEMP/tap"
+          cp packaging/pane.rb "$RUNNER_TEMP/tap/Casks/pane.rb"
+          cd "$RUNNER_TEMP/tap"
+          if git diff --quiet; then
+            echo "Tap already at $TAG"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -qam "pane $TAG"
+          git push origin HEAD
+
+      - name: Push the source copy to dev
+        run: |
+          set -euo pipefail
+          if git diff --quiet packaging/pane.rb; then
+            echo "packaging/pane.rb already at $TAG"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -qm "chore: bump the cask to $TAG" packaging/pane.rb
+          # dev may have moved while this ran; the bump touches two lines nobody else edits.
+          for attempt in 1 2 3; do
+            git push origin HEAD:dev && exit 0
+            git pull --rebase -q origin dev
+          done
+          exit 1
