@@ -82,6 +82,9 @@ jobs:
             = "${{ steps.version.outputs.version }}"
           # The alias is the whole reason this is an image rather than a zip.
           test "$(readlink /tmp/verify/Applications)" = "/Applications"
+          # And the window around it: its layout and its background art.
+          test -f /tmp/verify/.DS_Store
+          ls /tmp/verify/.background.*
 
       - name: Publish the release
         env:

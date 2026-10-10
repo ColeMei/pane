@@ -84,3 +84,24 @@ jobs:
             echo "error: a release bundle is stamped as a scratch build — see decision 99" >&2
             exit 1
           fi
+
+      # The disk image too, so a break in packaging shows on the push that caused it rather than on
+      # release day — and so the window can be looked at before a tag: the image is attached to the
+      # run for a week.
+      - name: Package the disk image
+        run: |
+          set -euo pipefail
+          Scripts/make-dmg.sh
+          DMG="$(ls build/Pane-*.dmg)"
+          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint /tmp/ci-dmg
+          trap 'hdiutil detach /tmp/ci-dmg -quiet || true' EXIT
+          codesign --verify --deep --strict /tmp/ci-dmg/Pane.app
+          test "$(readlink /tmp/ci-dmg/Applications)" = "/Applications"
+          test -f /tmp/ci-dmg/.DS_Store
+          ls /tmp/ci-dmg/.background.*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pane-dmg
+          path: build/Pane-*.dmg
+          retention-days: 7

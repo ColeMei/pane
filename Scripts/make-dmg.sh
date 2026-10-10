@@ -24,7 +24,6 @@ APP="${1:-$ROOT/build/Pane.app}"
 
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
 DMG="$ROOT/build/Pane-$VERSION.dmg"
-STAGE="$ROOT/build/dmg-staging"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
@@ -35,27 +34,27 @@ if /usr/libexec/PlistBuddy -c "Print :PaneScratchBuild" "$APP/Contents/Info.plis
 	exit 1
 fi
 
-say "Staging"
-rm -rf "$STAGE" "$DMG"
-mkdir -p "$STAGE"
-# ditto, not cp -R: it preserves the extended attributes and the ad-hoc signature. A bundle copied
-# with cp -R fails `codesign --verify` on the other end, which on an already-unsigned app reads to
-# the user as a corrupt download.
-ditto "$APP" "$STAGE/Pane.app"
-ln -s /Applications "$STAGE/Applications"
+# dmgbuild, from hash-pinned requirements, in a venv of its own under build/ — so the tool that packs
+# the download is the same on every machine and never touches the system Python.
+VENV="$ROOT/build/.dmgbuild-venv"
+REQS="$ROOT/packaging/dmg/requirements.txt"
+if [[ ! -x "$VENV/bin/dmgbuild" || "$REQS" -nt "$VENV/bin/dmgbuild" ]]; then
+	say "Installing dmgbuild"
+	rm -rf "$VENV"
+	python3 -m venv "$VENV"
+	"$VENV/bin/pip" install --quiet --disable-pip-version-check --require-hashes --no-deps -r "$REQS"
+fi
 
-# No custom window layout, background image or icon positions. Setting those means driving Finder
-# over AppleScript, which needs a real GUI session and Automation consent — neither of which a CI
-# runner reliably has, and a release step that works on one machine is not a release step.
+# The window: background art, icon positions, no toolbar or sidebar — packaging/dmg/settings.py.
+# dmgbuild copies the bundle with the extended attributes and the ad-hoc signature intact, and writes
+# the window's .DS_Store itself, without driving Finder.
 say "Building $DMG"
-hdiutil create \
-	-volname "Pane" \
-	-srcfolder "$STAGE" \
-	-fs HFS+ \
-	-format UDZO \
-	-quiet \
+rm -f "$DMG"
+"$VENV/bin/dmgbuild" \
+	-s "$ROOT/packaging/dmg/settings.py" \
+	-D app="$APP" \
+	-D background="$ROOT/packaging/dmg/background.png" \
+	"Pane" \
 	"$DMG"
-
-rm -rf "$STAGE"
 
 say "Built $DMG ($VERSION, $(du -h "$DMG" | cut -f1))"
