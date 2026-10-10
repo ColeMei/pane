@@ -39,7 +39,7 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/ColeMei/pane/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>__SPARKLE_PUBLIC_KEY__</string>
+	<string>39ASiUOApjBCrM/IlOTsvoZbE9QJpNXJfSlbRMSJ3SI=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<false/>
 
