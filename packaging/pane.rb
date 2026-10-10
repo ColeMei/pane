@@ -10,8 +10,8 @@
 # two lines; the next release carries the edit to the tap.
 
 cask "pane" do
-  version "0.7.2"
-  sha256 "2e02341e2fdc23153c077f6b9e2481f08730edad9ef0543a4bc2db138041d2e4"
+  version "0.7.3"
+  sha256 "56b622d1a5035eb229b0b7c55334ac659bad0fa8c04b61bbf1b55ba230f1da89"
 
   url "https://github.com/ColeMei/pane/releases/download/v#{version}/Pane-#{version}.dmg"
   name "Pane"
