@@ -32,6 +32,9 @@ concurrency:
 
 jobs:
   bump:
+    # A pre-release is not something `brew upgrade` should hand out, and GitHub's `releases/latest`
+    # skips them too, so the cask and the in-app notice agree on what "latest" is.
+    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
