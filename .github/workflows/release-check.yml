@@ -1,0 +1,51 @@
+name: Release setup check
+
+# Run by hand after setting up or rotating the update key. It runs in the `release` environment, so
+# it waits for the same approval a release does, and it checks the one thing that cannot be seen in
+# the settings page: that SPARKLE_ED_PRIVATE_KEY is the private half of the SUPublicEDKey the app
+# ships. A mismatch would sign updates that every installed Pane refuses.
+#
+# Nothing is published and the key is never printed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: The secret matches the app's public key
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SPARKLE_ED_PRIVATE_KEY" ]]; then
+            echo "::error::SPARKLE_ED_PRIVATE_KEY is not set on the release environment"
+            exit 1
+          fi
+          PUBLIC="$(python3 - <<'PY'
+          import plistlib
+          print(plistlib.load(open("Scripts/Info.plist", "rb"))["SUPublicEDKey"])
+          PY
+          )"
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet --disable-pip-version-check cryptography
+          "$RUNNER_TEMP/venv/bin/python" - "$PUBLIC" <<'PY'
+          import base64, os, sys
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives import serialization as s
+          raw = base64.b64decode(os.environ["SPARKLE_ED_PRIVATE_KEY"].strip())
+          # generate_keys exports the 32-byte seed; older versions the 64-byte seed + public key.
+          if len(raw) not in (32, 64):
+              sys.exit(f"::error::the secret decodes to {len(raw)} bytes, not an EdDSA key")
+          derived = Ed25519PrivateKey.from_private_bytes(raw[:32]).public_key().public_bytes(
+              s.Encoding.Raw, s.PublicFormat.Raw)
+          if base64.b64encode(derived).decode() != sys.argv[1]:
+              sys.exit("::error::the secret is not the key whose public half is in Scripts/Info.plist")
+          print("OK: the release key matches SUPublicEDKey", sys.argv[1])
+          PY
