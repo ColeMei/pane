@@ -80,7 +80,7 @@ final class MenuBarController: NSObject {
     ///
     /// **Derived, never dismissed.** Nothing marks it as read: it is set from a version comparison
     /// and goes away when the running build catches up, so there is no flag here that can be wrong
-    /// or stale. That is the difference between this and the toast, which fires once and is gone.
+    /// or stale. That is the difference between this and the toast, which is shown and gone.
     private var updateAvailable: String?
 
     /// Tells the item a newer release exists, or that there is not one.
