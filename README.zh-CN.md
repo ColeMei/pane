@@ -37,13 +37,11 @@ brew install --cask ColeMei/pane/pane
 Applications。
 
 > [!IMPORTANT]
-> Pane 暂时没有签名，第一次打开时 macOS 会提示"已损坏"。需要运行一次以下命令：
+> Pane 暂时没有签名，安装或升级后第一次打开时 macOS 会提示"已损坏"。运行以下命令即可：
 >
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/Pane.app
 > ```
->
-> 用 Homebrew 的话，也可以安装时加上 `--no-quarantine`。
 
 ## 和 Raycast Notes 比
 

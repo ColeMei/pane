@@ -42,13 +42,9 @@ cask "pane" do
     On recent macOS that means Gatekeeper reports the app as "damaged and can't be
     opened", and right-clicking → Open no longer gets past it. It is not damaged;
     that is simply what an unsigned app looks like now. Clear the quarantine flag
-    once and it launches normally from then on:
+    after each install or upgrade and it launches normally:
 
       xattr -dr com.apple.quarantine /Applications/Pane.app
-
-    Or skip the flag at install time:
-
-      brew install --cask --no-quarantine ColeMei/pane/pane
 
     Pane requests no privacy permissions at all: the global hotkey goes through
     RegisterEventHotKey, which needs no Accessibility access. The only request it

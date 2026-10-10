@@ -51,17 +51,11 @@ and drag `Pane.app` onto the `Applications` folder beside it.
 >
 > Pane is not signed with an Apple Developer ID or notarized by Apple. Depending on your macOS
 > version, Gatekeeper may report that the app is damaged or that its developer cannot be verified.
-> If you installed Pane from this repository's releases or Homebrew cask, you can clear its
-> quarantine flag once:
+> If you installed Pane from this repository's releases or Homebrew cask, clear its quarantine
+> flag after installing or upgrading:
 >
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/Pane.app
-> ```
->
-> Or skip the flag at install time:
->
-> ```bash
-> brew install --cask --no-quarantine ColeMei/pane/pane
 > ```
 
 ## Coming from Raycast Notes
