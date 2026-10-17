@@ -25,7 +25,8 @@ import { ChangeSet, EditorSelection, EditorState, type Extension, type Selection
 import type { EditorView } from "@codemirror/view";
 import { markerSpanEnd } from "../blocks";
 import type { Command } from "./edit";
-import { isSeam, spansIn, type Span } from "./spans";
+import { isSeam } from "./hidden";
+import { spansIn, type Span } from "./spans";
 
 interface Region {
   from: number;

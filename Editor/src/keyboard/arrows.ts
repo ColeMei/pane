@@ -21,21 +21,11 @@
 
 import { cursorLineDown, cursorLineUp, selectLineDown, selectLineUp } from "@codemirror/commands";
 import { EditorSelection } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import type { EditorView } from "@codemirror/view";
 import { markerSpanEnd, notAPlace } from "../blocks";
 import { placeFor, placeRangeEnd } from "../caret";
 import type { Command } from "./edit";
-
-/** Hidden ranges — replaced markers and widgets — overlapping `from..to`, as offsets into it. */
-function hiddenIn(view: EditorView, from: number, to: number): { from: number; to: number }[] {
-  const hidden: { from: number; to: number }[] = [];
-  for (const set of view.state.facet(EditorView.atomicRanges).map((f) => f(view))) {
-    set.between(from, to, (a, b, value) => {
-      if (value.point && b > a) hidden.push({ from: Math.max(a, from), to: Math.min(b, to) });
-    });
-  }
-  return hidden;
-}
+import { hiddenIn } from "./hidden";
 
 /** How many drawn characters precede `pos` on its line: the hidden markers do not count (173). */
 function drawnColumn(view: EditorView, pos: number): number {

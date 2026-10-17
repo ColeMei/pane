@@ -113,11 +113,6 @@ export function spansIn(state: EditorState, from: number, to: number): Span[] {
   return [...found.values()].sort((a, b) => a.from - b.from || b.to - a.to);
 }
 
-/** Is `pos` between a construct's marker and its text, or inside a marker — not a place to stop (177)? */
-export function isSeam(state: EditorState, pos: number): boolean {
-  return spansIn(state, pos, pos).some((s) => pos > s.from && pos < s.to && (pos <= s.textFrom || pos >= s.textTo));
-}
-
 interface Plan {
   /** The range the closers and openers replace: the caret, widened over the spaces at a split. */
   from: number;
