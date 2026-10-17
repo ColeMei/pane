@@ -26,6 +26,7 @@ import type { EditorView } from "@codemirror/view";
 import { markerSpanEnd } from "../blocks";
 import type { Command } from "./edit";
 import { isSeam } from "./hidden";
+import { one, place } from "./motion";
 import { spansIn, type Span } from "./spans";
 
 interface Region {
@@ -136,7 +137,7 @@ export function keepPairs(): Extension {
     const anchor = insert ? set.mapPos(plan.insertAt, 1) : set.mapPos(ofSelection ? before.from : before.head, -1);
     return {
       changes: set,
-      selection: EditorSelection.cursor(anchor),
+      selection: one(EditorSelection.cursor(anchor)),
       userEvent: tr.annotation(Transaction.userEvent),
       scrollIntoView: true,
     };
@@ -162,11 +163,7 @@ export function moveOverSeams(forward: boolean, group: boolean, extend: boolean)
     if (!range.empty && !extend) return false;
     const head = step(view, EditorSelection.cursor(range.head), forward, group);
     if (head === range.head) return false;
-    view.dispatch({
-      selection: extend ? EditorSelection.range(range.anchor, head) : EditorSelection.cursor(head, forward ? -1 : 1),
-      userEvent: "select",
-      scrollIntoView: true,
-    });
+    place(view, head, 0, extend);
     return true;
   };
 }
@@ -197,7 +194,7 @@ export function deleteOverMarks(forward: boolean, group: boolean, atEdge: Comman
         const set = ChangeSet.of(changesOf(plan, ""), state.doc.length);
         view.dispatch({
           changes: set,
-          selection: EditorSelection.cursor(set.mapPos(range.head, -1)),
+          selection: one(EditorSelection.cursor(set.mapPos(range.head, -1))),
           userEvent: forward ? "delete.forward" : "delete.backward",
           scrollIntoView: true,
         });

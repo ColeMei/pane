@@ -20,12 +20,12 @@
  */
 
 import { cursorLineDown, cursorLineUp, selectLineDown, selectLineUp } from "@codemirror/commands";
-import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { markerSpanEnd, notAPlace } from "../blocks";
 import { placeFor, placeRangeEnd } from "../caret";
 import type { Command } from "./edit";
 import { hiddenIn } from "./hidden";
+import { place } from "./motion";
 
 /** How many drawn characters precede `pos` on its line: the hidden markers do not count (173). */
 function drawnColumn(view: EditorView, pos: number): number {
@@ -65,7 +65,7 @@ function stepOverBreak(move: Command): Command {
 
     const target = beyond(view, range.head, before.head, column);
     if (target !== range.head) {
-      view.dispatch({ selection: EditorSelection.cursor(target), userEvent: "select", scrollIntoView: true });
+      place(view, target, 0, false);
     }
     return true;
   };
@@ -86,7 +86,7 @@ function extendOverBreak(move: Command, direction: 1 | -1): Command {
     const own = view.state.doc.lineAt(before.head);
     if (target >= own.from && target <= own.to) target = direction > 0 ? own.to : markerSpanEnd(view.state, own.number);
     if (target !== range.head) {
-      view.dispatch({ selection: EditorSelection.range(range.anchor, target), userEvent: "select", scrollIntoView: true });
+      place(view, target, 0, true);
     }
     return true;
   };

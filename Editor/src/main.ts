@@ -47,6 +47,7 @@ import { describe, hideTooltip, mountTooltips, setPointer } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
+import { one } from "./keyboard/motion";
 import { backspace } from "./keyboard/backspace";
 import { deleteToLineStart, deleteWordAtStart, lineEnd, lineStart, selectLineEnd, selectLineStart } from "./keyboard/line-edge";
 import { arrowDown, arrowUp, shiftArrowDown, shiftArrowUp } from "./keyboard/arrows";
@@ -516,7 +517,7 @@ function selectBlockThenAll(view: EditorView): boolean {
   const take = best && rangeOf(best);
   if (!take) return false;
 
-  view.dispatch({ selection: EditorSelection.range(take.from, take.to) });
+  view.dispatch({ selection: one(EditorSelection.range(take.from, take.to)) });
   return true;
 }
 

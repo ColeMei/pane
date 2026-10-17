@@ -16,11 +16,11 @@
  * the move is measured again once the line has redrawn — decision 187.
  */
 
-import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { markerSpanEnd } from "../blocks";
 import type { Command } from "./edit";
 import { pastHidden } from "./hidden";
+import { place } from "./motion";
 import { type Row, rowAt, rowsOf } from "./rows";
 
 /** A row's edge, as a caret may stand at it. */
@@ -39,25 +39,20 @@ export function lineEdge(view: EditorView, head: number, assoc: number, forward:
 
 function moveTo(extend: boolean, forward: boolean): Command {
   return (view) => {
-    const { anchor, head, assoc } = view.state.selection.main;
+    const { head, assoc } = view.state.selection.main;
     const n = view.state.doc.lineAt(head).number;
     const start = markerSpanEnd(view.state, n);
     const k = rowAt(rowsOf(view, n), head, assoc);
     const side = forward ? -1 : 1;
     // Landing in or out of an inline construct reveals or hides its markers and can rewrap the line,
     // so the edge is of the caret's row by its index, measured again in the layout now drawn (187).
-    // An `EditorSelection`, not a bare range, which a transaction reads as `{anchor, head}`: the
-    // side would be dropped, and ⌘→'s caret drawn at the start of the row below.
+    // The caret keeps its side (`place`): dropped, ⌘→'s caret would be drawn at the start of the row below.
     let at = -1;
     for (let pass = 0; pass < 3; pass++) {
       const target = edgeOf(view, rowsOf(view, n), k, forward, start);
       if (target === at) break;
       at = target;
-      view.dispatch({
-        selection: EditorSelection.create([extend ? EditorSelection.range(anchor, at, undefined, undefined, side) : EditorSelection.cursor(at, side)]),
-        userEvent: "select",
-        scrollIntoView: true,
-      });
+      place(view, at, side, extend);
     }
     return true;
   };

@@ -16,8 +16,9 @@
  * which half of the strip was clicked and this does not.
  */
 
-import { type Annotation, type AnnotationType, EditorSelection, EditorState, type Extension, type SelectionRange, Transaction, type TransactionSpec } from "@codemirror/state";
+import { type Annotation, type AnnotationType, EditorSelection, EditorState, type Extension, Transaction, type TransactionSpec } from "@codemirror/state";
 import { fencedBlockAt, fencesOf, markerSpanEnd, notAPlace } from "./blocks";
+import { one } from "./keyboard/motion";
 
 /** The nearest place line from `n` in `direction` (exclusive), or null when there is none. */
 function placeLineFrom(state: EditorState, n: number, direction: 1 | -1): number | null {
@@ -144,7 +145,7 @@ export function caretPlaces(): Extension {
     }
     return {
       changes: tr.changes,
-      selection: EditorSelection.cursor(target, undefined, undefined, sel.main.goalColumn),
+      selection: one(EditorSelection.cursor(target)),
       effects: tr.effects,
       annotations,
       scrollIntoView: tr.scrollIntoView,
@@ -165,11 +166,11 @@ function placeRange(tr: Transaction): Transaction | TransactionSpec {
   const head = placeRangeEnd(state, range.head, mapped(before.head), range.anchor);
   const anchor = placeRangeEnd(state, range.anchor, mapped(before.anchor), head, false);
   if (head === range.head && anchor === range.anchor) return tr;
-  return rebuilt(tr, anchor === head ? EditorSelection.cursor(head) : EditorSelection.range(anchor, head, range.goalColumn));
+  return rebuilt(tr, one(anchor === head ? EditorSelection.cursor(head) : EditorSelection.range(anchor, head)));
 }
 
 /** `tr` with its selection replaced, keeping its changes, effects and the annotations that matter. */
-function rebuilt(tr: Transaction, selection: EditorSelection | SelectionRange): TransactionSpec {
+function rebuilt(tr: Transaction, selection: EditorSelection): TransactionSpec {
   const annotations: Annotation<unknown>[] = [];
   const kinds: AnnotationType<any>[] = [Transaction.userEvent, Transaction.addToHistory, Transaction.time, Transaction.remote];
   for (const kind of kinds) {

@@ -18,6 +18,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 import { fencesOf, markerSpanEnd } from "../blocks";
 import type { Command } from "./edit";
+import { one, place } from "./motion";
 
 /** The block the caret moves with: its list item, or its block at the top of the note. */
 function blockAt(state: EditorState, pos: number): SyntaxNode | null {
@@ -74,7 +75,7 @@ function move(direction: -1 | 1): Command {
     const offset = (pos: number) => (direction < 0 ? a.from + (pos - b.from) : a.from + second.length + between.length + (pos - a.from));
     view.dispatch({
       changes: { from: a.from, to: b.to, insert: second + between + first },
-      selection: EditorSelection.range(offset(range.anchor), offset(range.head)),
+      selection: one(EditorSelection.range(offset(range.anchor), offset(range.head))),
       userEvent: "move.line",
       scrollIntoView: true,
     });
@@ -93,7 +94,7 @@ function selectToEdge(direction: -1 | 1): Command {
     if (!block) return true;
     const lines = linesOf(state, block);
     const edge = direction < 0 ? markerSpanEnd(state, state.doc.lineAt(lines.from).number) : lines.to;
-    view.dispatch({ selection: EditorSelection.range(range.anchor, edge), userEvent: "select", scrollIntoView: true });
+    place(view, edge, 0, true);
     return true;
   };
 }
