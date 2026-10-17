@@ -10,6 +10,10 @@
  * back into a block's marker span. ⌘← at the text start therefore stays there (the ← rule in
  * `caret.ts` is for ←). At the text start, ⌥⌫ and ⌘⌫ do what ⌫ does: they unwrap a block, join a
  * paragraph to the one above, and leave a fence alone.
+ *
+ * On a wrapped line the edge is the visual row the caret is drawn on, which the caret's `assoc`
+ * says, and the caret keeps the side it lands on. A reveal can rewrap the line under the caret, so
+ * the move is measured again once the line has redrawn — decision 187.
  */
 
 import { EditorSelection, type RangeSet } from "@codemirror/state";
@@ -37,25 +41,67 @@ function pastAtoms(view: EditorView, pos: number, direction: 1 | -1): number {
   return pos;
 }
 
-/** The edge of the (visual) line holding `head`, as a caret may stand at it. */
-export function lineEdge(view: EditorView, head: number, forward: boolean): number {
-  const state = view.state;
-  const line = state.doc.lineAt(head);
-  const start = markerSpanEnd(state, line.number);
-  const edge = view.moveToLineBoundary(EditorSelection.cursor(head, forward ? -1 : 1), forward, true).head;
-  if (forward) return Math.max(pastAtoms(view, edge, 1), start);
-  return Math.max(pastAtoms(view, Math.max(edge, start), -1), start);
+interface Row { from: number; to: number }
+
+/**
+ * The visual rows of document line `n`, in the layout drawn now; each ends where the next starts.
+ * A hidden marker has no reliable coordinates, so each row is measured from the visible text after
+ * it, and a boundary sits before the marker that opens the row below (187).
+ */
+function rowsOf(view: EditorView, n: number): Row[] {
+  const line = view.state.doc.line(n);
+  const rows: Row[] = [];
+  for (let from = line.from; ; ) {
+    const raw = view.moveToLineBoundary(EditorSelection.cursor(pastAtoms(view, from, 1), 1), true, true).head;
+    const to = pastAtoms(view, raw, -1);
+    if (raw >= line.to || to <= from) { rows.push({ from, to: line.to }); return rows; }
+    rows.push({ from, to });
+    from = to;
+  }
+}
+
+/** The row a caret is drawn on: at a wrap point, the upper row only when it sits before its position. */
+function rowAt(rows: Row[], head: number, assoc: number): number {
+  const k = rows.findIndex((row) => head < row.to || (head === row.to && assoc < 0));
+  return k < 0 ? rows.length - 1 : k;
+}
+
+/** A row's edge, as a caret may stand at it. */
+function edgeOf(view: EditorView, rows: Row[], k: number, forward: boolean, start: number): number {
+  const row = rows[Math.min(k, rows.length - 1)]!;
+  if (forward) return Math.max(row.to, start);
+  return Math.max(pastAtoms(view, Math.max(row.from, start), -1), start);
+}
+
+/** The edge of the visual row the caret at `head` is drawn on, as a caret may stand at it. */
+export function lineEdge(view: EditorView, head: number, assoc: number, forward: boolean): number {
+  const n = view.state.doc.lineAt(head).number;
+  const rows = rowsOf(view, n);
+  return edgeOf(view, rows, rowAt(rows, head, assoc), forward, markerSpanEnd(view.state, n));
 }
 
 function moveTo(extend: boolean, forward: boolean): Command {
   return (view) => {
-    const range = view.state.selection.main;
-    const head = lineEdge(view, range.head, forward);
-    view.dispatch({
-      selection: extend ? EditorSelection.range(range.anchor, head) : EditorSelection.cursor(head, forward ? -1 : 1),
-      userEvent: "select",
-      scrollIntoView: true,
-    });
+    const { anchor, head, assoc } = view.state.selection.main;
+    const n = view.state.doc.lineAt(head).number;
+    const start = markerSpanEnd(view.state, n);
+    const k = rowAt(rowsOf(view, n), head, assoc);
+    const side = forward ? -1 : 1;
+    // Landing in or out of an inline construct reveals or hides its markers and can rewrap the line,
+    // so the edge is of the caret's row by its index, measured again in the layout now drawn (187).
+    // An `EditorSelection`, not a bare range, which a transaction reads as `{anchor, head}`: the
+    // side would be dropped, and ⌘→'s caret drawn at the start of the row below.
+    let at = -1;
+    for (let pass = 0; pass < 3; pass++) {
+      const target = edgeOf(view, rowsOf(view, n), k, forward, start);
+      if (target === at) break;
+      at = target;
+      view.dispatch({
+        selection: EditorSelection.create([extend ? EditorSelection.range(anchor, at, undefined, undefined, side) : EditorSelection.cursor(at, side)]),
+        userEvent: "select",
+        scrollIntoView: true,
+      });
+    }
     return true;
   };
 }
@@ -70,7 +116,7 @@ export function deleteToLineStart(backspace: Command): Command {
   return (view) => {
     const range = view.state.selection.main;
     if (!range.empty) return false;
-    const to = lineEdge(view, range.head, false);
+    const to = lineEdge(view, range.head, range.assoc, false);
     if (to >= range.head) return backspace(view);
     view.dispatch({ changes: { from: to, to: range.head }, selection: { anchor: to }, userEvent: "delete.line", scrollIntoView: true });
     return true;

@@ -2381,6 +2381,63 @@ export function runGestures(view, doc) {
   d.press("Backspace", { altKey: true });
   r.check("⌥⌫ at a paragraph's start joins it to the one above, as ⌫ does (170)", "first para wordssecond para words", view.state.doc.line(3).text);
 
+  // 187: on a wrapped line, ⌘← and ⌘→ keep to the visual row the caret is drawn on, in the layout
+  // that is on screen once the move's reveal has redrawn the line. Read off the drawn caret and the
+  // letters beside it: after ⌘→ no letter of the line follows it on its row, after ⌘← none precedes.
+  {
+    const W = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey";
+    const alternate = (open, close) => W.split(" ").map((w, n) => (n % 3 === 1 ? `${open}${w}${close}` : w)).join(" ");
+    const ROWS = [
+      ["paragraph", W], ["bold run", `alpha bravo charlie **delta echo foxtrot golf hotel india juliet kilo lima mike** november oscar papa quebec romeo sierra tango`],
+      ["code run", "alpha bravo charlie `delta echo foxtrot golf hotel india juliet kilo lima mike` november oscar papa quebec romeo sierra tango"],
+      ["bold words", alternate("**", "**")], ["code words", alternate("`", "`")], ["italic words", alternate("*", "*")],
+      ["bullet", `- ${W}`], ["task", `- [ ] ${W}`], ["ordered", `1. ${W}`], ["quote", `> ${W}`], ["heading", `## ${W}`],
+      ["soft break", `${W}\n${W}`],
+    ];
+    const letter = (p) => /[a-z]/.test(view.state.sliceDoc(p, p + 1));
+    const caret = () => view.coordsAtPos(sel().head, sel().assoc || 1);
+    const onRow = (rect, row) => rect && rect.top < (row.top + row.bottom) / 2 && rect.bottom > (row.top + row.bottom) / 2;
+    const atRowEdge = (forward) => {
+      const row = caret(), h = head(), line = view.state.doc.lineAt(h);
+      if (forward) {
+        for (let q = h; q < line.to; q++) if (letter(q)) return !onRow(view.coordsAtPos(q, 1), row);
+      } else {
+        for (let p = h - 1; p >= line.from; p--) if (letter(p)) return !onRow(view.coordsAtPos(p + 1, -1), row);
+      }
+      return true;
+    };
+    {
+      const SOURCE = `top\n\n${W}\n\nPARA\n`;
+      d.load(SOURCE); d.at("charlie");
+      cmd("ArrowRight");
+      const end = head();
+      cmd("Backspace");
+      r.check("paragraph: ⌘→ then ⌘⌫ deletes its first row and nothing below it (187)", SOURCE.slice(0, 5) + SOURCE.slice(end), d.text());
+    }
+    for (const [name, text] of ROWS) {
+      const SOURCE = `top\n\n${text}\n\nPARA\n`;
+      d.load(SOURCE);
+      const from = SOURCE.indexOf(text), to = from + text.length;
+      d.at("PARA");
+      r.check(`${name}: the fixture wraps (187)`, true, view.coordsAtPos(to, -1).top - view.coordsAtPos(from, 1).top > 30);
+      for (const keys of [["ArrowRight"], ["ArrowLeft"], ["ArrowRight", "ArrowLeft"], ["ArrowLeft", "ArrowRight"], ["⇧ArrowRight"], ["⇧ArrowLeft"]]) {
+        const misses = [];
+        for (let s = from + 1; s < to; s += 2) {
+          if (!letter(s - 1) || !letter(s)) continue;
+          d.load(SOURCE);
+          view.dispatch({ selection: { anchor: s } });
+          let row = null;
+          for (const key of keys) { cmd(key.replace("⇧", ""), { shiftKey: key.startsWith("⇧") }); if (!row) row = caret(); }
+          const last = keys[keys.length - 1].endsWith("ArrowRight");
+          const sameRow = keys.length === 1 || onRow(caret(), row);
+          if (!atRowEdge(last) || !sameRow) misses.push(`${s}→${head()}`);
+        }
+        r.check(`${name}: ${keys.map((k) => `${k.startsWith("⇧") ? "⇧" : ""}⌘${k.endsWith("ArrowRight") ? "→" : "←"}`).join(" ")} ends at its row's edge from every start (187)`,
+          0, misses.length, misses.slice(0, 4).join(" "));
+      }
+    }
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {
