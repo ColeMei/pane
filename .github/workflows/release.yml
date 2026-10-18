@@ -49,6 +49,7 @@ jobs:
           Scripts/test-markdown.sh --skip-editor
           Scripts/test-switcher.sh --skip-editor
           Scripts/test-tooltip.sh --skip-editor
+          Scripts/test-gestures.sh --skip-editor
 
       - name: Version from the tag
         id: version

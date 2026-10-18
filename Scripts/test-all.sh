@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every gate, in one run: the PaneKit suite, the typecheck, the keyboard tables, and the four
+# Every gate, in one run: the PaneKit suite, the typecheck, the keyboard tables, and the five
 # WKWebView suites against one build of the editor bundle. What CI runs, runnable here.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -15,6 +15,7 @@ step "Command matrix"     Scripts/test-editor.sh --skip-editor
 step "Markdown"           Scripts/test-markdown.sh --skip-editor
 step "Switcher"           Scripts/test-switcher.sh --skip-editor
 step "Tooltip"            Scripts/test-tooltip.sh --skip-editor
+step "Gesture replay"     Scripts/test-gestures.sh --skip-editor
 
 echo
 [[ $status -eq 0 ]] && echo "✓ every suite green" || echo "✗ at least one suite failed"

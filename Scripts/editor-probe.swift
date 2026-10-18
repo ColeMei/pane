@@ -43,8 +43,9 @@ window.contentView = web
 window.setFrameOrigin(CGPoint(x: -30_000, y: -30_000))
 window.orderFront(nil)
 
-// Never let a hung page hold the build.
-DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+// Never let a hung page hold the build. The gesture replay runs thousands of cells and sets its own.
+let timeout = Double(ProcessInfo.processInfo.environment["PROBE_TIMEOUT"] ?? "") ?? 60
+DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
     FileHandle.standardError.write(Data("editor-probe: timed out\n".utf8))
     exit(2)
 }
