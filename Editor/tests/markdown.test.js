@@ -2438,6 +2438,38 @@ export function runGestures(view, doc) {
     }
   }
 
+  // 188: a caret at a wrap point is drawn at the start of the lower row (as Typora draws one an
+  // arrow lands there), and ↑ ↓ move from the row it is drawn on. A caret with no side, as AX or
+  // the DOM leaves one, is drawn below but CodeMirror measured it from above, so ↑ skipped a row.
+  {
+    const W = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey";
+    const SOURCE = `top\n\n${W}\n\nPARA\n`;
+    const from = SOURCE.indexOf(W), to = from + W.length;
+    d.load(SOURCE);
+    let wrap = from + 1;
+    while (wrap < to && !(view.coordsAtPos(wrap, 1).top > view.coordsAtPos(from, 1).top + 5)) wrap++;
+    const rowTop = (p, side) => Math.round(view.coordsAtPos(p, side).top);
+    const lowerRow = rowTop(wrap, 1), upperRow = rowTop(from, 1);
+    const drawn = () => rowTop(head(), sel().assoc || 1);
+    const upStaysInLine = () => { d.press("ArrowUp"); return head() >= from && head() < wrap; };
+    const arrive = (how) => {
+      d.load(SOURCE);
+      if (how === "→") { view.dispatch({ selection: { anchor: wrap - 1 } }); d.press("ArrowRight"); }
+      if (how === "←") { view.dispatch({ selection: { anchor: wrap + 1 } }); d.press("ArrowLeft"); }
+      if (how === "no side") view.dispatch({ selection: { anchor: wrap } });
+    };
+    for (const how of ["→", "←", "no side"]) {
+      arrive(how);
+      r.check(`a caret brought to a wrap point by ${how} is there (188)`, wrap, head());
+      r.check(`…drawn at the start of the lower row (188)`, lowerRow, drawn());
+      r.check(`…and ↑ from it goes to the upper row of the same line, not the line above (188)`, true, upStaysInLine(), `${head()}`);
+      arrive(how);
+      d.press("ArrowDown");
+      r.check(`…and ↓ from it leaves the lower row (188)`, true, rowTop(head(), 1) > lowerRow, `${head()}`);
+    }
+    r.check("the fixture wraps (188)", true, lowerRow > upperRow);
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

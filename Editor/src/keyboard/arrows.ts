@@ -14,6 +14,8 @@
  * with arithmetic, and a wrapped line's exact goal column is a fair price for an answer that is the
  * same everywhere.
  *
+ * Both start from the row the caret is drawn on, at a wrap point too (188).
+ *
  * ⇧↑ and ⇧↓ take the same step with the selection's head, keeping its anchor (169): the break is no
  * more a place for a selection's end than for a caret. A run of blank lines keeps every line after
  * the first, and a blank line in a fence, as places.
@@ -25,7 +27,7 @@ import { markerSpanEnd, notAPlace } from "../blocks";
 import { placeFor, placeRangeEnd } from "../caret";
 import type { Command } from "./edit";
 import { hiddenIn } from "./hidden";
-import { place } from "./motion";
+import { place, sideAsDrawn } from "./motion";
 
 /** How many drawn characters precede `pos` on its line: the hidden markers do not count (173). */
 function drawnColumn(view: EditorView, pos: number): number {
@@ -56,6 +58,7 @@ function beyond(view: EditorView, head: number, from: number, column: number): n
 
 function stepOverBreak(move: Command): Command {
   return (view) => {
+    sideAsDrawn(view);
     const before = view.state.selection.main;
     const column = drawnColumn(view, before.head);
     if (!move(view)) return false;
@@ -75,6 +78,7 @@ function stepOverBreak(move: Command): Command {
  * it goes to its own line's edge, as ⇧↓ on a note's last line does. */
 function extendOverBreak(move: Command, direction: 1 | -1): Command {
   return (view) => {
+    sideAsDrawn(view);
     const before = view.state.selection.main;
     const column = drawnColumn(view, before.head);
     if (!move(view)) return false;
