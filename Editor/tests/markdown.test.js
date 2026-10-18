@@ -2517,6 +2517,30 @@ export function runGestures(view, doc) {
     r.check("⌃H at a heading's text start is ⌫: it unwraps the heading (189)", "QHead words", caretAfter("## Head words", 3, ["h"]));
   }
 
+  // 190: ⌃T swaps the letters either side of the caret, or at a line's end the two before it, as
+  // macOS and Typora do; never a marker, hidden or shown, and never across a line's edge.
+  {
+    const transpose = (text, at) => {
+      d.load(`top\n\n${text}\n\nend\n`); view.dispatch({ selection: { anchor: 5 + at } });
+      d.press("t", { ctrlKey: true, keyCode: 84 });
+      d.type("Q");
+      return view.state.doc.toString().split("\n").slice(2, -3).join("⏎");
+    };
+    const T = [
+      ["mid-word: the two letters swap and the caret goes past them", "abcd zz", 2, "acbQd zz"],
+      ["at a line's end: the two letters before it", "aa words", 8, "aa worsdQ"],
+      ["…on the note's last line too", "Head words", 10, "Head worsdQ"],
+      ["at a line's start: nothing", "aa words", 0, "Qaa words"],
+      ["next to a bold's opening marker: nothing", "aa **bold** zz", 3, "aa Q**bold** zz"],
+      ["at a bold's inner start: nothing", "aa **bold** zz", 5, "aa **Qbold** zz"],
+      ["at a bold's inner end: nothing", "aa **bold** zz", 9, "aa **boldQ** zz"],
+      ["inside a bold, between letters: they swap", "aa **bold** zz", 7, "aa **bloQd** zz"],
+      ["at a heading's text start: nothing (its marker is not a letter)", "## Head words", 3, "## QHead words"],
+      ["at an inline code's inner end: nothing", "aa `code` zz", 8, "aa `codeQ` zz"],
+    ];
+    for (const [name, text, at, want] of T) r.check(`⌃T ${name} (190)`, want, transpose(text, at));
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

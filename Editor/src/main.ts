@@ -48,6 +48,7 @@ import { findHighlighting, mountFind } from "./find";
 import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
 import { one } from "./keyboard/motion";
+import { transpose } from "./keyboard/transpose";
 import { backspace } from "./keyboard/backspace";
 import { deleteToLineStart, deleteWordAtStart, killToLineEnd, lineEnd, lineStart, lineTextEdge, selectLineEnd, selectLineStart } from "./keyboard/line-edge";
 import { arrowDown, arrowUp, shiftArrowDown, shiftArrowUp } from "./keyboard/arrows";
@@ -725,6 +726,8 @@ function baseExtensions(): Extension[] {
         { key: "Ctrl-a", run: lineTextEdge(false, false), shift: lineTextEdge(true, false) },
         { key: "Ctrl-e", run: lineTextEdge(false, true), shift: lineTextEdge(true, true) },
         { key: "Ctrl-k", run: killToLineEnd(chain(keyCommand(deleteForward), deleteOverMarks(true, false, deleteKey))) },
+        // ⌃T never swaps a marker or across a line's edge (190).
+        { key: "Ctrl-t", run: transpose },
       ].flatMap((binding) => {
         const twin = EMACS_TWINS[binding.key ?? ""];
         return twin ? [binding, { ...binding, key: twin }] : [binding];
