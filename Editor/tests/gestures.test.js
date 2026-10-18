@@ -40,7 +40,8 @@ export function run(view, _bar, doc) {
   const press = (combo) => {
     const parts = combo.split("+");
     const name = parts.pop();
-    const key = KEYS[name] ?? name;
+    // As a keyboard sends it: ⇧ makes a letter a capital.
+    const key = KEYS[name] ?? (parts.includes("shift") ? name.toUpperCase() : name);
     content.dispatchEvent(new KeyboardEvent("keydown", {
       key, code: key, keyCode: CODES[key] ?? key.toUpperCase().charCodeAt(0), bubbles: true, cancelable: true,
       metaKey: parts.includes("cmd"), altKey: parts.includes("opt"), ctrlKey: parts.includes("ctrl"), shiftKey: parts.includes("shift"),
