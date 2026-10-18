@@ -12,6 +12,7 @@
 
 import type { EditorState, RangeSet } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { markerSpanEnd } from "../blocks";
 import { spansIn } from "./spans";
 
 export interface Region {
@@ -53,4 +54,32 @@ export function hiddenIn(view: EditorView, from: number, to: number): Region[] {
 /** Is `pos` between a construct's marker and its text, or inside a marker — not a place to stop (177)? */
 export function isSeam(state: EditorState, pos: number): boolean {
   return spansIn(state, pos, pos).some((s) => pos > s.from && pos < s.to && (pos <= s.textFrom || pos >= s.textTo));
+}
+
+/**
+ * Is the character at `pos` (from `pos` to `pos + 1`) part of a marker rather than text: a
+ * construct's, hidden or shown, a block's marker span, or anything drawn as nothing? (190, 191)
+ */
+export function isMarkerChar(view: EditorView, pos: number): boolean {
+  const state = view.state;
+  const line = state.doc.lineAt(pos);
+  if (pos < markerSpanEnd(state, line.number)) return true;
+  // A hidden range that only touches `pos` (a list marker ending at the text) does not cover it.
+  if (hiddenIn(view, pos, pos + 1).some((r) => r.to > r.from)) return true;
+  return spansIn(state, pos, pos + 1).some((s) => (pos >= s.from && pos < s.textFrom) || (pos >= s.textTo && pos < s.to));
+}
+
+/**
+ * Does `from..to` hold nothing but an inline construct's markers, so a caret crossing it moves
+ * nowhere on screen (191)? A line break or a block's marker span is a move of its own.
+ */
+export function onlyMarkers(view: EditorView, from: number, to: number): boolean {
+  if (from === to) return false;
+  // Crossing into another line is a move on screen, however the break between them is drawn.
+  if (view.state.doc.sliceString(Math.min(from, to), Math.max(from, to)).includes("\n")) return false;
+  // A block's marker span is not crossed here: a caret in it is moved off by the caret filter (151).
+  const span = markerSpanEnd(view.state, view.state.doc.lineAt(Math.min(from, to)).number);
+  if (Math.min(from, to) < span) return false;
+  for (let pos = Math.min(from, to); pos < Math.max(from, to); pos++) if (!isMarkerChar(view, pos)) return false;
+  return true;
 }

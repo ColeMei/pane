@@ -19,6 +19,7 @@
 import { type Annotation, type AnnotationType, EditorSelection, EditorState, type Extension, Transaction, type TransactionSpec } from "@codemirror/state";
 import { fencedBlockAt, fencesOf, markerSpanEnd, notAPlace } from "./blocks";
 import { one } from "./keyboard/motion";
+import { spansIn } from "./keyboard/spans";
 
 /** The nearest place line from `n` in `direction` (exclusive), or null when there is none. */
 function placeLineFrom(state: EditorState, n: number, direction: 1 | -1): number | null {
@@ -165,6 +166,11 @@ function placeRange(tr: Transaction): Transaction | TransactionSpec {
   const mapped = (pos: number) => tr.changes.mapPos(Math.min(pos, tr.changes.length));
   const head = placeRangeEnd(state, range.head, mapped(before.head), range.anchor);
   const anchor = placeRangeEnd(state, range.anchor, mapped(before.anchor), head, false);
+  // A selection made by a key or the pointer that holds nothing but markers selects nothing on
+  // screen, and typing over it would delete them: it is the caret at its anchor (191).
+  if (tr.isUserEvent("select") && !tr.docChanged && onlyMarkerText(state, Math.min(anchor, head), Math.max(anchor, head))) {
+    return rebuilt(tr, one(EditorSelection.cursor(anchor)));
+  }
   if (head === range.head && anchor === range.anchor) return tr;
   return rebuilt(tr, one(anchor === head ? EditorSelection.cursor(head) : EditorSelection.range(anchor, head)));
 }
@@ -178,4 +184,16 @@ function rebuilt(tr: Transaction, selection: EditorSelection): TransactionSpec {
     if (value !== undefined) annotations.push(kind.of(value));
   }
   return { changes: tr.changes, selection, effects: tr.effects, annotations, scrollIntoView: tr.scrollIntoView };
+}
+
+/** Is `from..to` nothing but construct and block markers (no text a reader sees)? (191) */
+function onlyMarkerText(state: EditorState, from: number, to: number): boolean {
+  if (from === to) return false;
+  for (let pos = from; pos < to; pos++) {
+    const line = state.doc.lineAt(pos);
+    if (pos < markerSpanEnd(state, line.number)) continue;
+    if (spansIn(state, pos, pos + 1).some((s) => (pos >= s.from && pos < s.textFrom) || (pos >= s.textTo && pos < s.to))) continue;
+    return false;
+  }
+  return true;
 }

@@ -8,20 +8,8 @@
  * the caret is at a line's start, ⌃T does nothing.
  */
 
-import type { EditorView } from "@codemirror/view";
-import { markerSpanEnd } from "../blocks";
 import type { Command } from "./edit";
-import { hiddenIn } from "./hidden";
-import { spansIn } from "./spans";
-
-/** Is the character at `pos` (from `pos` to `pos + 1`) part of a marker rather than text? */
-function isMarker(view: EditorView, pos: number): boolean {
-  const state = view.state;
-  const line = state.doc.lineAt(pos);
-  if (pos < markerSpanEnd(state, line.number)) return true;
-  if (hiddenIn(view, pos, pos + 1).length > 0) return true;
-  return spansIn(state, pos, pos + 1).some((s) => (pos >= s.from && pos < s.textFrom) || (pos >= s.textTo && pos < s.to));
-}
+import { isMarkerChar } from "./hidden";
 
 export const transpose: Command = (view) => {
   const range = view.state.selection.main;
@@ -32,7 +20,7 @@ export const transpose: Command = (view) => {
   const a = range.head === line.to ? range.head - 2 : range.head - 1;
   const b = a + 1;
   if (a < line.from) return true;
-  if (isMarker(view, a) || isMarker(view, b)) return true;
+  if (isMarkerChar(view, a) || isMarkerChar(view, b)) return true;
   const doc = view.state.doc;
   const swapped = doc.sliceString(b, b + 1) + doc.sliceString(a, a + 1);
   view.dispatch({ changes: { from: a, to: b + 1, insert: swapped }, selection: { anchor: b + 1 }, userEvent: "input.transpose", scrollIntoView: true });

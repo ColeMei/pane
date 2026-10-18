@@ -2541,6 +2541,30 @@ export function runGestures(view, doc) {
     for (const [name, text, at, want] of T) r.check(`⌃T ${name} (190)`, want, transpose(text, at));
   }
 
+  // 191: a move crosses at least one character a reader sees, and a selection of nothing but
+  // markers is none. Where the caret is between a construct's text and its marker (typing inside
+  // it leaves it there), → and ⌥→ used to cross only the marker and stay put on screen, and ⇧←
+  // ⇧→ selected the marker alone, so typing deleted it.
+  {
+    const R = "ArrowRight", L = "ArrowLeft", S = { shiftKey: true }, A = { altKey: true };
+    const after = (text, at, keys) => {
+      d.load(`top\n\n${text}\n\nend line\n`); view.dispatch({ selection: { anchor: 5 + at } });
+      for (const [key, mods] of keys) d.press(key, mods ?? {});
+      d.type("Q");
+      return d.text().trimEnd().replace(/\n/g, "⏎");
+    };
+    const C = [
+      ["→ at a bold's inner end moves past the space after it", "aa **bold words** zz", 15, [[R]], "top⏎⏎aa **bold words** Qzz⏎⏎end line"],
+      ["→ at a bold's inner end at a line's end goes to the next line", "aa **bold words**", 15, [[R]], "top⏎⏎aa **bold words**⏎⏎Qend line"],
+      ["← at a bold's inner start at a line's start goes to the line above", "**bold words** zz", 2, [[L]], "topQ⏎⏎**bold words** zz⏎⏎end line"],
+      ["⌥→ at a bold's inner end goes to the next word's end", "aa **bold words** zz", 15, [[R, A]], "top⏎⏎aa **bold words** zzQ⏎⏎end line"],
+      ["⇧← ⇧→ at a bold's inner end comes back to a caret, and typing stays in the bold", "aa **bold words** zz", 15, [[L, S], [R, S]], "top⏎⏎aa **bold wordsQ** zz⏎⏎end line"],
+      ["⇧→ ⇧← at a bold's inner end comes back to a caret too", "aa **bold words** zz", 15, [[R, S], [L, S]], "top⏎⏎aa **bold wordsQ** zz⏎⏎end line"],
+      ["⇧⌘→ at inline code's inner end selects nothing, so typing keeps the backtick", "aa `code words`", 14, [[R, { shiftKey: true, metaKey: true }]], "top⏎⏎aa `code wordsQ`⏎⏎end line"],
+    ];
+    for (const [name, text, at, keys, want] of C) r.check(`${name} (191)`, want, after(text, at, keys));
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

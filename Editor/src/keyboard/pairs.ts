@@ -25,7 +25,7 @@ import { ChangeSet, EditorSelection, EditorState, type Extension, type Selection
 import type { EditorView } from "@codemirror/view";
 import { markerSpanEnd } from "../blocks";
 import type { Command } from "./edit";
-import { isSeam } from "./hidden";
+import { isSeam, onlyMarkers } from "./hidden";
 import { one, place } from "./motion";
 import { spansIn, type Span } from "./spans";
 
@@ -144,11 +144,14 @@ export function keepPairs(): Extension {
   });
 }
 
-/** One step from `start`, and on past any seam (rule 1). */
-function step(view: EditorView, start: SelectionRange, forward: boolean, group: boolean): number {
+/**
+ * One step from `start`, and on past any seam (rule 1), and on again while the step has crossed
+ * nothing but markers, which moves the caret nowhere on screen (191; moves only, `visible`).
+ */
+function step(view: EditorView, start: SelectionRange, forward: boolean, group: boolean, visible = false): number {
   const move = (r: SelectionRange) => (group ? view.moveByGroup(r, forward) : view.moveByChar(r, forward));
   let next = move(start);
-  for (let i = 0; i < 16 && next.head !== start.head && isSeam(view.state, next.head); i++) {
+  for (let i = 0; i < 16 && next.head !== start.head && (isSeam(view.state, next.head) || (visible && onlyMarkers(view, start.head, next.head))); i++) {
     const after = move(next);
     if (after.head === next.head) break;
     next = after;
@@ -161,7 +164,7 @@ export function moveOverSeams(forward: boolean, group: boolean, extend: boolean)
   return (view) => {
     const range = view.state.selection.main;
     if (!range.empty && !extend) return false;
-    const head = step(view, EditorSelection.cursor(range.head), forward, group);
+    const head = step(view, EditorSelection.cursor(range.head), forward, group, true);
     if (head === range.head) return false;
     place(view, head, 0, extend);
     return true;
