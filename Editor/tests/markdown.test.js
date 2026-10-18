@@ -2470,6 +2470,53 @@ export function runGestures(view, doc) {
     r.check("the fixture wraps (188)", true, lowerRow > upperRow);
   }
 
+  // 189: the emacs keys macOS gives every text view are Pane's own keys under another name. ⌃F ⌃B
+  // ⌃N ⌃P ⌃H ⌃D end exactly where → ← ↓ ↑ ⌫ ⌦ do, from every other place in every kind of line; ⌃A and
+  // ⌃E go to the line's text edges as ⌘← and ⌘→ do on an unwrapped line, and stay there; ⌃K
+  // deletes to the line's end, keeping pairs, and at the end is ⌦.
+  {
+    const LONG = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo";
+    const FIXTURES = ["aa **bold words** zz", "**bold words** zz", "aa `code words` zz", "aa [link words](https://x.com) zz",
+      "## Head words", "> Aside words", "- item one\n- Item words", "- [ ] item one\n- [ ] Item words",
+      "```\nfirst code\nlast code\n```", "para above\n\n---\n\npara below", `${LONG} **${LONG}** ${LONG}`];
+    const TWINS = [["f", "ArrowRight"], ["b", "ArrowLeft"], ["n", "ArrowDown"], ["p", "ArrowUp"], ["h", "Backspace"], ["d", "Delete"]];
+    const outcome = (source, at, key, mods) => {
+      d.load(source); view.dispatch({ selection: { anchor: at } });
+      d.press(key, mods);
+      const m = view.state.selection.main;
+      return `${d.text()}|${m.anchor}|${m.head}`;
+    };
+    for (const [letter, twin] of TWINS) {
+      for (const shift of letter === "h" || letter === "d" ? [false] : [false, true]) {
+        const misses = [];
+        for (const text of FIXTURES) {
+          const source = `top\n\n${text}\n\nend\n`;
+          for (let at = 5; at <= 5 + text.length; at += text.length > 60 ? 9 : 2) {
+            // As a keyboard sends it: ⇧ makes the letter a capital, and the key code is the letter's.
+            const a = outcome(source, at, shift ? letter.toUpperCase() : letter, { ctrlKey: true, shiftKey: shift, keyCode: letter.toUpperCase().charCodeAt(0) });
+            const b = outcome(source, at, twin, { shiftKey: shift });
+            if (a !== b) misses.push(`${JSON.stringify(text.slice(0, 12))}@${at - 5}`);
+          }
+        }
+        r.check(`${shift ? "⇧" : ""}⌃${letter.toUpperCase()} ends where ${shift ? "⇧" : ""}${twin} does, from every other place (189)`, 0, misses.length, misses.slice(0, 4).join(" "));
+      }
+    }
+    const caretAfter = (text, at, keys) => {
+      d.load(`top\n\n${text}\n\nend\n`); view.dispatch({ selection: { anchor: 5 + at } });
+      for (const k of keys) d.press(k, { ctrlKey: true });
+      d.type("Q");
+      return view.state.doc.line(3).text;
+    };
+    r.check("⌃A goes to a heading's text start (189)", "## QHead words", caretAfter("## Head words", 8, ["a"]));
+    r.check("…and a second ⌃A stays there (189)", "## QHead words", caretAfter("## Head words", 8, ["a", "a"]));
+    r.check("⌃A on a line that opens with bold goes before it, as ⌘← does (189, 170)", "Q**bold words** zz", caretAfter("**bold words** zz", 6, ["a"]));
+    r.check("⌃E goes past a construct that ends the line (189, 170)", "aa **bold words**Q", caretAfter("aa **bold words**", 7, ["e"]));
+    r.check("⌃A on a wrapped line goes to the line's start, not the row's (189)", `Q${LONG}`, caretAfter(LONG, 80, ["a"]));
+    r.check("⌃K deletes to the line's end and keeps the pair (189, 177)", "aa **boQ**", caretAfter("aa **bold words** zz", 7, ["k"]));
+    r.check("⌃K at a line's end is ⌦: the break goes whole (189, 172)", "aa words zzQend", caretAfter("aa words zz", 11, ["k"]));
+    r.check("⌃H at a heading's text start is ⌫: it unwraps the heading (189)", "QHead words", caretAfter("## Head words", 3, ["h"]));
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

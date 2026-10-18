@@ -84,3 +84,28 @@ export function deleteWordAtStart(backspace: Command): Command {
     return range.head === markerSpanEnd(view.state, line.number) ? backspace(view) : false;
   };
 }
+
+/**
+ * ⌃A and ⌃E (with ⇧, to extend): the edges of the whole line, not its row, as macOS's
+ * paragraph moves are; outside an inline construct and after a block's marker, as ⌘← and ⌘→ are
+ * (170). A second press stays (189).
+ */
+export function lineTextEdge(extend: boolean, forward: boolean): Command {
+  return (view) => {
+    const line = view.state.doc.lineAt(view.state.selection.main.head);
+    place(view, forward ? line.to : markerSpanEnd(view.state, line.number), forward ? -1 : 1, extend);
+    return true;
+  };
+}
+
+/** ⌃K: delete to the line's end, the pairs kept by the delete filter (177); at the end, ⌦ (172, 189). */
+export function killToLineEnd(deleteKey: Command): Command {
+  return (view) => {
+    const range = view.state.selection.main;
+    if (!range.empty) return false;
+    const line = view.state.doc.lineAt(range.head);
+    if (range.head >= line.to) return deleteKey(view);
+    view.dispatch({ changes: { from: range.head, to: line.to }, userEvent: "delete.forward", scrollIntoView: true });
+    return true;
+  };
+}

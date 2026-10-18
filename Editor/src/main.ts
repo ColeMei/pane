@@ -49,7 +49,7 @@ import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
 import { one } from "./keyboard/motion";
 import { backspace } from "./keyboard/backspace";
-import { deleteToLineStart, deleteWordAtStart, lineEnd, lineStart, selectLineEnd, selectLineStart } from "./keyboard/line-edge";
+import { deleteToLineStart, deleteWordAtStart, killToLineEnd, lineEnd, lineStart, lineTextEdge, selectLineEnd, selectLineStart } from "./keyboard/line-edge";
 import { arrowDown, arrowUp, shiftArrowDown, shiftArrowUp } from "./keyboard/arrows";
 import { deleteForward } from "./keyboard/delete";
 import { caretPlaces } from "./caret";
@@ -123,6 +123,11 @@ declare global {
     paneHost: typeof host;
   }
 }
+
+/** The emacs keys macOS gives every text view, each bound to what Pane binds its twin to (189). */
+const EMACS_TWINS: Record<string, string> = {
+  ArrowRight: "Ctrl-f", ArrowLeft: "Ctrl-b", ArrowDown: "Ctrl-n", ArrowUp: "Ctrl-p", Backspace: "Ctrl-h", Delete: "Ctrl-d",
+};
 
 function send(message: OutboundMessage): void {
   // Absent when the bundle is opened directly in a browser for design work, which is a legitimate
@@ -715,7 +720,15 @@ function baseExtensions(): Extension[] {
         { key: "Alt-Delete", run: chain(keyCommand(deleteForward), deleteOverMarks(true, true, deleteKey)) },
         { key: "Mod-Delete", run: keyCommand(deleteForward) },
         { key: "Mod-a", run: selectBlockThenAll },
-      ])
+        // macOS's emacs keys are Pane's own keys under another name (189): without these they
+        // reached CodeMirror's emacs keymap and every rule above was missing from them.
+        { key: "Ctrl-a", run: lineTextEdge(false, false), shift: lineTextEdge(true, false) },
+        { key: "Ctrl-e", run: lineTextEdge(false, true), shift: lineTextEdge(true, true) },
+        { key: "Ctrl-k", run: killToLineEnd(chain(keyCommand(deleteForward), deleteOverMarks(true, false, deleteKey))) },
+      ].flatMap((binding) => {
+        const twin = EMACS_TWINS[binding.key ?? ""];
+        return twin ? [binding, { ...binding, key: twin }] : [binding];
+      }))
     ),
 
     // Pane's own shortcuts, in their own compartment so the Shortcuts tab can rebind them without
