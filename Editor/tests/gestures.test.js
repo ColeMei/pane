@@ -237,6 +237,6 @@ export function run(view, _bar, doc) {
       failures.push({ case: `${name}  [${why}]`, want: `${JSON.stringify(wantIns)} at ${wantFrom}  ${show(wantLabels)}`, got: `${JSON.stringify(ins)} at ${from}  ${show(mine)}: …${near}…` });
     }
   }
-  if (skipped) failures.push({ case: `(${skipped} cells from ${offStarts.size} wrapped-row starts this layout places differently, skipped)`, want: "", got: "" }), checked++;
-  return { checked, failures };
+  const note = skipped ? `${skipped} cells from ${offStarts.size} wrapped-row starts this layout places differently, skipped` : undefined;
+  return { checked, failures, note };
 }

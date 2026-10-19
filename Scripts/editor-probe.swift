@@ -10,8 +10,9 @@ import WebKit
  the *real* parser does with a real selection. So: a real window, offscreen, at the pane's own
  width.
 
- The JS file must export `run(view, bar, doc)` and return `{ checked, failures }`. Exit status is
- 0 when `failures` is empty, 1 otherwise, so this behaves like any other test command.
+ The JS file must export `run(view, bar, doc)` and return `{ checked, failures }`, and may add a
+ `note` to print. Exit status is 0 when `failures` is empty, 1 otherwise, so this behaves like any
+ other test command.
 */
 
 let arguments = CommandLine.arguments
@@ -92,6 +93,8 @@ final class Runner: NSObject, WKNavigationDelegate {
             // what diverged and exits 0, because a divergence nobody has decided to fix yet must not
             // block a tag. `commands.test.js` returns no mode and is unaffected.
             let reporting = (result["mode"] as? String) == "report"
+            // A line the suite wants read that is not a failure: what it set aside, and why.
+            if let note = result["note"] as? String { print("— \(note)") }
 
             if failures.isEmpty {
                 print("✓ \(checked) editor assertions, all passing")

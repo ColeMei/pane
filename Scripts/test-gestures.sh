@@ -24,7 +24,8 @@ for ((lo = 0; lo < total; lo += 3000)); do
 	{ printf 'const GOLDEN = '; cat "$golden"; printf ';\nconst RANGE = [%d, %d];\n' "$lo" "$hi"; cat Editor/tests/gestures.test.js; } > "$dir/gestures.test.js"
 	PROBE_TIMEOUT=600 swift Scripts/editor-probe.swift "$PWD/Editor/dist/index.html" "$dir/gestures.test.js" > "$dir/out.txt" || status=1
 	grep -v '^✓' "$dir/out.txt" | grep -v ' assertions diverged$' || true
-	n=$(grep -c '^✗ ' "$dir/out.txt" || true)
+	# The cells, not the slice's own summary line.
+	n=$(grep '^✗ ' "$dir/out.txt" | grep -vc ' assertions diverged$' || true)
 	failed=$((failed + n)); checked=$hi
 	echo "    $hi of $total cells, $failed red so far"
 done
