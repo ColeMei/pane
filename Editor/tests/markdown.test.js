@@ -739,7 +739,7 @@ export function runTypedLists(view, doc) {
   d.press("Enter"); d.press("Tab"); d.type("two");
   d.at("two", 0);
   d.press("Backspace");
-  r.check("Backspace at the start of a nested item outdents it", "- one\n- two", d.text(),
+  r.check("Backspace at the start of a nested item makes it a paragraph of its parent (196)", "- one\n\n  two", d.text(),
     "caret before `two`, ⌫");
 
   d.reset();
@@ -749,7 +749,7 @@ export function runTypedLists(view, doc) {
   d.press("Backspace");
   // A blank line, for `exitListToParagraph`'s reason: without it the text that has just stopped
   // being an item is a lazy continuation of the item above, which is the same bug in a new place.
-  r.check("Backspace at the start of a top-level item makes it a paragraph", "- one\n\ntwo",
+  r.check("Backspace at the start of a second item makes it a paragraph of the first (196)", "- one\n\n  two",
     d.text(), "caret before `two`, ⌫");
 
   return { checked: r.checked, failures: r.failures };

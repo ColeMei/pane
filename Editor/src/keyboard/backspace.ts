@@ -12,7 +12,7 @@
  *   1b. undo a soft break        — the whitespace-only line ⇧⏎ left goes the same way (144)
  *   2a. never onto a fence       — under a blank line under a fence or a rule, ⌫ stops short of it (161)
  *   2. join back to paragraph    — a paragraph break is deleted, not halved (90)
- *   3. leave or outdent an item  — ⌫ at an item's text start outdents, or drops the marker (108, 109)
+ *   3. join or leave an item     — ⌫ at an item's text start joins the item above, or drops the marker (108, 109, 196)
  *   4. delete a typed marker     — a marker somebody typed loses one character, not the line (109)
  *   5. off a heading             — ⌫ at a heading's text start makes it a paragraph (151)
  *   6. out of a code block       — ⌫ at the start of an empty block removes it; with code, nothing (151)
@@ -23,7 +23,7 @@
 
 import type { LineContext } from "./context";
 import { NOOP, rows, type KeyEdit } from "./edit";
-import { outdentEdit } from "../list-indent";
+import { joinItemAboveEdit } from "../list-indent";
 import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 import { fencedBlockAt, fenceOrRuleLine, fencesOf } from "../blocks";
@@ -100,15 +100,16 @@ function joinBackToParagraph(ctx: LineContext): KeyEdit | null {
   return null;
 }
 
-/** 3. At the start of an item's text: outdent a nested item, or take the outermost out of the list. */
+/** 3. At the start of an item's text: a paragraph of the item above, or out of the list from its first item (196). */
 function unindentListItem(ctx: LineContext): KeyEdit | null {
   const marker = ctx.listMarker;
   if (!marker || !marker.hasText || !ctx.inListItem) return null;
   if (ctx.head !== ctx.line.from + marker.contentColumn) return null;
 
-  if (marker.indent > 0) return outdentEdit(ctx.state, ctx.head);
+  const joined = joinItemAboveEdit(ctx.state, ctx.head);
+  if (joined) return joined;
 
-  // Outermost level: drop the marker, and keep a blank line between it and a paragraph above so
+  // A top-level list's first item: drop the marker, and keep a blank line between it and a paragraph above so
   // the text does not become that paragraph's continuation.
   const blank = ctx.above !== null && !ctx.above.blank;
   return {

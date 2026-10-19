@@ -202,6 +202,52 @@ export function outdentEdit(state: EditorState, pos: number): KeyEdit | null {
   return shiftEdit(state, item, (parent ? parent.indent : 0) - item.indent);
 }
 
+/**
+ * ⌫ at an item's text start (196): the text becomes a paragraph of the item above it in the same
+ * list, or of its parent when it is the first child, at that item's content column. Blank lines
+ * set it off from the text above, from its own children, which move with it, and from the sibling
+ * after it. Null for the first item of a top-level list.
+ */
+export function joinItemAboveEdit(state: EditorState, textStart: number): KeyEdit | null {
+  const doc = state.doc;
+  const line = doc.lineAt(textStart);
+  const match = MARKER.exec(line.text);
+  const item = itemAt(state, textStart);
+  const node = match && listItemAt(state, line.from + match[1]!.length);
+  if (!item || !node) return null;
+
+  let above = node.prevSibling;
+  while (above && above.name !== "ListItem") above = above.prevSibling;
+  const host = above ?? (node.parent?.parent?.name === "ListItem" ? node.parent.parent : null);
+  const hostMatch = host && MARKER.exec(doc.lineAt(host.from).text);
+  if (!hostMatch) return null;
+  const column = hostMatch[1]!.length + hostMatch[2]!.length + hostMatch[3]!.length;
+
+  const blankAbove = line.number === 1 || doc.line(line.number - 1).text.trim() === "";
+  const insert = (blankAbove ? "" : "\n") + " ".repeat(column);
+  const changes = [{ from: line.from, to: textStart, insert }];
+  const delta = column - item.content;
+  let ownText = true;
+  for (let n = item.first + 1; n <= item.last; n++) {
+    const next = doc.line(n);
+    if (next.length === 0) { ownText = false; continue; }
+    const leading = /^[ \t]*/.exec(next.text)![0];
+    // The first child right under the text: without a blank line an ordered child that does not
+    // start at 1 would be read as more of the paragraph.
+    const child = ownText && MARKER.test(next.text);
+    if (child || next.text.trim() === "") ownText = false;
+    const width = Math.max(0, leading.length + delta);
+    changes.push({ from: next.from, to: next.from + leading.length, insert: (child ? "\n" : "") + " ".repeat(width) });
+  }
+  // And one before the sibling after it, for the same reason.
+  let after = node.nextSibling;
+  while (after && after.name !== "ListItem") after = after.nextSibling;
+  if (after && item.last < doc.lines && doc.line(item.last + 1).text.trim() !== "") {
+    changes.push({ from: doc.line(item.last + 1).from, to: doc.line(item.last + 1).from, insert: "\n" });
+  }
+  return { changes, anchor: line.from + insert.length, userEvent: "delete.backward" };
+}
+
 export function contentColumn(state: EditorState, pos: number): number | null {
   const item = itemAt(state, pos);
   return item ? item.content : null;
