@@ -10,7 +10,8 @@
  * The rules and the decisions behind them:
  *   1. undo a marker break       — a ⏎ that made a marker-only line is undone whole (90, 108)
  *   1b. undo a soft break        — the whitespace-only line ⇧⏎ left goes the same way (144)
- *   2a. never onto a fence       — under a blank line under a fence or a rule, ⌫ stops short of it (161)
+ *   2a. never onto a fence       — under a blank line under a fence or a rule, ⌫ stops short of it (161);
+ *                                  at text under a rule, the rule goes (202)
  *   2. join back to paragraph    — a paragraph break is deleted, not halved (90)
  *   3. join or leave an item     — ⌫ at an item's text start joins the item above, or drops the marker (108, 109, 196)
  *   4. delete a typed marker     — a marker somebody typed loses one character, not the line (109)
@@ -54,6 +55,7 @@ function undoSoftBreak(ctx: LineContext): KeyEdit | null {
  * (161). Row 2 would delete both breaks and leave the caret on the fence's 8px strip, or pull the
  * line's text onto the `---`. An empty line goes with the blank one and the caret steps into the
  * block's last line of code; otherwise only the blank line goes, and rows 7 and 8 take the next ⌫.
+ * Under a rule, a line of text takes the rule with the first ⌫, as Typora does (202).
  */
 function stopShortOfFence(ctx: LineContext): KeyEdit | null {
   if (!ctx.atLineStart || ctx.line.number < 3 || !ctx.above || ctx.above.length !== 0) return null;
@@ -69,6 +71,9 @@ function stopShortOfFence(ctx: LineContext): KeyEdit | null {
     }
   } else if (!/^[ \t]*([-*_])([ \t]*\1){2,}[ \t]*$/.test(markLine.text)) {
     return null;
+  } else if (ctx.line.length > 0) {
+    // At a line of text the rule goes, with the blank line under it, and the paragraphs stay apart (202).
+    return { changes: [{ from: markLine.from, to: ctx.line.from }], anchor: markLine.from, userEvent: DELETE };
   }
   const blank = doc.line(ctx.line.number - 1);
   return { changes: [{ from: blank.from, to: ctx.line.from }], anchor: blank.from, userEvent: DELETE };
