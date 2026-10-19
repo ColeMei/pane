@@ -2602,6 +2602,24 @@ export function runGestures(view, doc) {
     r.check("from inline code's inner start to the line's end: the code stays, holding the new text (193)", "aa `Q`", typed("aa `code words` zz", 4, 18));
   }
 
+  // 194: typing over (or deleting) a selection that takes whole lines and ends at a block's text
+  // start keeps that block: its marker is not a character anyone selected (151). Starting partway
+  // into a line, the lines still merge into the first one.
+  {
+    const typed = (text, from, to, key) => {
+      d.load(text); view.dispatch({ selection: { anchor: from, head: to } });
+      if (key) d.press(key); else d.type("Q");
+      return d.text().trimEnd().replace(/\n/g, "⏎");
+    };
+    const B = [["## ", "heading"], ["> ", "quote"], ["- ", "list item"], ["- [ ] ", "task"], ["1. ", "numbered item"]];
+    for (const [mark, name] of B) {
+      const text = `top line\n\n${mark}Head words\n`;
+      r.check(`typing over whole lines up to a ${name}'s text start keeps the ${name} (194)`, `${mark}QHead words`, typed(text, 0, 10 + mark.length));
+    }
+    r.check("…and ⌫ there keeps it too (194)", "## Head words", typed("top line\n\n## Head words\n", 0, 13, "Backspace"));
+    r.check("from partway into a line, the lines merge into the first (194)", "top Qitem", typed("top line\n\n- item\n", 4, 12));
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

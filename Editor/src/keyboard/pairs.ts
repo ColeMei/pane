@@ -65,9 +65,15 @@ const markers = (s: Span): [Region, Region] => [{ from: s.from, to: s.textFrom }
  * What deleting `from..to` (and inserting `insert` in its place) takes once rule 2 has had its say,
  * or null when that is exactly `from..to`. `insertAt` is where the insert lands.
  */
-export function keptDeletion(state: EditorState, from: number, to: number, insert: string):
+export function keptDeletion(state: EditorState, from: number, end: number, insert: string):
   { deletions: Region[]; insertAt: number } | null {
   const doc = state.doc;
+  // Whole lines up to a block's text start: the block keeps its marker, which nobody selected, and
+  // what is typed goes in after it (194). From partway into a line the lines merge, as before.
+  const startLine = doc.lineAt(from), endLine = doc.lineAt(end);
+  const endSpan = markerSpanEnd(state, endLine.number);
+  const keepBlock = startLine.number < endLine.number && from === startLine.from && end === endSpan && endSpan > endLine.from;
+  const to = keepBlock ? endLine.from : end;
   const spans = spansIn(state, from, to).filter((s) => !(from <= s.from && to >= s.to));
   const cut = spans.filter((s) => markers(s).some((m) => overlaps(m, from, to)));
   const pieces = subtract({ from, to }, cut.flatMap(markers));
@@ -107,8 +113,8 @@ export function keptDeletion(state: EditorState, from: number, to: number, inser
     }
   }
 
-  const insertAt = pieces[0]?.from ?? from;
-  if (deletions.length === 1 && deletions[0]!.from === from && deletions[0]!.to === to) return null;
+  const insertAt = keepBlock ? endSpan : pieces[0]?.from ?? from;
+  if (deletions.length === 1 && deletions[0]!.from === from && deletions[0]!.to === end) return null;
   return { deletions, insertAt };
 }
 
