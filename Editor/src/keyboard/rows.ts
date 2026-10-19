@@ -18,7 +18,8 @@ export interface Row {
 /**
  * The visual rows of document line `n`, in the layout drawn now; each ends where the next starts.
  * A hidden marker has no reliable coordinates, so each row is measured from the visible text after
- * it, and a boundary sits before the marker that opens the row below (187).
+ * it, and a boundary sits before the marker that opens the row below (187). Markers that end the
+ * line are the last row's, not a row of their own (200).
  */
 export function rowsOf(view: EditorView, n: number): Row[] {
   const line = view.state.doc.line(n);
@@ -26,7 +27,8 @@ export function rowsOf(view: EditorView, n: number): Row[] {
   for (let from = line.from; ; ) {
     const raw = view.moveToLineBoundary(EditorSelection.cursor(pastHidden(view, from, 1), 1), true, true).head;
     const to = pastHidden(view, raw, -1);
-    if (raw >= line.to || to <= from) { rows.push({ from, to: line.to }); return rows; }
+    // Only hidden markers past the boundary: the line ends there, not a row of nothing (200).
+    if (raw >= line.to || to <= from || pastHidden(view, to, 1) >= line.to) { rows.push({ from, to: line.to }); return rows; }
     rows.push({ from, to });
     from = to;
   }

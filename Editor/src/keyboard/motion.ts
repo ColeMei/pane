@@ -22,11 +22,11 @@ export function one(range: SelectionRange): EditorSelection {
 /**
  * Move the caret to `head`, drawn on `side` of it: -1 at the end of the row above a wrap point, 1
  * at the start of the row below, 0 as CodeMirror would. With `extend`, the anchor stays, or is the
- * one given.
+ * one given. `goal` is the x a vertical move keeps aiming for (200).
  */
-export function place(view: EditorView, head: number, side: -1 | 0 | 1, extend: boolean, anchor = view.state.selection.main.anchor): void {
+export function place(view: EditorView, head: number, side: -1 | 0 | 1, extend: boolean, anchor = view.state.selection.main.anchor, goal?: number): void {
   view.dispatch({
-    selection: one(extend ? EditorSelection.range(anchor, head, undefined, undefined, side || undefined) : EditorSelection.cursor(head, side)),
+    selection: one(extend ? EditorSelection.range(anchor, head, goal, undefined, side || undefined) : EditorSelection.cursor(head, side, undefined, goal)),
     userEvent: "select",
     scrollIntoView: true,
   });

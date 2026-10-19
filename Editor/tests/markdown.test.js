@@ -2652,6 +2652,34 @@ export function runGestures(view, doc) {
     }
   }
 
+  // 200: a vertical step over a line that is not a place keeps the goal it started from, so a ⇧↑
+  // then a ⇧↓ (and ↑ ↓) comes back to where it began, in a proportional font as well.
+  {
+    const trip = (source, at, keys) => {
+      d.load(source); view.dispatch({ selection: { anchor: at } });
+      for (const [key, shiftKey] of keys) d.press(key, { shiftKey });
+      const m = view.state.selection.main;
+      return `${m.anchor}|${m.head}`;
+    };
+    const PP = "gesture sweep n77\n\nfirst para words\n\nsecond para words\n\nend line";
+    const H2 = "gesture sweep n46\n\n## Head words\n\nend line";
+    r.check("⇧↑ ⇧↓ over a paragraph break comes back to a caret where it began (200)", "43|43", trip(PP, 43, [["ArrowUp", true], ["ArrowDown", true]]));
+    r.check("…⇧↓ ⇧↑ too (200)", "35|35", trip(PP, 35, [["ArrowDown", true], ["ArrowUp", true]]));
+    r.check("…↑ ↓ too (200)", "43|43", trip(PP, 43, [["ArrowUp", false], ["ArrowDown", false]]));
+    r.check("…from a heading (200)", "29|29", trip(H2, 29, [["ArrowUp", true], ["ArrowDown", true]]));
+    r.check("…and back up to it (200)", "29|29", trip(H2, 29, [["ArrowDown", true], ["ArrowUp", true]]));
+    const TAIL = "gesture sweep n2\n\naa **bold words**\n\nend line";
+    r.check("…from the start of a line that ends in a bold (200)", "18|18", trip(TAIL, 18, [["ArrowDown", true], ["ArrowUp", true]]));
+    const QUOTE = "gesture sweep n52\n\n> Aside words\n\nend line";
+    const NEST = "gesture sweep n64\n\n- top item\n  - mid item\n    - low item\n- next top\n\nend line";
+    r.check("…through a shorter line, from the longer one's end (200)", "32|32", trip(QUOTE, 32, [["ArrowDown", true], ["ArrowUp", true]]));
+    r.check("…through a deeper item, from a list item's text start (200)", "34|34", trip(NEST, 34, [["ArrowDown", true], ["ArrowUp", true]]));
+    r.check("…and back down to an outer item (200)", "60|60", trip(NEST, 60, [["ArrowUp", true], ["ArrowDown", true]]));
+    const BOLD = "gesture sweep n0\n\naa **bold words** zz\n\nend line";
+    r.check("…from inside a bold, revealed on the way out and not on the way back (200)", "25|25", trip(BOLD, 25, [["ArrowUp", true], ["ArrowDown", true]]));
+    r.check("…⇧↓ ⇧↑ from inside it too (200)", "25|25", trip(BOLD, 25, [["ArrowDown", true], ["ArrowUp", true]]));
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

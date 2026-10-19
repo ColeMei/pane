@@ -146,7 +146,8 @@ export function caretPlaces(): Extension {
     }
     return {
       changes: tr.changes,
-      selection: one(EditorSelection.cursor(target)),
+      // The goal stays: the next ↑ or ↓ aims where this one did (200).
+      selection: one(EditorSelection.cursor(target, undefined, undefined, sel.main.goalColumn)),
       effects: tr.effects,
       annotations,
       scrollIntoView: tr.scrollIntoView,
@@ -170,10 +171,11 @@ function placeRange(tr: Transaction): Transaction | TransactionSpec {
   // screen, and typing over it would delete them: it is a caret (191). Made from a caret, the move
   // just moved it, so at the head; shrunk back from a selection, the caret is where it began.
   if (tr.isUserEvent("select") && !tr.docChanged && onlyMarkerText(state, Math.min(anchor, head), Math.max(anchor, head))) {
-    return rebuilt(tr, one(EditorSelection.cursor(before.empty ? head : anchor)));
+    return rebuilt(tr, one(EditorSelection.cursor(before.empty ? head : anchor, undefined, undefined, range.goalColumn)));
   }
   if (head === range.head && anchor === range.anchor) return tr;
-  return rebuilt(tr, one(anchor === head ? EditorSelection.cursor(head) : EditorSelection.range(anchor, head)));
+  const goal = range.goalColumn;
+  return rebuilt(tr, one(anchor === head ? EditorSelection.cursor(head, undefined, undefined, goal) : EditorSelection.range(anchor, head, goal)));
 }
 
 /** `tr` with its selection replaced, keeping its changes, effects and the annotations that matter. */
