@@ -20,7 +20,7 @@ import type { EditorView } from "@codemirror/view";
 import { markerSpanEnd } from "../blocks";
 import type { Command } from "./edit";
 import { pastHidden } from "./hidden";
-import { place } from "./motion";
+import { growFrom, place } from "./motion";
 import { type Row, rowAt, rowsOf } from "./rows";
 
 /** A row's edge, as a caret may stand at it. */
@@ -39,7 +39,9 @@ export function lineEdge(view: EditorView, head: number, assoc: number, forward:
 
 function moveTo(extend: boolean, forward: boolean): Command {
   return (view) => {
-    const { head, assoc } = view.state.selection.main;
+    // Extending, a selection grows from its edge on this side and keeps the far one (192).
+    const main = view.state.selection.main;
+    const { base: head, anchor, assoc } = extend ? growFrom(view, forward) : { base: main.head, anchor: main.anchor, assoc: main.assoc };
     const n = view.state.doc.lineAt(head).number;
     const start = markerSpanEnd(view.state, n);
     const k = rowAt(rowsOf(view, n), head, assoc);
@@ -52,7 +54,7 @@ function moveTo(extend: boolean, forward: boolean): Command {
       const target = edgeOf(view, rowsOf(view, n), k, forward, start);
       if (target === at) break;
       at = target;
-      place(view, at, side, extend);
+      place(view, at, side, extend, extend ? anchor : undefined);
     }
     return true;
   };

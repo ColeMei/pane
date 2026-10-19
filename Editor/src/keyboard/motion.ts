@@ -21,10 +21,10 @@ export function one(range: SelectionRange): EditorSelection {
 
 /**
  * Move the caret to `head`, drawn on `side` of it: -1 at the end of the row above a wrap point, 1
- * at the start of the row below, 0 as CodeMirror would. With `extend`, the anchor stays.
+ * at the start of the row below, 0 as CodeMirror would. With `extend`, the anchor stays, or is the
+ * one given.
  */
-export function place(view: EditorView, head: number, side: -1 | 0 | 1, extend: boolean): void {
-  const { anchor } = view.state.selection.main;
+export function place(view: EditorView, head: number, side: -1 | 0 | 1, extend: boolean, anchor = view.state.selection.main.anchor): void {
   view.dispatch({
     selection: one(extend ? EditorSelection.range(anchor, head, undefined, undefined, side || undefined) : EditorSelection.cursor(head, side)),
     userEvent: "select",
@@ -39,4 +39,24 @@ export function sideAsDrawn(view: EditorView): void {
   const below = view.coordsAtPos(range.head, 1), above = view.coordsAtPos(range.head, -1);
   if (!below || !above || Math.abs(below.top - above.top) < 1) return;
   view.dispatch({ selection: one(EditorSelection.cursor(range.head, 1, undefined, range.goalColumn)) });
+}
+
+/**
+ * Where an edge move (to a line's, a block's or the note's edge) extends from: macOS extends a
+ * selection from its edge on the move's side and keeps the far one, so the second press the other
+ * way covers the whole line, block or note (192). A caret extends from itself.
+ */
+export function growFrom(view: EditorView, forward: boolean): { base: number; anchor: number; assoc: number } {
+  const range = view.state.selection.main;
+  if (range.empty) return { base: range.head, anchor: range.head, assoc: range.assoc };
+  return forward ? { base: range.to, anchor: range.from, assoc: -1 } : { base: range.from, anchor: range.to, assoc: 1 };
+}
+
+/** ⇧⌘↑ and ⇧⌘↓: to the note's start or end, grown from the selection's edge on that side (192). */
+export function selectDocEdge(forward: boolean): (view: EditorView) => boolean {
+  return (view) => {
+    const { anchor } = growFrom(view, forward);
+    place(view, forward ? view.state.doc.length : 0, 0, true, anchor);
+    return true;
+  };
 }

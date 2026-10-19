@@ -2565,6 +2565,27 @@ export function runGestures(view, doc) {
     for (const [name, text, at, keys, want] of C) r.check(`${name} (191)`, want, after(text, at, keys));
   }
 
+  // 192: the edge moves (⇧⌘← ⇧⌘→, ⇧⌘↑ ⇧⌘↓, ⇧⌥↑ ⇧⌥↓) extend a selection from its edge on their
+  // side and keep the far one, as macOS does: the second press the other way covers the whole line,
+  // note or block. A word or letter move still moves the head back.
+  {
+    const selected = (text, at, keys) => {
+      d.load(`top\n\n${text}\n\nend line\n`); view.dispatch({ selection: { anchor: 5 + at } });
+      for (const [key, mods] of keys) d.press(key, { shiftKey: true, ...mods });
+      const m = view.state.selection.main;
+      return d.text().slice(m.from, m.to);
+    };
+    const C = [
+      ["⇧⌘→ then ⇧⌘← selects the whole line", "aa bold words zz", 5, [["ArrowRight", { metaKey: true }], ["ArrowLeft", { metaKey: true }]], "aa bold words zz"],
+      ["⇧⌘← then ⇧⌘→ selects the whole line", "aa bold words zz", 5, [["ArrowLeft", { metaKey: true }], ["ArrowRight", { metaKey: true }]], "aa bold words zz"],
+      ["⇧⌘↓ then ⇧⌘↑ selects the whole note", "aa words", 3, [["ArrowDown", { metaKey: true }], ["ArrowUp", { metaKey: true }]], "top\n\naa words\n\nend line\n"],
+      ["⇧⌥↓ then ⇧⌥↑ selects the whole paragraph", "aa bold words zz", 5, [["ArrowDown", { altKey: true }], ["ArrowUp", { altKey: true }]], "aa bold words zz"],
+      ["one ⇧⌘→ still selects to the line's end", "aa bold words zz", 5, [["ArrowRight", { metaKey: true }]], "ld words zz"],
+      ["⇧⌥→ then ⇧⌥← still comes back to a caret", "aa bold words zz", 3, [["ArrowRight", { altKey: true }], ["ArrowLeft", { altKey: true }]], ""],
+    ];
+    for (const [name, text, at, keys, want] of C) r.check(`${name} (192)`, want, selected(text, at, keys));
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

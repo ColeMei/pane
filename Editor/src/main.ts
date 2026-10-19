@@ -47,7 +47,7 @@ import { describe, hideTooltip, mountTooltips, setPointer } from "./tooltip";
 import { findHighlighting, mountFind } from "./find";
 import { keyCommand } from "./keyboard/context";
 import { chain } from "./keyboard/edit";
-import { one } from "./keyboard/motion";
+import { one, selectDocEdge } from "./keyboard/motion";
 import { transpose } from "./keyboard/transpose";
 import { backspace } from "./keyboard/backspace";
 import { deleteToLineStart, deleteWordAtStart, killToLineEnd, lineEnd, lineStart, lineTextEdge, selectLineEnd, selectLineStart } from "./keyboard/line-edge";
@@ -701,6 +701,9 @@ function baseExtensions(): Extension[] {
         { key: "Ctrl-Mod-ArrowDown", run: moveBlockDown },
         { key: "Mod-Alt-ArrowUp", run: nothing },
         { key: "Mod-Alt-ArrowDown", run: nothing },
+        // ⇧⌘↑ and ⇧⌘↓ grow the selection to the note's edge from its edge on that side (192).
+        { key: "Shift-Mod-ArrowUp", run: selectDocEdge(false) },
+        { key: "Shift-Mod-ArrowDown", run: selectDocEdge(true) },
         { key: "Mod-ArrowLeft", run: lineStart, shift: selectLineStart },
         { key: "Mod-ArrowRight", run: lineEnd, shift: selectLineEnd },
         { key: "Mod-Backspace", run: deleteToLineStart(backspaceKey) },
