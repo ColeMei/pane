@@ -663,13 +663,14 @@ function baseExtensions(): Extension[] {
     // Where the caret may rest: past every block marker, never on a break, a fence line or a
     // rule — one filter for every way a caret arrives (146, 151).
     caretPlaces(),
+    // Ordered lists count themselves. A filter that writes to the document, so it declares the
+    // transactions it is *for* rather than the ones it is against — see the file's own note, and
+    // decision 81, which is what happened the first time that was the other way round. Above
+    // `keepPairs`, because filters run last-installed first: it counts the lines that edit keeps (199).
+    renumberOrderedLists(),
     // No delete takes one marker of a construct and leaves its partner (177).
     keepPairs(),
     findHighlighting(),
-    // Ordered lists count themselves. A filter that writes to the document, so it declares the
-    // transactions it is *for* rather than the ones it is against — see the file's own note, and
-    // decision 81, which is what happened the first time that was the other way round.
-    renumberOrderedLists(),
     // An empty note said nothing at all — a caret in a blank rectangle. The reference prompts, and
     // it matters more here than it does there: ⌘N now leaves nothing on disk until the first write,
     // so an empty pane is genuinely a blank page rather than a file that already exists.

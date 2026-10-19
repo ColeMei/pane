@@ -2620,6 +2620,10 @@ export function runGestures(view, doc) {
     }
     r.check("…and ⌫ there keeps it too (194)", "## Head words", typed("top line\n\n## Head words\n", 0, 13, "Backspace"));
     r.check("from partway into a line, the lines merge into the first (194)", "top Qitem", typed("top line\n\n- item\n", 4, 12));
+    // 199: the list counts from the block that was kept, not from the edit before it was kept.
+    r.check("typing over the lines above a numbered item numbers it 1 (199)", "1. Qtwo", typed("para\n\n1. one\n2. two\n", 0, 16));
+    r.check("…selected from below too (199)", "1. Qtwo", typed("para\n\n1. one\n2. two\n", 16, 0));
+    r.check("…and ⌫ there too (199)", "1. two", typed("para\n\n1. one\n2. two\n", 0, 16, "Backspace"));
   }
 
   // 195: Home and End are ⌘← and ⌘→ (Cole kept them to the line's edges, 2026-10-18): the row's
