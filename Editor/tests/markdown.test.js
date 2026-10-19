@@ -2591,9 +2591,9 @@ export function runGestures(view, doc) {
   // 193: typing over a selection that empties a construct of its text, from outside it, takes the
   // construct whole; it used to leave its markers, `Q****`. Typing over exactly its text keeps it.
   {
-    const typed = (text, from, to) => {
+    const typed = (text, from, to, key) => {
       d.load(`top\n\n${text}\n\nend\n`); view.dispatch({ selection: { anchor: 5 + from, head: 5 + to } });
-      d.type("Q");
+      if (key) d.press(key); else d.type("Q");
       return view.state.doc.line(3).text;
     };
     r.check("from plain text to a bold's inner end: the bold goes whole (193)", "Q zz", typed("aa **bold words** zz", 0, 15));
@@ -2602,6 +2602,9 @@ export function runGestures(view, doc) {
     r.check("over a link's whole label from before it: the link goes (193)", "aa Q zz", typed("aa [link words](https://x.com) zz", 3, 14));
     r.check("over exactly a bold's text: the bold stays, holding the new text (193)", "aa **Q** zz", typed("aa **bold words** zz", 5, 15));
     r.check("from inline code's inner start to the line's end: the code stays, holding the new text (193)", "aa `Q`", typed("aa `code words` zz", 4, 18));
+    r.check("over a bold italic's whole text from before it: both go (201)", "Q zz", typed("aa ***both words*** zz", 16, 0));
+    r.check("…and ⌫ there too (201)", " zz", typed("aa ***both words*** zz", 16, 0, "Backspace"));
+    r.check("a bold that goes whole leaves its link no leading space (201, 177)", "aa [link](https://x.com) zz", typed("aa [in **bold** link](https://x.com) zz", 4, 13, "Backspace"));
   }
 
   // 194: typing over (or deleting) a selection that takes whole lines and ends at a block's text

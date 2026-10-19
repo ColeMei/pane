@@ -79,9 +79,11 @@ export function keptDeletion(state: EditorState, from: number, end: number, inse
   const pieces = subtract({ from, to }, cut.flatMap(markers));
   if (pieces.length === 0 && insert !== "") return null;
 
-  const deleted = (pos: number) => pieces.some((p) => pos >= p.from && pos < p.to);
   const extra: Region[] = [];
-  for (const s of spans) {
+  // Innermost first, and what an inner construct takes counts as deleted for the one around it:
+  // `***a***` emptied is two constructs emptied, not one inside a survivor (201).
+  const deleted = (pos: number) => [...pieces, ...extra].some((p) => pos >= p.from && pos < p.to);
+  for (const s of [...spans].sort((a, b) => (a.to - a.from) - (b.to - b.from))) {
     if (!pieces.some((p) => overlaps({ from: s.textFrom, to: s.textTo }, p.from, p.to))) continue;
     let first = s.textFrom;
     while (first < s.textTo && deleted(first)) first++;
