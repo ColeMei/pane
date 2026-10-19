@@ -16,13 +16,16 @@ export const transpose: Command = (view) => {
   if (!range.empty) return true;
   const line = view.state.doc.lineAt(range.head);
   if (range.head === line.from) return true;
-  // Mid-line, the letters either side; at the line's end, the two before it.
-  const a = range.head === line.to ? range.head - 2 : range.head - 1;
+  // Mid-line, the letters either side; at the line's end, the two before it. Where only markers
+  // follow the caret on the line, it is at the line's end on screen.
+  let atEnd = true;
+  for (let pos = range.head; pos < line.to; pos++) if (!isMarkerChar(view, pos)) { atEnd = false; break; }
+  const a = atEnd ? range.head - 2 : range.head - 1;
   const b = a + 1;
   if (a < line.from) return true;
   if (isMarkerChar(view, a) || isMarkerChar(view, b)) return true;
   const doc = view.state.doc;
   const swapped = doc.sliceString(b, b + 1) + doc.sliceString(a, a + 1);
-  view.dispatch({ changes: { from: a, to: b + 1, insert: swapped }, selection: { anchor: b + 1 }, userEvent: "input.transpose", scrollIntoView: true });
+  view.dispatch({ changes: { from: a, to: b + 1, insert: swapped }, selection: { anchor: atEnd ? range.head : b + 1 }, userEvent: "input.transpose", scrollIntoView: true });
   return true;
 };

@@ -2537,6 +2537,7 @@ export function runGestures(view, doc) {
       ["inside a bold, between letters: they swap", "aa **bold** zz", 7, "aa **bloQd** zz"],
       ["at a heading's text start: nothing (its marker is not a letter)", "## Head words", 3, "## QHead words"],
       ["at an inline code's inner end: nothing", "aa `code` zz", 8, "aa `codeQ` zz"],
+      ["at a bold's inner end that ends the line: the two letters before it, as at a line's end", "aa **bold**", 9, "aa **bodlQ**"],
     ];
     for (const [name, text, at, want] of T) r.check(`⌃T ${name} (190)`, want, transpose(text, at));
   }
