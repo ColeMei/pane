@@ -2586,6 +2586,22 @@ export function runGestures(view, doc) {
     for (const [name, text, at, keys, want] of C) r.check(`${name} (192)`, want, selected(text, at, keys));
   }
 
+  // 193: typing over a selection that empties a construct of its text, from outside it, takes the
+  // construct whole; it used to leave its markers, `Q****`. Typing over exactly its text keeps it.
+  {
+    const typed = (text, from, to) => {
+      d.load(`top\n\n${text}\n\nend\n`); view.dispatch({ selection: { anchor: 5 + from, head: 5 + to } });
+      d.type("Q");
+      return view.state.doc.line(3).text;
+    };
+    r.check("from plain text to a bold's inner end: the bold goes whole (193)", "Q zz", typed("aa **bold words** zz", 0, 15));
+    r.check("from a bold's inner end back past its start: the same (193)", "Q zz", typed("aa **bold words** zz", 15, 0));
+    r.check("over inline code's whole text from before it: the code goes (193)", "aa Q zz", typed("aa `code words` zz", 3, 14));
+    r.check("over a link's whole label from before it: the link goes (193)", "aa Q zz", typed("aa [link words](https://x.com) zz", 3, 14));
+    r.check("over exactly a bold's text: the bold stays, holding the new text (193)", "aa **Q** zz", typed("aa **bold words** zz", 5, 15));
+    r.check("from inline code's inner start to the line's end: the code stays, holding the new text (193)", "aa `Q`", typed("aa `code words` zz", 4, 18));
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {

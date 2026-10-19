@@ -75,14 +75,18 @@ export function keptDeletion(state: EditorState, from: number, to: number, inser
 
   const deleted = (pos: number) => pieces.some((p) => pos >= p.from && pos < p.to);
   const extra: Region[] = [];
-  if (insert === "") {
-    for (const s of spans) {
-      if (!pieces.some((p) => overlaps({ from: s.textFrom, to: s.textTo }, p.from, p.to))) continue;
-      let first = s.textFrom;
-      while (first < s.textTo && deleted(first)) first++;
-      let last = s.textTo;
-      while (last > first && deleted(last - 1)) last--;
-      if (first >= last) { extra.push({ from: s.from, to: s.to }); continue; }
+  for (const s of spans) {
+    if (!pieces.some((p) => overlaps({ from: s.textFrom, to: s.textTo }, p.from, p.to))) continue;
+    let first = s.textFrom;
+    while (first < s.textTo && deleted(first)) first++;
+    let last = s.textTo;
+    while (last > first && deleted(last - 1)) last--;
+    // Emptied of text, a construct goes whole: always for a key's deletion, and for typing when the
+    // selection starts outside it (193). Typed text takes the style where the selection starts, so
+    // over exactly its text, or from its inner start onwards, it stays.
+    if (first >= last && (insert === "" || from <= s.from)) { extra.push({ from: s.from, to: s.to }); continue; }
+    if (first >= last) continue;
+    if (insert === "") {
       const space = (pos: number) => /\s/.test(doc.sliceString(pos, pos + 1));
       if (!space(s.textFrom)) { let p = first; while (p < last && space(p)) p++; if (p > first) extra.push({ from: first, to: p }); }
       if (!space(s.textTo - 1)) { let p = last; while (p > first && space(p - 1)) p--; if (p < last) extra.push({ from: p, to: last }); }
