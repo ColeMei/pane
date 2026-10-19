@@ -125,9 +125,13 @@ declare global {
   }
 }
 
-/** The emacs keys macOS gives every text view, each bound to what Pane binds its twin to (189). */
-const EMACS_TWINS: Record<string, string> = {
+/**
+ * Keys that are another key under another name, bound to what Pane binds their twin to: the emacs
+ * keys macOS gives every text view (189), and Home and End, kept to the line's edges (195).
+ */
+const KEY_TWINS: Record<string, string> = {
   ArrowRight: "Ctrl-f", ArrowLeft: "Ctrl-b", ArrowDown: "Ctrl-n", ArrowUp: "Ctrl-p", Backspace: "Ctrl-h", Delete: "Ctrl-d",
+  "Mod-ArrowLeft": "Home", "Mod-ArrowRight": "End",
 };
 
 function send(message: OutboundMessage): void {
@@ -732,7 +736,7 @@ function baseExtensions(): Extension[] {
         // ⌃T never swaps a marker or across a line's edge (190).
         { key: "Ctrl-t", run: transpose },
       ].flatMap((binding) => {
-        const twin = EMACS_TWINS[binding.key ?? ""];
+        const twin = KEY_TWINS[binding.key ?? ""];
         return twin ? [binding, { ...binding, key: twin }] : [binding];
       }))
     ),

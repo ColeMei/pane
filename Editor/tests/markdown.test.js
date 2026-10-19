@@ -2621,6 +2621,32 @@ export function runGestures(view, doc) {
     r.check("from partway into a line, the lines merge into the first (194)", "top Qitem", typed("top line\n\n- item\n", 4, 12));
   }
 
+  // 195: Home and End are ⌘← and ⌘→ (Cole kept them to the line's edges, 2026-10-18): the row's
+  // edge on a wrapped line, outside a construct, after a block's marker, ⇧ forms too.
+  {
+    const LONG = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo";
+    const FIXTURES = ["aa **bold words** zz", "**bold words** zz", "aa `code words` zz", "## Head words", "- item one\n- Item words",
+      `${LONG} **${LONG}** ${LONG}`];
+    const outcome = (source, at, key, mods) => {
+      d.load(source); view.dispatch({ selection: { anchor: at } });
+      d.press(key, mods);
+      const m = view.state.selection.main;
+      return `${d.text()}|${m.anchor}|${m.head}`;
+    };
+    for (const [key, twin] of [["Home", "ArrowLeft"], ["End", "ArrowRight"]]) {
+      for (const shift of [false, true]) {
+        const misses = [];
+        for (const text of FIXTURES) {
+          const source = `top\n\n${text}\n\nend\n`;
+          for (let at = 5; at <= 5 + text.length; at += text.length > 60 ? 9 : 2) {
+            if (outcome(source, at, key, { shiftKey: shift }) !== outcome(source, at, twin, { shiftKey: shift, metaKey: true })) misses.push(`${JSON.stringify(text.slice(0, 12))}@${at - 5}`);
+          }
+        }
+        r.check(`${shift ? "⇧" : ""}${key} ends where ${shift ? "⇧" : ""}⌘${twin === "ArrowLeft" ? "←" : "→"} does, from every other place (195)`, 0, misses.length, misses.slice(0, 4).join(" "));
+      }
+    }
+  }
+
   // 171: ⏎ and ⇧⏎ inside an inline construct close it and open it again on the new line, as
   // Typora does; at its inner edge they step outside it first, so nothing is split.
   const enterIn = (text, needle, offset, keys = {}) => {
