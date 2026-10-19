@@ -15,7 +15,9 @@ if [[ "${1:-}" != "--skip-editor" ]]; then
 fi
 
 echo "==> Running the markdown suite"
-swift Scripts/editor-probe.swift \
+# The ⌃-key twin rows (189) press a key from every other place in eleven kinds of line, which takes
+# ~40 s here and twice that on CI: past the probe's default minute.
+PROBE_TIMEOUT=300 swift Scripts/editor-probe.swift \
 	"$PWD/Editor/dist/index.html" \
 	"$PWD/Editor/tests/markdown.test.js" | tee markdown-findings.txt
 echo "==> Table written to markdown-findings.txt"
