@@ -165,6 +165,13 @@ export function run(view, _bar, doc) {
   // sweep sets such starts aside too): its cells are skipped and counted, not failed.
   const offStarts = new Set();
   let skipped = 0;
+  // Rows waiting on Cole's call (2026-10-19): `**left***right*` draws as one word, so is ⌥ a word
+  // move or a style stop; and ⌥⌦ at a nested ordered item's start (158). They run; a divergence is
+  // a note, not a failure, until the call lands.
+  const PENDING = new Set(["st.adj · @22 · opt+right", "st.adj · @26 · opt+right", "st.adj · @26 · shift+opt+right",
+    "st.adj · @26 · opt+fdel", "st.adj · @33 · opt+left", "ne.olist · @37 · opt+fdel"]);
+  let pending = 0;
+  const fail = (f) => { if (PENDING.has(f.case.split("  [")[0])) pending++; else failures.push(f); };
   for (const [si, ki, wantFrom, wantDel, wantIns, wantLabels, why] of cells.slice(lo, hi)) {
     if (offStarts.has(si)) { skipped++; continue; }
     const [fi, spec] = starts[si];
@@ -213,7 +220,7 @@ export function run(view, _bar, doc) {
     const plain = (t) => t.replace(/\]\(https:\/\/[a-z./]+\)/g, "").replace(/\*\*|\*|`|~~|==|<u>|<\/u>|\[|\]/g, "");
     const onScreen = !same && marks(wantDoc) === marks(trim(out)) && plain(wantDoc) === plain(trim(out));
     if (!wantLabels) {
-      if (!same && !onScreen) failures.push({ case: `${name}  [${why}]`, want: `${JSON.stringify(wantIns)} at ${wantFrom}, ${wantDel} gone`, got: `${JSON.stringify(ins)} at ${from}, ${del} gone: …${near}…` });
+      if (!same && !onScreen) fail({ case: `${name}  [${why}]`, want: `${JSON.stringify(wantIns)} at ${wantFrom}, ${wantDel} gone`, got: `${JSON.stringify(ins)} at ${from}, ${del} gone: …${near}…` });
       continue;
     }
     const rowsByLine = startRows ?? endRows ?? snapshot(fx);
@@ -234,9 +241,12 @@ export function run(view, _bar, doc) {
     if (!ok && spec.role && combo === "-") { offStarts.add(si); checked--; skipped++; continue; }
     if (!ok) {
       const show = (ls) => ls.map((l) => (l ? l.slice(0, 3).join(".") : "")).join("…");
-      failures.push({ case: `${name}  [${why}]`, want: `${JSON.stringify(wantIns)} at ${wantFrom}  ${show(wantLabels)}`, got: `${JSON.stringify(ins)} at ${from}  ${show(mine)}: …${near}…` });
+      fail({ case: `${name}  [${why}]`, want: `${JSON.stringify(wantIns)} at ${wantFrom}  ${show(wantLabels)}`, got: `${JSON.stringify(ins)} at ${from}  ${show(mine)}: …${near}…` });
     }
   }
-  const note = skipped ? `${skipped} cells from ${offStarts.size} wrapped-row starts this layout places differently, skipped` : undefined;
+  const notes = [];
+  if (skipped) notes.push(`${skipped} cells from ${offStarts.size} wrapped-row starts this layout places differently, skipped`);
+  if (pending) notes.push(`${pending} cells pending a call, diverging`);
+  const note = notes.length ? notes.join("; ") : undefined;
   return { checked, failures, note };
 }
