@@ -38,6 +38,8 @@ export const cases: Case[] = [
   { name: "an empty `> ` leaves the quote", doc: "exits:> q\n> |\nafter", want: "> q\n\n|\nafter" },
   { name: "an empty top-level `- ` leaves the list", doc: "exits:- one\n- |\nafter", want: "- one\n\n|\nafter" },
   { name: "an empty nested item is delegated, not exited", doc: "exits:- one\n  - |", want: FALLTHROUGH },
+  { name: "⇧⏎ at a heading's text start pushes the heading down, as ⏎ does (198)", doc: "exits:top\n\n## |Head", want: "top\n\n\n\n## |Head" },
+  { name: "…but not in the middle of a heading", doc: "exits:## He|ad", want: FALLTHROUGH },
   { name: "the delegation predicate says yes to an empty nested item", doc: "nested:- one\n  - |", want: "yes" },
   { name: "…and no to an item with text", doc: "nested:- one|", want: "no" },
   { name: "…and no to prose", doc: "nested:hello|", want: "no" },

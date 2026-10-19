@@ -9,6 +9,7 @@
  *   1. ⇧⏎ inside a fence lands on the line after the closing fence, making one if needed (42)
  *   2. an empty marker line exits its block on ⇧⏎ exactly as on ⏎ (43)
  *   3. ⇧⏎ inside an item writes a soft break at the item's content column (108)
+ *   4. ⇧⏎ at a heading's text start pushes the heading down, as ⏎ does (178, 198)
  */
 
 import { syntaxTree } from "@codemirror/language";
@@ -17,7 +18,7 @@ import type { LineContext } from "./context";
 import { delegateWhen, FENCE_OPENING, keyCommand } from "./context";
 import { chain, rows, type KeyEdit } from "./edit";
 import { fencesOf } from "../blocks";
-import { continueMarkup, exitEmptyBlockquote, exitListToParagraph } from "./enter";
+import { continueMarkup, exitEmptyBlockquote, exitListToParagraph, pushHeadingDown } from "./enter";
 
 const INPUT = "input";
 
@@ -66,7 +67,7 @@ export function softBreakInListItem(ctx: LineContext): KeyEdit | null {
   return { changes: [{ from: ctx.head, to: ctx.head, insert }], anchor: ctx.head + insert.length, userEvent: INPUT, scrollIntoView: true };
 }
 
-export const shiftEnterExits = rows(escapeCodeBlock, exitEmptyBlockquote, exitListToParagraph);
+export const shiftEnterExits = rows(escapeCodeBlock, exitEmptyBlockquote, exitListToParagraph, pushHeadingDown);
 
 export const shiftEnterKey = chain(
   keyCommand(shiftEnterExits),
