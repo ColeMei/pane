@@ -2560,7 +2560,8 @@ export function runGestures(view, doc) {
       ["⌥→ at a bold's inner end goes to the next word's end", "aa **bold words** zz", 15, [[R, A]], "top⏎⏎aa **bold words** zzQ⏎⏎end line"],
       ["⇧← ⇧→ at a bold's inner end comes back to a caret, and typing stays in the bold", "aa **bold words** zz", 15, [[L, S], [R, S]], "top⏎⏎aa **bold wordsQ** zz⏎⏎end line"],
       ["⇧→ ⇧← at a bold's inner end comes back to a caret too", "aa **bold words** zz", 15, [[R, S], [L, S]], "top⏎⏎aa **bold wordsQ** zz⏎⏎end line"],
-      ["⇧⌘→ at inline code's inner end selects nothing, so typing keeps the backtick", "aa `code words`", 14, [[R, { shiftKey: true, metaKey: true }]], "top⏎⏎aa `code wordsQ`⏎⏎end line"],
+      ["⇧⌘→ at inline code's inner end selects nothing, so typing keeps the backtick (the caret moves past it, as Typora's)", "aa `code words`", 14, [[R, { shiftKey: true, metaKey: true }]], "top⏎⏎aa `code words`Q⏎⏎end line"],
+      ["⇧⌘← then ⇧⌘→ from inline code's inner start at a line's start takes the whole line, code and all", "`code words` zz", 1, [[L, { shiftKey: true, metaKey: true }], [R, { shiftKey: true, metaKey: true }]], "top⏎⏎Q⏎⏎end line"],
     ];
     for (const [name, text, at, keys, want] of C) r.check(`${name} (191)`, want, after(text, at, keys));
   }

@@ -167,9 +167,10 @@ function placeRange(tr: Transaction): Transaction | TransactionSpec {
   const head = placeRangeEnd(state, range.head, mapped(before.head), range.anchor);
   const anchor = placeRangeEnd(state, range.anchor, mapped(before.anchor), head, false);
   // A selection made by a key or the pointer that holds nothing but markers selects nothing on
-  // screen, and typing over it would delete them: it is the caret at its anchor (191).
+  // screen, and typing over it would delete them: it is a caret (191). Made from a caret, the move
+  // just moved it, so at the head; shrunk back from a selection, the caret is where it began.
   if (tr.isUserEvent("select") && !tr.docChanged && onlyMarkerText(state, Math.min(anchor, head), Math.max(anchor, head))) {
-    return rebuilt(tr, one(EditorSelection.cursor(anchor)));
+    return rebuilt(tr, one(EditorSelection.cursor(before.empty ? head : anchor)));
   }
   if (head === range.head && anchor === range.anchor) return tr;
   return rebuilt(tr, one(anchor === head ? EditorSelection.cursor(head) : EditorSelection.range(anchor, head)));
