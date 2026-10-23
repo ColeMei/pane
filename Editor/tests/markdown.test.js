@@ -2270,6 +2270,7 @@ export function runGestures(view, doc) {
     r.check(`${name}: …and selects nothing`, true, sel().empty);
   }
 
+
   // 169: a selection's ends rest where a caret may. Typing over one never deletes a hidden marker
   // on its own, a fence line on its own, or half of a paragraph break.
   const shift = (key) => d.press(key, { shiftKey: true });
@@ -2297,6 +2298,42 @@ export function runGestures(view, doc) {
   shift("ArrowUp");
   r.check("⇧↑ on a heading that starts the note selects nothing (169)", true, sel().empty);
   r.check("…and typing keeps the heading", "## QHead words", overtype().split("\n")[0]);
+
+  // 206: a double- or triple-click acts on where the first click landed, though that click's reveal
+  // moved the text; and a triple-click takes the line's text, not its break. Aimed, like a hand,
+  // before the first click, and every click of the series at the same point.
+  const clicks = (pos, count) => {
+    const box = view.coordsAtPos(pos);
+    const at = { clientX: Math.round(box.left + 1), clientY: Math.round((box.top + box.bottom) / 2) };
+    for (let detail = 1; detail <= count; detail++) {
+      d.content.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail, button: 0, ...at }));
+      document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, detail, button: 0, ...at }));
+    }
+  };
+  for (const [name, open, close, word] of STYLED) {
+    for (const [target, aim] of [[word, 2], ["words", 2]]) {
+      d.load(`aa ${open}${word} words${close} zz\n\nPARA\n`);
+      d.at("PARA");
+      clicks(d.text().indexOf(`${target}${target === word ? " words" : close}`) + aim, 2);
+      r.check(`${name}: a double-click on \`${target}\` selects it (206)`, target, selected());
+    }
+  }
+  for (const [name, line, text] of [
+    ["paragraph", "Para words here", "Para words here"], ["heading", "## Head words", "Head words"],
+    ["bullet", "- Item words", "Item words"], ["numbered", "2. Item words", "Item words"],
+    ["task", "- [ ] Item words", "Item words"], ["quote", "> Aside words", "Aside words"],
+  ]) {
+    d.load(`top\n\n${line}\n\nend line\n`);
+    d.at("top");
+    clicks(d.text().indexOf(text) + text.length - 3, 3);
+    r.check(`${name}: a triple-click selects the line's text (206)`, text, selected());
+    r.check(`${name}: …and typing over it keeps the next paragraph`, `${line.slice(0, line.length - text.length)}Q\n\nend line`,
+      overtype().split("\n").slice(2, 5).join("\n"));
+  }
+  d.load("- item one\n- Item words\n- item three\n");
+  d.at("item one");
+  clicks(d.text().indexOf("Item words") + 6, 3);
+  r.check("a triple-click in a list item takes none of the next item (206)", "Item words", selected());
 
   const FENCE = "top\n\n```\nfirst code\nlast code\n```\n\nPARA\n";
   d.load(FENCE); d.at("first code");

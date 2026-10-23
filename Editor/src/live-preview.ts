@@ -23,6 +23,7 @@ import { buildDecorations, TEXT_STYLE_CLASSES } from "./decorate";
 import { markerSpanEnd, notAPlace } from "./blocks";
 import { pendingPair } from "./format-bar";
 import { arrivedByEditAfter, revealPolicy } from "./reveal";
+import { pointerSelect } from "./pointer-select";
 import type { SyntaxNode } from "@lezer/common";
 import {
   type EditorState,
@@ -373,6 +374,7 @@ export function livePreview(openLink: (target: string) => void): Extension {
     blankLineClickHandler,
     taskClickHandler,
     linkClickHandler(openLink),
+    pointerSelect,
   ];
 }
 

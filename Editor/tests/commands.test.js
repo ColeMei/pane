@@ -1488,17 +1488,25 @@ export function runLinkOpening(view, doc) {
 
   // The invariant, swept over what was actually painted rather than over the tree.
   {
-    const spans = [...view.contentDOM.querySelectorAll(".pane-link")];
+    const painted = () => {
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      return [...view.contentDOM.querySelectorAll(".pane-link")];
+    };
+    const spans = painted();
     const missed = [];
-    for (const span of spans) {
+    for (let i = 0; i < spans.length; i++) {
+      // Read afresh with the caret away each time: a click that opens nothing places the caret,
+      // and the line it lands on reveals its source and repaints its spans (206).
+      const span = painted()[i];
+      const name = span.textContent;
       const box = span.getBoundingClientRect();
-      if (box.width === 0) { missed.push(`${span.textContent} (empty span)`); continue; }
+      if (box.width === 0) { missed.push(`${name} (empty span)`); continue; }
       sent.length = 0;
-      view.contentDOM.dispatchEvent(new MouseEvent("mousedown", {
-        bubbles: true, cancelable: true, metaKey: true, button: 0,
-        clientX: box.left + box.width / 2, clientY: box.top + box.height / 2,
-      }));
-      if (!sent.some((m) => m.type === "openLink")) missed.push(span.textContent);
+      const at = { bubbles: true, cancelable: true, metaKey: true, button: 0, detail: 1,
+        clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
+      view.contentDOM.dispatchEvent(new MouseEvent("mousedown", at));
+      document.dispatchEvent(new MouseEvent("mouseup", at));
+      if (!sent.some((m) => m.type === "openLink")) missed.push(name);
     }
     // Exactly one exception, named rather than tolerated: `[text][nope]` has no definition in the
     // note, so there is no target to open. It is painted as a link because `@lezer/markdown` does
