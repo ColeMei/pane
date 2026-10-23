@@ -165,11 +165,9 @@ export function run(view, _bar, doc) {
   // sweep sets such starts aside too): its cells are skipped and counted, not failed.
   const offStarts = new Set();
   let skipped = 0;
-  // Rows waiting on Cole's call (2026-10-19): `**left***right*` draws as one word, so is ⌥ a word
-  // move or a style stop; and ⌥⌦ at a nested ordered item's start (158). They run; a divergence is
-  // a note, not a failure, until the call lands.
-  const PENDING = new Set(["st.adj · @22 · opt+right", "st.adj · @26 · opt+right", "st.adj · @26 · shift+opt+right",
-    "st.adj · @26 · opt+fdel", "st.adj · @33 · opt+left", "ne.olist · @37 · opt+fdel"]);
+  // Rows waiting on Cole's call (2026-10-19): ⌥⌦ at a nested ordered item's start (158). They run;
+  // a divergence is a note, not a failure, until the call lands.
+  const PENDING = new Set(["ne.olist · @37 · opt+fdel"]);
   let pending = 0;
   const fail = (f) => { if (PENDING.has(f.case.split("  [")[0])) pending++; else failures.push(f); };
   for (const [si, ki, wantFrom, wantDel, wantIns, wantLabels, why] of cells.slice(lo, hi)) {

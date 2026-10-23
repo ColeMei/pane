@@ -2563,6 +2563,13 @@ export function runGestures(view, doc) {
       ["⇧→ ⇧← at a bold's inner end comes back to a caret too", "aa **bold words** zz", 15, [[R, S], [L, S]], "top⏎⏎aa **bold wordsQ** zz⏎⏎end line"],
       ["⇧⌘→ at inline code's inner end selects nothing, so typing keeps the backtick (the caret moves past it, as Typora's)", "aa `code words`", 14, [[R, { shiftKey: true, metaKey: true }]], "top⏎⏎aa `code words`Q⏎⏎end line"],
       ["⇧⌘← then ⇧⌘→ from inline code's inner start at a line's start takes the whole line, code and all", "`code words` zz", 1, [[L, { shiftKey: true, metaKey: true }], [R, { shiftKey: true, metaKey: true }]], "top⏎⏎Q⏎⏎end line"],
+      // `**left***right*` draws as one word, and the ⌥ keys take it as one (amended 2026-10-23).
+      ["⌥→ before a bold run straight into an italic goes past both: they draw as one word", "aa **left***right* zz", 3, [[R, A]], "top⏎⏎aa **left***right*Q zz⏎⏎end line"],
+      ["⌥→ inside the bold of a bold run into an italic goes past the italic too", "aa **left***right* zz", 7, [[R, A]], "top⏎⏎aa **left***right*Q zz⏎⏎end line"],
+      ["⌥→ inside the italic of a bold run into an italic goes to its end", "aa **left***right* zz", 14, [[R, A]], "top⏎⏎aa **left***right*Q zz⏎⏎end line"],
+      ["⌥← inside the italic of a bold run into an italic goes before the bold too", "aa **left***right* zz", 14, [[L, A]], "top⏎⏎aa Q**left***right* zz⏎⏎end line"],
+      ["⇧⌥→ inside the bold of a bold run into an italic selects to the drawn word's end", "aa **left***right* zz", 7, [[R, { shiftKey: true, altKey: true }]], "top⏎⏎aa **leQ** zz⏎⏎end line"],
+      ["⌥⌦ inside the bold of a bold run into an italic deletes to the drawn word's end", "aa **left***right* zz", 7, [["Delete", A]], "top⏎⏎aa **leQ** zz⏎⏎end line"],
     ];
     for (const [name, text, at, keys, want] of C) r.check(`${name} (191)`, want, after(text, at, keys));
   }
