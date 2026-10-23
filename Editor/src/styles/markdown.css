@@ -793,6 +793,15 @@
   background: var(--accent);
 }
 
+/* At 1x WebKit floors the 1.5px ring to 1px but places the fill at 2.5px, so the 7px fill sat
+ * half a pixel off centre (205). The fill keeps its 2x share of the box (12 of 28 is 6 of 14), and
+ * the gap is what is left of the 12px inside the ring: 3px each side. */
+@media (max-resolution: 1.5dppx) {
+  .pane-task--done::after {
+    inset: 3px;
+  }
+}
+
 .pane-task--todo {
   border: 1.5px solid var(--checkbox-border);
   background: transparent;

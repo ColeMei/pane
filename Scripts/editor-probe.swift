@@ -44,6 +44,42 @@ window.contentView = web
 window.setFrameOrigin(CGPoint(x: -30_000, y: -30_000))
 window.orderFront(nil)
 
+// `PROBE_SCALE=1` renders as a 1x display does, whatever this Mac's screen is: a hairline that is
+// whole at 2x can floor to a different width at 1x (205's checkbox, LAB 2026-10-09). WebKit SPI,
+// measured on home 2026-10-23: `devicePixelRatio` and the snapshot's pixels both follow it.
+if let scale = Double(ProcessInfo.processInfo.environment["PROBE_SCALE"] ?? "") {
+    let sel = NSSelectorFromString("_setOverrideDeviceScaleFactor:")
+    guard web.responds(to: sel) else {
+        FileHandle.standardError.write(Data("editor-probe: this WebKit cannot override the scale\n".utf8))
+        exit(2)
+    }
+    typealias SetScale = @convention(c) (AnyObject, Selector, CGFloat) -> Void
+    unsafeBitCast(web.method(for: sel), to: SetScale.self)(web, sel, CGFloat(scale))
+}
+
+/// `await webkit.messageHandlers.probeShot.postMessage({x, y, width, height})`, in CSS pixels:
+/// the rendered pixels of that rectangle as `{width, height, rgba}`, `rgba` base64, at the device
+/// scale. So a suite can assert what was painted rather than what the style says.
+final class Shot: NSObject, WKScriptMessageHandlerWithReply {
+    func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
+        guard let body = message.body as? [String: Any], let web = message.webView,
+              let x = body["x"] as? Double, let y = body["y"] as? Double,
+              let w = body["width"] as? Double, let h = body["height"] as? Double else { return (nil, "bad rectangle") }
+        let config = WKSnapshotConfiguration()
+        config.rect = CGRect(x: x, y: y, width: w, height: h)
+        guard let image = try? await web.takeSnapshot(configuration: config),
+              let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return (nil, "no snapshot") }
+        let pw = cg.width, ph = cg.height
+        var data = [UInt8](repeating: 0, count: pw * ph * 4)
+        let ctx = CGContext(data: &data, width: pw, height: ph, bitsPerComponent: 8, bytesPerRow: pw * 4,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: pw, height: ph))
+        return (["width": pw, "height": ph, "rgba": Data(data).base64EncodedString()], nil)
+    }
+}
+let shot = Shot()
+web.configuration.userContentController.addScriptMessageHandler(shot, contentWorld: .page, name: "probeShot")
+
 // Never let a hung page hold the build. The gesture replay runs thousands of cells and sets its own.
 let timeout = Double(ProcessInfo.processInfo.environment["PROBE_TIMEOUT"] ?? "") ?? 60
 DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {

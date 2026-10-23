@@ -21,3 +21,9 @@ PROBE_TIMEOUT=300 swift Scripts/editor-probe.swift \
 	"$PWD/Editor/dist/index.html" \
 	"$PWD/Editor/tests/markdown.test.js" | tee markdown-findings.txt
 echo "==> Table written to markdown-findings.txt"
+
+# What it draws, read off the pixels, as a 1x display and a 2x one paint it (205).
+for scale in 1 2; do
+	echo "==> Running the pixel pass at ${scale}x"
+	PROBE_SCALE=$scale swift Scripts/editor-probe.swift "$PWD/Editor/dist/index.html" "$PWD/Editor/tests/pixels.test.js"
+done
