@@ -597,5 +597,45 @@ export function run(view, bar, doc) {
     press("Escape");
   }
 
+  // ---- (204) ⏎ and Esc that end an input method's composition belong to it ---------------------
+  //
+  // Measured with Simplified Pinyin on work, 2026-10-09: ⏎ that commits `ni hao` opened a note in ⌘P,
+  // and Esc that cancels it closed ⌘P, ⌘K and find. Safari sends the committing key either during
+  // the composition (`isComposing`) or just after `compositionend`; both are the composition's.
+  {
+    window.paneHost.loadNote("ime.md", "aa one aa two aa\n", 0, false);
+    const openFind = () => {
+      if (!doc.querySelector(".pane").hasAttribute("data-find"))
+        view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, keyCode: 70, bubbles: true, cancelable: true }));
+    };
+    const findInput = doc.querySelector(".find__input");
+    const wait = (ms) => { const end = performance.now() + ms; while (performance.now() < end); };
+    const send = (field, key, init = {}) =>
+      field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
+    const compose = (field, type) => field.dispatchEvent(new CompositionEvent(type, { bubbles: true, data: "你好" }));
+    for (const [name, openIt, field, attr] of [
+      ["⌘P", () => openWith(6), search, "data-switcher"],
+      ["⌘K", () => { if (!doc.querySelector(".pane").hasAttribute("data-actions")) doc.getElementById("open-actions").click(); }, actionsSearch, "data-actions"],
+      ["find", openFind, findInput, "data-find"],
+    ]) {
+      const open = () => doc.querySelector(".pane").hasAttribute(attr);
+      openIt();
+      field.focus();
+      const head = view.state.selection.main.head;
+      compose(field, "compositionstart");
+      send(field, "Enter", { isComposing: true });
+      check(`(204) ${name}: ⏎ during a composition leaves the panel open`, "open", open() ? "open" : "closed", open());
+      check(`(204) ${name}: …and does nothing else`, head, view.state.selection.main.head, view.state.selection.main.head === head);
+      send(field, "Escape", { isComposing: true });
+      check(`(204) ${name}: Esc during a composition leaves it open`, "open", open() ? "open" : "closed", open());
+      compose(field, "compositionend");
+      send(field, "Enter");
+      check(`(204) ${name}: ⏎ just after compositionend is the composition's too`, "open", open() ? "open" : "closed", open());
+      wait(150);
+      send(field, "Escape");
+      check(`(204) ${name}: a later Esc closes it`, "closed", open() ? "open" : "closed", !open());
+    }
+  }
+
   return { checked, failures };
 }

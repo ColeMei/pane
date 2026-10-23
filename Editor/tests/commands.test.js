@@ -1062,6 +1062,18 @@ export function runFooterCount(view, doc) {
 
   press();
   check("and a second press puts words back", "1 word", el.textContent);
+  // 204: Chinese and Japanese are written without spaces, and each character is a word, as Word and
+  // Pages count them. The sentence was 1 word.
+  set("今天我们去公园散步，天气很好。\n");
+  check("each Chinese character is a word, punctuation none (204)", "13 words", el.textContent);
+  set("用 Pane 写笔记\n");
+  check("…and a Latin word among them is one (204)", "5 words", el.textContent);
+  set("Pane的笔记\n");
+  check("…with no space between them too (204)", "4 words", el.textContent);
+  set("ひらがなとカタカナ\n");
+  check("kana count the same way (204)", "9 words", el.textContent);
+  set("오늘 날씨\n");
+  check("Korean is spaced, so it counts by spaces (204)", "2 words", el.textContent);
   check("and the count names nothing on hover", null, el.getAttribute("data-tip"));
 
   // The one that matters. `preventDefault` on mousedown is what keeps the caret where it was.

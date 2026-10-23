@@ -7,6 +7,7 @@
  */
 
 import { desiredOverlayHeight, pointerMotion } from "./overlay";
+import { composing } from "./ime";
 
 export interface NoteSummary {
   filename: string;
@@ -151,7 +152,7 @@ export function mountSwitcher(options: SwitcherOptions) {
   document.addEventListener(
     "keydown",
     (event) => {
-      if (event.key !== "Escape" || !isOpen()) return;
+      if (event.key !== "Escape" || !isOpen() || composing(event)) return;
       event.preventDefault();
       event.stopPropagation();
       close();
@@ -436,6 +437,8 @@ export function mountSwitcher(options: SwitcherOptions) {
   });
 
   search.addEventListener("keydown", (event) => {
+    // An input method's ⏎ and Esc are its own (204).
+    if (composing(event)) return;
     // Decision 182: Delete Note's key acts on the selected row here, as ⌘⏎ pins it. Not in Recently
     // Deleted, where the row's only delete has no undo behind it.
     if (mode === "notes" && rows.length > 0 && options.isDeleteKey(event)) {

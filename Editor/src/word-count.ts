@@ -53,12 +53,15 @@ export function countCharacters(markdown: string): number {
   return [...toPlainText(markdown).replace(/\n/g, "")].length;
 }
 
+/** Chinese and Japanese characters: written without spaces, each one a word, as Word and Pages count them (204). */
+const CJK = /([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])/u;
+
 export function countWords(markdown: string): number {
   const plain = toPlainText(markdown);
   let count = 0;
   for (const token of plain.split(/\s+/)) {
-    // `\p{L}` and `\p{N}` rather than [A-Za-z0-9]: a note written in Chinese or Greek has words too.
-    if (token && /[\p{L}\p{N}]/u.test(token)) count++;
+    // `\p{L}` and `\p{N}` rather than [A-Za-z0-9]: a note written in Greek has words too.
+    for (const part of token.split(CJK)) if (part && /[\p{L}\p{N}]/u.test(part)) count++;
   }
   return count;
 }

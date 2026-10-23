@@ -17,6 +17,7 @@
 import { describe } from "./tooltip";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import { EditorSelection, StateEffect, StateField, type Extension } from "@codemirror/state";
+import { composing } from "./ime";
 
 interface Match {
   from: number;
@@ -326,6 +327,8 @@ export function mountFind(options: FindOptions) {
   input.addEventListener("input", () => refresh(input.value));
 
   input.addEventListener("keydown", (event) => {
+    // An input method's ⏎ and Esc are its own (204).
+    if (composing(event)) return;
     switch (event.key) {
       case "Enter":
         event.preventDefault();
@@ -339,6 +342,7 @@ export function mountFind(options: FindOptions) {
   });
 
   replaceInput.addEventListener("keydown", (event) => {
+    if (composing(event)) return;
     switch (event.key) {
       case "Enter":
         event.preventDefault();

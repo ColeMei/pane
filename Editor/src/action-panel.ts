@@ -20,6 +20,7 @@
 
 import { icon } from "./format-bar";
 import { desiredOverlayHeight, pointerMotion } from "./overlay";
+import { composing } from "./ime";
 
 export interface ActionRow {
   id: string;
@@ -324,6 +325,8 @@ export function mountActionPanel(options: ActionPanelOptions) {
   });
 
   search.addEventListener("keydown", (event) => {
+    // An input method's ⏎ and Esc are its own (204).
+    if (composing(event)) return;
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -350,7 +353,7 @@ export function mountActionPanel(options: ActionPanelOptions) {
   document.addEventListener(
     "keydown",
     (event) => {
-      if (event.key !== "Escape" || !isOpen()) return;
+      if (event.key !== "Escape" || !isOpen() || composing(event)) return;
       event.preventDefault();
       event.stopPropagation();
       close();
