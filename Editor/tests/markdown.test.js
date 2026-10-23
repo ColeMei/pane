@@ -2900,12 +2900,17 @@ export function runGestures(view, doc) {
   r.check("⇥ at a code line's start indents it (179)", "top\n\n```\n  code words\n```\n\nPARA\n", tabbed(CODE, "code words", 0, 1));
   r.check("⇥ in a list item still nests it (108)", "- one\n  - two\n\nPARA\n", tabbed("- one\n- two\n\nPARA\n", "two", 0, 1));
 
-  // 203: a delete never leaves a space at the text start of an item with a block nested under it. The
-  // space would move the item's content column past the block's indent, and CommonMark would take it out.
+  // 203: a delete never leaves a space at a text start where it does harm. Under an item with a block
+  // nested below, it would move the content column past the block's indent and CommonMark would take
+  // the block out; after a heading's, a quote's or a bullet's marker it is hidden with the marker, so
+  // the caret cannot rest before it (amended 2026-10-23).
   const NESTED = "top\n\n1. top item\n   1. mid item\n      1. low item\n2. next top\n\nPARA\n";
-  const deleted = (text, needle, offset, presses, keys = {}) => {
+  const deleted = (text, needle, offset, presses, keys = {}, sync = false) => {
     d.load(text); d.at(needle, offset);
     for (const [key, mods] of presses) d.press(key, mods ?? keys);
+    // The real app's WebKit syncs a caret it cannot draw, one left inside a hidden marker span, and
+    // that puts it past the span; this window never syncs (LAB, 2026-10-23). `sync` where it is hidden.
+    if (sync) view.dispatch({ selection: { anchor: view.state.selection.main.head }, userEvent: "select" });
     d.type("Q");
     return d.text();
   };
@@ -2918,16 +2923,21 @@ export function runGestures(view, doc) {
   r.check("…and a selected first word, deleted (203)", KEPT,
     deleted(NESTED, "mid item", 0, [["ArrowRight", { shiftKey: true }], ["ArrowRight", { shiftKey: true }], ["ArrowRight", { shiftKey: true }], ["Backspace", {}]]));
   r.check("a bullet's child stays nested too (203)", "- top\n  - Qitem\n    - low\n\nPARA\n",
-    deleted("- top\n  - mid item\n    - low\n\nPARA\n", "mid item", 0, [["Delete", { altKey: true }]]));
+    deleted("- top\n  - mid item\n    - low\n\nPARA\n", "mid item", 0, [["Delete", { altKey: true }]], {}, true));
   r.check("a task item keeps its box and loses the space (203)", "- [ ] Qitem\n  - low\n\nPARA\n",
     deleted("- [ ] mid item\n  - low\n\nPARA\n", "mid item", 0, [["Delete", { altKey: true }]]));
-  r.check("an item with nothing nested under it keeps the space, as a text editor does (203)", "- top\n- Q item\n\nPARA\n",
-    deleted("- top\n- mid item\n\nPARA\n", "mid item", 0, [["Delete", { altKey: true }]]));
-  r.check("…and so does a nested item with nothing under it (203)", "top\n\n1. top item\n   1. mid item\n      1. Q item\n2. next top\n\nPARA\n",
+  r.check("a bullet with nothing under it loses the space too: it is never drawn (203)", "- top\n- Qitem\n\nPARA\n",
+    deleted("- top\n- mid item\n\nPARA\n", "mid item", 0, [["Delete", { altKey: true }]], {}, true));
+  r.check("a task item keeps it: it is drawn after the box (203)", "- [ ] Q item\n\nPARA\n",
+    deleted("- [ ] mid item\n\nPARA\n", "mid item", 0, [["Delete", { altKey: true }]]));
+  r.check("a numbered item with nothing under it keeps it: it is drawn after the number (203)", "top\n\n1. top item\n   1. mid item\n      1. Q item\n2. next top\n\nPARA\n",
     deleted(NESTED, "low item", 0, [["Delete", { altKey: true }]]));
-  r.check("a heading keeps the space, as a text editor does (203)", "top\n\n## Q words\n\nPARA\n",
-    deleted("top\n\n## Head words\n\nPARA\n", "Head", 0, [["Delete", { altKey: true }]]));
-  r.check("a paragraph keeps the space (203)", "top\n\nQ item\n\nPARA\n", deleted("top\n\nmid item\n\nPARA\n", "mid", 0, [["Delete", { altKey: true }]]));
+  r.check("a heading loses it, so the file holds what the line shows (203)", "top\n\n## Qwords\n\nPARA\n",
+    deleted("top\n\n## Head words\n\nPARA\n", "Head", 0, [["Delete", { altKey: true }]], {}, true));
+  r.check("…and a quote (203)", "top\n\n> Qwords\n\nPARA\n", deleted("top\n\n> Aside words\n\nPARA\n", "Aside", 0, [["Delete", { altKey: true }]], {}, true));
+  r.check("a paragraph keeps it, as a text editor does (203)", "top\n\nQ item\n\nPARA\n", deleted("top\n\nmid item\n\nPARA\n", "mid", 0, [["Delete", { altKey: true }]]));
+  r.check("a code line keeps its spaces: they are code (203)", "top\n\n```\nQ item\n```\n\nPARA\n",
+    deleted("top\n\n```\nmid item\n```\n\nPARA\n", "mid", 0, [["Delete", { altKey: true }]]));
   r.check("a word deleted inside an item's text keeps the spaces around it (203)", "- top\n  - mid Q item\n\nPARA\n",
     deleted("- top\n  - mid big item\n\nPARA\n", "big", 0, [["Delete", { altKey: true }]]));
   d.load(NESTED); d.at("mid item", 0); d.press("Delete", { altKey: true }); d.press("z", { metaKey: true });

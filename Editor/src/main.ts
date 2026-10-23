@@ -58,7 +58,7 @@ import { fencesOf, markerSpanEnd, notAPlace, ruleLine } from "./blocks";
 import { enterKey } from "./keyboard/enter";
 import { shiftEnterKey } from "./keyboard/shift-enter";
 import { splitSpans } from "./keyboard/spans";
-import { noSpaceAtItemStart } from "./keyboard/item-space";
+import { noSpaceAtTextStart } from "./keyboard/text-start";
 import { deleteOverMarks, keepPairs, moveOverSeams } from "./keyboard/pairs";
 import { openAbove, openAboveLeft, openBelow, openBelowRight } from "./keyboard/fence-exit";
 import { moveBlockDown, moveBlockUp, nothing, selectBlockEnd, selectBlockStart } from "./keyboard/move-block";
@@ -671,9 +671,8 @@ function baseExtensions(): Extension[] {
     renumberOrderedLists(),
     // No delete takes one marker of a construct and leaves its partner (177).
     keepPairs(),
-    // A delete leaves no space at the text start of an item with a block under it (203). Below
-    // `keepPairs`, so it runs first.
-    noSpaceAtItemStart(),
+    // A delete leaves no space at a line's text start (203). Below `keepPairs`, so it runs first.
+    noSpaceAtTextStart(),
     findHighlighting(),
     // An empty note said nothing at all — a caret in a blank rectangle. The reference prompts, and
     // it matters more here than it does there: ⌘N now leaves nothing on disk until the first write,
