@@ -647,19 +647,46 @@ function spansPerBlock(
  * exactly where the empty pair would have put it. Any other move — a caret move, another edit —
  * forgets the pair. Mid-line the empty pair stays as it was: nothing there is a block.
  */
-const setPendingWrap = StateEffect.define<{ open: string; close: string } | null>();
+/** `from`..`to` is what an input method has composed so far, once it has started (208). */
+type Pending = { open: string; close: string; from: number; to?: number };
+const setPendingWrap = StateEffect.define<Pending | null>();
 
-const pendingWrap = StateField.define<{ open: string; close: string } | null>({
+const pendingWrap = StateField.define<Pending | null>({
   create: () => null,
   update(value, tr) {
     for (const effect of tr.effects) if (effect.is(setPendingWrap)) return effect.value;
+    // An input method's marked text is the first character still being typed: the pair holds
+    // through it, and through the selection syncs that come with it, and wraps it at the end (208).
+    if (value && tr.isUserEvent("input.type.compose")) {
+      const { changes } = tr;
+      return { ...value, from: changes.mapPos(value.from, -1), to: changes.mapPos(value.to ?? value.from, 1) };
+    }
+    if (value?.to !== undefined && !tr.docChanged) return value;
     return tr.docChanged || tr.selection ? null : value;
   },
 });
 
 /** The pair a caret is waiting to type into, for the bar's pressed state. */
-export function pendingPair(state: EditorState): { open: string; close: string } | null {
+export function pendingPair(state: EditorState): Pending | null {
   return state.field(pendingWrap, false) ?? null;
+}
+
+/** A finished composition takes the waiting pair; a cancelled one leaves it waiting (208). */
+function finishComposition(view: EditorView): void {
+  const pair = view.state.field(pendingWrap, false);
+  if (pair?.to === undefined || view.composing || view.compositionStarted) return;
+  const { open, close, from, to } = pair;
+  if (to <= from) {
+    view.dispatch({ effects: setPendingWrap.of({ open, close, from }) });
+    return;
+  }
+  const head = view.state.selection.main.head;
+  view.dispatch({
+    changes: [{ from, insert: open }, { from: to, insert: close }],
+    selection: { anchor: head === to ? to + open.length : head + (head > from ? open.length : 0) },
+    effects: setPendingWrap.of(null),
+    userEvent: "input.type",
+  });
 }
 
 export function pendingWrapExtension(): Extension {
@@ -667,13 +694,24 @@ export function pendingWrapExtension(): Extension {
     pendingWrap,
     EditorView.inputHandler.of((view, from, to, text) => {
       const pair = view.state.field(pendingWrap);
-      if (!pair || from !== to || text.includes("\n")) return false;
+      // A composing letter is the input method's until it commits (208).
+      if (!pair || from !== to || text.includes("\n") || view.composing || view.compositionStarted) return false;
       view.dispatch({
         changes: { from, insert: pair.open + text + pair.close },
         selection: { anchor: from + pair.open.length + text.length },
         userEvent: "input.type",
       });
       return true;
+    }),
+    // The end is seen twice over: an update after the composition (a microtask, since an update may
+    // not dispatch), and `compositionend` itself, after CodeMirror's own flush, which may send none.
+    EditorView.updateListener.of((update) => {
+      if (update.state.field(pendingWrap)?.to !== undefined && !update.view.composing && !update.view.compositionStarted) {
+        queueMicrotask(() => finishComposition(update.view));
+      }
+    }),
+    EditorView.domEventHandlers({
+      compositionend: (_event, view) => { setTimeout(() => finishComposition(view), 80); return false; },
     }),
   ];
 }
@@ -695,7 +733,7 @@ function wrapPerBlock(
     // caret trims to `1.`, so the guard read the line as mid-line and wrote `1. ****` — a thematic
     // break inside the item, drawn as a rule, which is decision 148's own fault in a list.
     if (from <= markerSpanEnd(state, line.number)) {
-      view.dispatch({ effects: setPendingWrap.of({ open, close }) });
+      view.dispatch({ effects: setPendingWrap.of({ open, close, from }) });
     } else {
       view.dispatch({
         changes: { from, insert: open + close },

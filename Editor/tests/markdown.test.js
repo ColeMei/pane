@@ -3024,15 +3024,66 @@ export function runGestures(view, doc) {
   return r;
 }
 
-export function run(view, bar, doc) {
+/** An input method's composition after a waiting pair — decision 208. Async: the wrap waits a microtask. */
+export async function runComposition(view, doc) {
+  const r = recorder("composition");
+  const d = driver(view, doc);
+  Object.defineProperty(view, "hasFocus", { get: () => true, configurable: true });
+  const key = (k, mods) => d.content.dispatchEvent(new KeyboardEvent("keydown", {
+    key: k, code: "Key" + k.toUpperCase(), keyCode: k.toUpperCase().charCodeAt(0), bubbles: true, cancelable: true, ...mods,
+  }));
+  const head = () => view.state.selection.main.head;
+
+  // 208: an input method's composition is the first character too. Its letters are the IME's until
+  // it commits, so the waiting pair holds through them and wraps what was composed. Composing is
+  // stood in for by the view's own flag and CodeMirror's `input.type.compose` edits, as WebKit's
+  // marked text arrives (`cu ti` growing, then the chosen word).
+  {
+    let composing = false;
+    Object.defineProperty(view, "composing", { get: () => composing, configurable: true });
+    Object.defineProperty(view, "compositionStarted", { get: () => composing, configurable: true });
+    const compose = (from, to, insert) => view.dispatch({
+      changes: { from, to, insert }, selection: { anchor: from + insert.length }, userEvent: "input.type.compose",
+    });
+    const end = async () => { composing = false; view.dispatch({}); await Promise.resolve(); };
+    d.reset(); d.type("x"); d.press("Enter"); key("b", { metaKey: true });
+    composing = true;
+    // CodeMirror offers each composed change to the input handlers first; the waiting pair's took
+    // the `c` as typed and wrote `**c**` (LAB, 2026-10-25).
+    const taken = view.state.facet(view.constructor.inputHandler).some((h) => h(view, 3, 3, "c", () => null));
+    r.check("…the composition's first letter is not taken as typed (208)", false, taken, "⌘B c (composing)");
+    if (taken) { composing = false; d.reset(); d.type("x"); d.press("Enter"); key("b", { metaKey: true }); composing = true; }
+    compose(3, 3, "c"); compose(3, 4, "cu");
+    view.dispatch({ selection: { anchor: 5 } });   // WebKit's selection sync, mid-composition
+    compose(3, 5, "cu ti"); compose(3, 8, "粗体");
+    r.check("⌘B, then a composition: nothing wrapped while it composes (208)", "x\n\n粗体", d.text(), "⌘B cu ti");
+    await end();
+    r.check("…and the composed word is wrapped when it ends", "x\n\n**粗体**", d.text(), "⌘B 粗体");
+    r.check("…with the caret before the closing marker", "x\n\n**粗体".length, head(), "⌘B 粗体");
+    d.type("a");
+    r.check("…and typing goes on inside the bold", "x\n\n**粗体a**", d.text(), "⌘B 粗体 a");
+
+    d.reset(); d.type("x"); d.press("Enter"); key("b", { metaKey: true });
+    composing = true;
+    compose(3, 3, "n"); compose(3, 4, ""); await end();
+    r.check("a composition cancelled leaves nothing written (208)", "x\n\n", d.text(), "⌘B n Esc");
+    d.type("a");
+    r.check("…and the pair still waits for the first character", "x\n\n**a**", d.text(), "⌘B n Esc a");
+    delete view.composing; delete view.compositionStarted;
+  }
+
+  return r;
+}
+
+export async function run(view, bar, doc) {
   const failures = [];
   let checked = 0;
   // An instrument reports; it does not fall over. A section that throws is itself a finding, and
   // the sections after it still have to run.
   for (const suite of [runTypedLists, runListStructure, runListGeometry, runLineBreaks,
-                       runConstructs, runDegradation, runSelectionReveal, runNoJump, runBlockEdges, runGestures]) {
+                       runConstructs, runDegradation, runSelectionReveal, runNoJump, runBlockEdges, runGestures, runComposition]) {
     try {
-      const result = suite(view, doc, bar);
+      const result = await suite(view, doc, bar);
       checked += result.checked;
       failures.push(...result.failures);
     } catch (error) {

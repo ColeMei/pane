@@ -648,7 +648,8 @@ export function buildDecorations(view: EditorView, reveal: Reveal): DecorationSe
   const pair = pendingPair(view.state);
   if (pair) {
     const at = view.state.selection.main.head;
-    decorations.push(Decoration.widget({ widget: new PendingMarkWidget(pair.open), side: -1 }).range(at));
+    // While an input method composes the first word, the opening mark stays where it began (208).
+    decorations.push(Decoration.widget({ widget: new PendingMarkWidget(pair.open), side: -1 }).range(pair.to !== undefined ? pair.from : at));
     decorations.push(Decoration.widget({ widget: new PendingMarkWidget(pair.close), side: 1 }).range(at));
   }
 
