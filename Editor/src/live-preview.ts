@@ -23,7 +23,7 @@ import { buildDecorations, TEXT_STYLE_CLASSES } from "./decorate";
 import { markerSpanEnd, notAPlace } from "./blocks";
 import { pendingPair } from "./format-bar";
 import { arrivedByEditAfter, revealPolicy } from "./reveal";
-import { pointerSelect } from "./pointer-select";
+import { heldReveal, pointerSelect, released } from "./pointer-select";
 import type { SyntaxNode } from "@lezer/common";
 import {
   type EditorState,
@@ -44,7 +44,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
     atoms: DecorationSet;
 
     constructor(view: EditorView) {
-      this.decorations = buildDecorations(view, revealPolicy(view.state, view.hasFocus, caretArrivedByEdit));
+      this.decorations = buildDecorations(view, revealPolicy(view.state, view.hasFocus, caretArrivedByEdit, heldReveal()));
       this.atoms = atomsOf(this.decorations);
     }
 
@@ -78,9 +78,11 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         // the selection, and its markers are drawn rather than written (148) — so without this the
         // click drew nothing at all, which is the complaint it was meant to answer.
         pendingPair(update.startState) !== pendingPair(update.state) ||
-        syntaxTree(update.startState) !== syntaxTree(update.state)
+        syntaxTree(update.startState) !== syntaxTree(update.state) ||
+        // A drag held the reveal still (207); its release lets it catch up.
+        update.transactions.some((tr) => tr.effects.some((effect) => effect.is(released)))
       ) {
-        this.decorations = buildDecorations(update.view, revealPolicy(update.state, update.view.hasFocus, caretArrivedByEdit));
+        this.decorations = buildDecorations(update.view, revealPolicy(update.state, update.view.hasFocus, caretArrivedByEdit, heldReveal()));
         this.atoms = atomsOf(this.decorations);
       }
     }

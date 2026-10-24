@@ -6,10 +6,42 @@
  * the next click at the same point found another word or a marker. And a triple-click takes the
  * line's text, not its break, as the reference does; the break's end lies on the blank line below,
  * which is no place (169), so the selection reached into the next paragraph and typing joined it.
+ *
+ * And while the button is down, what is revealed stays as it was before the press (207): a reveal
+ * moves the text, and a drag that moved the text under the pointer ended letters short of its aim.
+ * The release lets it settle.
  */
 
-import { EditorSelection, EditorState, findClusterBreak, SelectionRange } from "@codemirror/state";
+import { EditorSelection, EditorState, findClusterBreak, SelectionRange, StateEffect } from "@codemirror/state";
 import { EditorView, type MouseSelectionStyle } from "@codemirror/view";
+import { inlineRevealRanges } from "./reveal";
+
+type Ranges = readonly { from: number; to: number }[];
+
+/** The inline ranges revealed when the button went down, until it comes up; null otherwise (207). */
+let held: Ranges | null = null;
+
+export function heldReveal(): Ranges | null {
+  return held;
+}
+
+/** Dispatched on release, so the decorations catch up with the selection the drag made. */
+export const released = StateEffect.define<null>();
+
+function hold(view: EditorView): void {
+  held = inlineRevealRanges(view.state, view.hasFocus);
+  const win = view.dom.ownerDocument.defaultView ?? window;
+  const release = (event: Event) => {
+    // A move with no button down is a release whose `mouseup` went elsewhere.
+    if (event.type === "mousemove" && (event as MouseEvent).buttons !== 0) return;
+    for (const type of ["mouseup", "mousemove", "dragstart", "blur"]) win.removeEventListener(type, release);
+    if (held === null) return;
+    held = null;
+    view.dispatch({ effects: released.of(null) });
+  };
+  // On the window, so CodeMirror's own `mouseup` on the document has made the selection first.
+  for (const type of ["mouseup", "mousemove", "dragstart", "blur"]) win.addEventListener(type, release);
+}
 
 /** CodeMirror's `groupAt`, which it does not export: the run of one character category at `pos`. */
 function groupAt(state: EditorState, pos: number, bias: -1 | 1): SelectionRange {
@@ -60,12 +92,14 @@ function pointerSelection(view: EditorView, down: MouseEvent): MouseSelectionSty
   if (count === 1) first = { hit: { ...start }, doc: view.state.doc };
   else if (first && first.doc === view.state.doc) start = { ...first.hit };
   let startSel = view.state.selection;
+  hold(view);
 
   return {
     update(update) {
       if (!update.docChanged) return;
       start.pos = update.changes.mapPos(start.pos);
       startSel = startSel.map(update.changes);
+      held = held?.map((range) => ({ from: update.changes.mapPos(range.from), to: update.changes.mapPos(range.to) })) ?? null;
     },
     get(event, extend) {
       // Until the pointer moves, it is still on the word the series started on.

@@ -61,7 +61,7 @@ function caretLines(state: EditorState, hasFocus: boolean): Set<number> {
  * mid-gesture. And why only a *single-line* range: that same width, paid on every line at once, is
  * what ⌘A used to cost (77, 139).
  */
-function inlineRevealRanges(state: EditorState, hasFocus: boolean): readonly { from: number; to: number }[] {
+export function inlineRevealRanges(state: EditorState, hasFocus: boolean): readonly { from: number; to: number }[] {
   if (!hasFocus) return [];
   const doc = state.doc;
   return state.selection.ranges.filter(
@@ -115,9 +115,15 @@ export function arrivedByEditAfter(
   return previous;
 }
 
-export function revealPolicy(state: EditorState, hasFocus: boolean, arrivedByEdit: boolean): Reveal {
+/** `held`: the inline ranges as they were at a press, kept until its release (207). */
+export function revealPolicy(
+  state: EditorState,
+  hasFocus: boolean,
+  arrivedByEdit: boolean,
+  held: readonly { from: number; to: number }[] | null = null
+): Reveal {
   const lines = caretLines(state, hasFocus);
-  const ranges = inlineRevealRanges(state, hasFocus);
+  const ranges = held ?? inlineRevealRanges(state, hasFocus);
   return {
     ranges,
     touches: (from, to) => ranges.some((range) => range.from <= to && range.to >= from),

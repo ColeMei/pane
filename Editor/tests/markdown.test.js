@@ -2335,6 +2335,47 @@ export function runGestures(view, doc) {
   clicks(d.text().indexOf("Item words") + 6, 3);
   r.check("a triple-click in a list item takes none of the next item (206)", "Item words", selected());
 
+  // 207: nothing reveals or hides while the button is down, so a drag ends on the letter it was
+  // aimed at. Both ends aimed before the press, as a hand aims them; the reveal comes on release.
+  const point = (pos) => {
+    const box = view.coordsAtPos(pos);
+    return { clientX: Math.round(box.left + 1), clientY: Math.round((box.top + box.bottom) / 2) };
+  };
+  const mouse = (type, at, buttons) =>
+    (type === "mousedown" ? d.content : document).dispatchEvent(
+      new MouseEvent(type, { bubbles: true, cancelable: true, detail: 1, button: 0, buttons, ...at }));
+  for (const [name, open, close, word] of STYLED) {
+    const text = `aa ${open}${word} words${close} zz`;
+    const inWord = text.indexOf(word) + 2;
+    const zz = text.lastIndexOf("zz") + 1;
+    for (const [what, from, to] of [["into", 1, inWord], ["out of", inWord, zz]]) {
+      d.load(`${text}\n\nPARA\n`);
+      d.at("PARA");
+      const aimFrom = point(from);
+      const aimTo = point(to);
+      const zzLeft = view.coordsAtPos(zz).left;
+      mouse("mousedown", aimFrom, 1);
+      mouse("mousemove", aimTo, 1);
+      r.check(`${name}: a drag ${what} it selects what it was aimed over (207)`, text.slice(from, to), selected());
+      r.check(`${name}: …and nothing on the line moved while the button was down`, zzLeft, view.coordsAtPos(zz).left);
+      mouse("mouseup", aimTo, 0);
+      r.check(`${name}: …and on release the selection is kept`, text.slice(from, to), selected());
+    }
+  }
+  {
+    const text = "aa **bold words** zz";
+    d.load(`${text}\n\nPARA\n`);
+    d.at("PARA");
+    const zz = text.lastIndexOf("zz");
+    const zzLeft = view.coordsAtPos(zz).left;
+    const aim = point(text.indexOf("bold") + 2);
+    mouse("mousedown", aim, 1);
+    r.check("a press inside bold reveals nothing yet (207)", zzLeft, view.coordsAtPos(zz).left);
+    mouse("mouseup", aim, 0);
+    r.check("…the release reveals it", true, view.coordsAtPos(zz).left > zzLeft);
+    r.check("…with the caret where the press landed", text.indexOf("bold") + 2, head());
+  }
+
   const FENCE = "top\n\n```\nfirst code\nlast code\n```\n\nPARA\n";
   d.load(FENCE); d.at("first code");
   shift("ArrowUp");
