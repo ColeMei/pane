@@ -5,7 +5,9 @@
 <h1 align="center">Pane</h1>
 
 <p align="center">
-  一键呼出的 macOS 浮动笔记，Raycast Notes 的免费开源替代。
+  一键呼出的 macOS 浮动笔记，不会把你从当前应用切走。<br>
+  笔记就是普通的 Markdown 文件。开源，无需账号。<br>
+  用起来像 Raycast Notes，但不需要 Raycast。
 </p>
 
 <p align="center">
@@ -23,9 +25,9 @@
   <img src="artifacts/pane-hero.png" alt="Pane 浮在代码编辑器上方" width="760">
 </p>
 
-按 <kbd>⌃⌥Space</kbd>，笔记就浮到当前窗口上，写完再按一下就收起，接着干手里的活。
+按 <kbd>⌃⌥Space</kbd>，笔记就浮到当前窗口上，写完再按一下就收起，接着干手里的活。当前应用始终保持激活，收起后光标回到原处。
 
-Markdown 实时渲染，笔记就是文件夹里的 `.md` 文件。不需要装 Raycast，不限笔记数量，也没有注册账号。
+Markdown 实时渲染，笔记就是文件夹里的 `.md` 文件。不需要装 Raycast，也没有注册账号。
 
 ## 安装
 
@@ -49,10 +51,11 @@ Applications。
 
 |          | Raycast Notes          | Pane                                 |
 | -------- | ---------------------- | ------------------------------------ |
-| 笔记数量 | 免费版 5 篇            | 不限                                 |
 | 存在哪   | Raycast 内部           | 你自己的文件夹，普通 `.md` 文件      |
 | 同步     | Pro 才有               | iCloud 云盘、Syncthing，随你选       |
 | 价格     | 免费版 + Pro 订阅      | 免费，MIT 开源                       |
+
+Pane 没有云服务，也没有 iPhone 或 iPad 版。
 
 快捷键和操作习惯尽量和 Raycast Notes 保持一致，迁移过来基本不用重新适应。
 

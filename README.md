@@ -9,7 +9,9 @@
 </p>
 
 <p align="center">
-  <b>A free, open source alternative to Raycast Notes for macOS.</b>
+  <b>A notes panel for macOS that never switches you out of your app.</b><br>
+  Your notes are plain Markdown files. Open source, no account.<br>
+  Works like Raycast Notes, without Raycast.
 </p>
 
 <p align="center">
@@ -27,10 +29,10 @@
   <img src="artifacts/pane-hero.png" alt="The Pane panel floating above a code editor, showing a markdown note rendered live" width="760">
 </p>
 
-Press <kbd>⌃⌥Space</kbd> to bring a floating note over your current app and continue where you
-left off. Write with live Markdown formatting, switch notes with <kbd>⌘P</kbd>, and dismiss the
-panel when you're done. Pane runs independently of Raycast, with unlimited notes and no account
-or subscription.
+Press <kbd>⌃⌥Space</kbd> and a note floats over the app you're in, with the caret where you left
+it. That app stays active behind the panel, so press the hotkey again and you're back where you were
+typing. Markdown renders as you type, <kbd>⌘P</kbd> switches notes, and every note is a `.md` file in
+a folder you choose.
 
 <p align="center">
   <a href="https://github.com/ColeMei/pane/releases/latest"><b>Download for macOS</b></a>
@@ -68,17 +70,16 @@ keyboard shortcuts to switch notes and run actions. It is a standalone app, so R
 
 |                | Raycast Notes                    | Pane                                                     |
 | -------------- | -------------------------------- | -------------------------------------------------------- |
-| Notes          | 5 on the free plan, unlimited on Pro | Unlimited                                              |
 | Where they live| Raycast's own storage            | `.md` files in a folder you pick                          |
 | Sync           | Cloud Sync, on Pro               | Sync the notes folder between Macs with iCloud Drive or a tool such as Syncthing |
 | Cost           | Free tier + Pro subscription     | Free, MIT, no account                                     |
 | App            | Part of Raycast                  | Standalone macOS app; no Raycast required                 |
 
-Pane does not provide its own cloud service or an iPhone or iPad app. Folder sync carries your
+Pane has no cloud service, no iPhone or iPad app, and no images in notes. Folder sync carries your
 notes between Macs; local settings and window state stay on each Mac.
 
 Raycast plan details: [pricing](https://www.raycast.com/pricing) and
-[Raycast Notes](https://www.raycast.com/core-features/notes), checked October 9, 2026.
+[Raycast Notes](https://www.raycast.com/core-features/notes), checked November 8, 2026.
 
 *Not affiliated with or endorsed by Raycast Technologies.*
 
@@ -90,7 +91,8 @@ Raycast plan details: [pricing](https://www.raycast.com/pricing) and
 </p>
 
 - **Pick up where you left off.** Summon the panel over your current app with a global hotkey.
-  Pane remembers your last note and each note's caret position.
+  That app stays active, and dismissing the panel puts your caret back in it. Pane remembers your
+  last note and each note's caret position.
 - **Write with structure.** Markdown renders as you type. Headings, lists, quotes and code blocks
   never show their symbols, and bold, links and other inline styles show theirs only under the caret.
 - **Stay in one panel.** <kbd>⌘P</kbd> switches notes with recency groups, fuzzy title matching and
